@@ -14,7 +14,6 @@
 #include "cangjie/CHIR/Checker/VarInitCheck.h"
 #include "cangjie/CHIR/CHIRChecker.h"
 #include "cangjie/CHIR/GenerateVTable/GenerateVTable.h"
-#include "cangjie/CHIR/IRChecker.h"
 #include "cangjie/CHIR/Interpreter/ConstEval.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
 #include "cangjie/CHIR/Serializer/CHIRSerializer.h"
@@ -760,7 +759,7 @@ bool ToCHIR::RunIRChecker(const Phase& phase)
     auto checker = CHIRChecker(*chirPkg, opts, builder);
     std::unordered_set<CHIRChecker::Rule> rules;
     // after AST2CHIR, there are many empty block, we need to clean them
-    if (phase == Phase::RAW) {
+    if (phase != Phase::RAW && phase != Phase::PLUGIN) {
         rules.emplace(CHIRChecker::Rule::EMPTY_BLOCK);
     }
     // we need to translate correct InvokeStatic, but after function inline,
@@ -1330,8 +1329,7 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
         diag.DiagnoseRefactor(DiagKindRefactor::plugin_throws_exception, DEFAULT_POSITION);
     } else if (hasPluginForCHIR && builder.IsEnableIRCheckerAfterPlugin()) {
         DumpCHIRToFile("PLUGIN");
-        Utils::ProfileRecorder rec2("CHIR", "IRCheck after plugins");
-        succeed = IRCheck(package, opts, builder, Phase::PLUGIN);
+        succeed = RunIRChecker(Phase::PLUGIN);
     }
     return succeed;
 }

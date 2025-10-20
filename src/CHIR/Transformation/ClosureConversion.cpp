@@ -1202,7 +1202,14 @@ ClassDef* ClosureConversion::CreateBoxClassDef(Type& type)
 
     AttributeInfo attributeInfo;
     attributeInfo.SetAttr(Attribute::PUBLIC, true);
-    classDef->AddInstanceVar(MemberVarInfo{"value", "", &type, attributeInfo, INVALID_LOCATION});
+    auto memberVar = MemberVarInfo {
+        .name = "value",
+        .type = &type,
+        .attributeInfo = attributeInfo,
+        .loc = INVALID_LOCATION,
+        .outerDef = classDef
+    };
+    classDef->AddInstanceVar(memberVar);
 
     boxClassMap.emplace(&type, classDef);
     return classDef;
@@ -1912,7 +1919,14 @@ void ClosureConversion::CreateMemberVarInAutoEnvImplDef(ClassDef& parentClass,
         auto memberName = GenerateSrcCodeIdentifier(*boxedEnvs[i]);
 
         // 4. add member var
-        parentClass.AddInstanceVar(MemberVarInfo{std::move(memberName), "", memberTy, attributeInfo, loc});
+        auto memberVar = MemberVarInfo {
+            .name = std::move(memberName),
+            .type = memberTy,
+            .attributeInfo = attributeInfo,
+            .loc = loc,
+            .outerDef = &parentClass
+        };
+        parentClass.AddInstanceVar(memberVar);
     }
 }
 
@@ -2516,7 +2530,14 @@ void ClosureConversion::CreateMemberVarInAutoEnvWrapper(ClassDef& autoEnvWrapper
     AttributeInfo attributeInfo;
     attributeInfo.SetAttr(Attribute::PUBLIC, true);
 
-    autoEnvWrapperDef.AddInstanceVar(MemberVarInfo{"v", "", memberVarType, attributeInfo, INVALID_LOCATION});
+    auto memberVar = MemberVarInfo {
+        .name = "v",
+        .type = memberVarType,
+        .attributeInfo = attributeInfo,
+        .loc = INVALID_LOCATION,
+        .outerDef = &autoEnvWrapperDef
+    };
+    autoEnvWrapperDef.AddInstanceVar(memberVar);
 }
 
 Func* ClosureConversion::CreateGenericMethodInAutoEnvWrapper(ClassDef& autoEnvWrapperDef)
