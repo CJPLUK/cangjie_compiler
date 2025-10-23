@@ -361,7 +361,7 @@ void BuildOrphanTypeReplaceTable(
     }
 }
 
-FuncBase* FindFunctionInVtable(const ClassType* parentTy, const std::vector<VirtualFuncInfo>& infos,
+FuncBase* FindFunctionInVtable(const ClassType* parentTy, const std::vector<VirtualMethodInfo>& infos,
     const Devirtualization::FuncSig& method, CHIRBuilder& builder)
 {
     std::unordered_map<const GenericType*, Type*> parentReplaceTable;
@@ -376,14 +376,14 @@ FuncBase* FindFunctionInVtable(const ClassType* parentTy, const std::vector<Virt
     }
 
     for (auto& info : infos) {
-        if (info.srcCodeIdentifier != method.name) {
+        if (info.GetMethodName() != method.name) {
             continue;
         }
-        auto sigParamTys = info.typeInfo.sigType->GetParamTypes();
+        auto sigParamTys = info.GetMethodSigType()->GetParamTypes();
         if (sigParamTys.size() != paramTypes.size()) {
             continue;
         }
-        if (info.typeInfo.methodGenericTypeParams.size() != method.typeArgs.size()) {
+        if (info.GetGenericTypeParams().size() != method.typeArgs.size()) {
             continue;
         }
         bool isSigSame = true;
@@ -392,7 +392,7 @@ FuncBase* FindFunctionInVtable(const ClassType* parentTy, const std::vector<Virt
             BuildOrphanTypeReplaceTable(sigParamTys[i], freeGenericReplaceTable);
             BuildOrphanTypeReplaceTable(paramTypes[i], freeGenericReplaceTable);
         }
-        auto& methodGenerics = info.typeInfo.methodGenericTypeParams;
+        auto methodGenerics = info.GetGenericTypeParams();
         for (size_t i{0}; i < methodGenerics.size(); ++i) {
             freeGenericReplaceTable.emplace(methodGenerics[i], method.typeArgs[i]);
         }
@@ -409,7 +409,7 @@ FuncBase* FindFunctionInVtable(const ClassType* parentTy, const std::vector<Virt
         if (!isSigSame) {
             continue;
         }
-        return info.instance;
+        return info.GetVirtualMethod();
     }
     return nullptr;
 }
@@ -490,9 +490,11 @@ std::pair<FuncBase*, Type*> Devirtualization::FindRealCallee(
             if (!typeMatched) {
                 continue;
             }
-            auto funcType = builder.GetType<FuncType>(method.types, builder.GetUnitTy());
+            auto paramTypes = method.types;
+            paramTypes.erase(paramTypes.begin());
+            auto funcType = builder.GetType<FuncType>(paramTypes, builder.GetUnitTy());
             FuncCallType funcCallType{method.name, funcType, method.typeArgs};
-            auto res = def->GetFuncIndexInVTable(funcCallType, false, replaceTable, builder);
+            auto res = def->GetFuncIndexInVTable(funcCallType, replaceTable, builder);
             if (!res.empty() && res[0].instance != nullptr) {
                 target = res[0].instance;
                 break;
@@ -520,8 +522,8 @@ FuncBase* Devirtualization::GetCandidateFromSpecificType(
     auto extendsOrImplements = devirtFuncInfo.defsMap[customType];
     for (auto oriDef : extendsOrImplements) {
         auto genericDef = oriDef->GetGenericDecl() != nullptr ? oriDef->GetGenericDecl() : oriDef;
-        for (auto [parentTy, infos] : genericDef->GetVTable()) {
-            if (auto target = FindFunctionInVtable(parentTy, infos, method, builder)) {
+        for (const auto& it : genericDef->GetDefVTable().GetTypeVTables()) {
+            if (auto target = FindFunctionInVtable(it.GetSrcParentType(), it.GetVirtualMethods(), method, builder)) {
                 return target;
             }
         }
@@ -572,11 +574,12 @@ void Devirtualization::CollectCandidates(
             auto extendsOrImplements = devirtFuncInfo.defsMap[subtypeCustom];
             for (auto oriDef : extendsOrImplements) {
                 auto def = oriDef->GetGenericDecl() != nullptr ? oriDef->GetGenericDecl() : oriDef;
-                for (auto [parentTy, infos] : def->GetVTable()) {
-                    if (!expected->IsEqualOrSubTypeOf(*parentTy->StripAllRefs(), builder)) {
+                for (const auto& vtableIt : def->GetDefVTable().GetTypeVTables()) {
+                    if (!expected->IsEqualOrSubTypeOf(*vtableIt.GetSrcParentType(), builder)) {
                         continue;
                     }
-                    if (auto target = FindFunctionInVtable(parentTy, infos, method, builder)) {
+                    if (auto target = FindFunctionInVtable(
+                        vtableIt.GetSrcParentType(), vtableIt.GetVirtualMethods(), method, builder)) {
                         if (res.first == nullptr) {
                             res = {target, subtypeCustom};
                         } else if (res.first != target) {

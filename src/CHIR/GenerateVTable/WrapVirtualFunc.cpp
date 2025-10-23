@@ -28,13 +28,14 @@ bool FuncTypeMatch(const FuncType& parentFuncType, const FuncType& curFuncType)
     return VirMethodRetureTypeIsMatched(*parentFuncType.GetReturnType(), *curFuncType.GetReturnType());
 }
 
-bool JudgeIfNeedVirtualWrapper(const VirtualFuncInfo& parentFuncInfo, const FuncBase& virtualFunc, const Type& selfTy, CHIRBuilder& builder)
+bool JudgeIfNeedVirtualWrapper(
+    const VirtualMethodInfo& parentFuncInfo, const FuncBase& virtualFunc, const Type& selfTy, CHIRBuilder& builder)
 {
     /** if struct and enum inherit interface, for non-static function, wrapper func is needed
      *  because `this` in struct is value type, and in interface is ref type
      *  but for static function, we need to follow rules below
      */
-    if (!selfTy.IsClassOrArray() && !virtualFunc.TestAttr(Attribute::STATIC)) {
+     if (!selfTy.IsClassOrArray() && !virtualFunc.TestAttr(Attribute::STATIC)) {
         return true;
     }
     /*  there are two cases which need to wrap virtual function:
@@ -62,11 +63,11 @@ bool JudgeIfNeedVirtualWrapper(const VirtualFuncInfo& parentFuncInfo, const Func
     // case 1
     auto funcParentType = virtualFunc.GetParentCustomTypeDef()->GetType();
     if (funcParentType != &selfTy && funcParentType->IsGenericRelated() &&
-        !funcParentType->IsEqualOrSubTypeOf(*parentFuncInfo.typeInfo.parentType, builder)) {
+        !funcParentType->IsEqualOrSubTypeOf(*parentFuncInfo.GetInstParentType(), builder)) {
         return true;
     }
     // case 2
-    auto parentFuncType = parentFuncInfo.typeInfo.originalType;
+    auto parentFuncType = parentFuncInfo.GetOriginalFuncType();
     return !FuncTypeMatch(*parentFuncType, *virtualFunc.GetFuncType());
 }
 
@@ -105,23 +106,24 @@ WrapVirtualFunc::WrapVirtualFunc(CHIRBuilder& builder,
 void WrapVirtualFunc::CheckAndWrap(CustomTypeDef& customTypeDef)
 {
     auto selfTy = customTypeDef.GetType();
-    for (auto& [parentTy, infos] : customTypeDef.GetVTable()) {
+    for (auto& vtableIt : customTypeDef.GetDefVTable().GetTypeVTables()) {
+        auto parentTy = vtableIt.GetSrcParentType();
         if (parentTy == selfTy) {
             continue;
         }
-        auto parentDef = parentTy->GetCustomTypeDef();
-        auto parentVTableIt = parentDef->GetVTable().find(StaticCast<ClassType*>(parentDef->GetType()));
-        CJC_ASSERT(parentVTableIt != parentDef->GetVTable().end());
-        CJC_ASSERT(parentVTableIt->second.size() == infos.size());
-        for (size_t i = 0; i < infos.size(); ++i) {
-            auto& info = infos[i];
-            if (!info.instance) {
+        auto parentDef = parentTy->GetClassDef();
+        auto& parentVTable = parentDef->GetDefVTable().GetExpectedTypeVTable(*parentDef->GetType());
+        CJC_ASSERT(!parentVTable.IsEmpty());
+        CJC_ASSERT(parentVTable.GetMethodNum() == vtableIt.GetMethodNum());
+        for (size_t i = 0; i < vtableIt.GetMethodNum(); ++i) {
+            auto& curVirMethodInfo = vtableIt.GetVirtualMethods()[i];
+            if (curVirMethodInfo.GetVirtualMethod() == nullptr) {
                 continue;
             }
-            auto& parentInfo = parentVTableIt->second[i];
-            auto wrapper = CreateVirtualWrapperIfNeeded(info, parentInfo, *selfTy, customTypeDef, *parentTy);
+            auto& parentVirMethodInfo = parentVTable.GetVirtualMethods()[i];
+            auto wrapper = CreateVirtualWrapperIfNeeded(curVirMethodInfo, parentVirMethodInfo, *selfTy, customTypeDef, *parentTy);
             if (incrementalKind != IncreKind::INVALID) {
-                HandleVirtualFuncWrapperForIncrCompilation(wrapper, *info.instance);
+                HandleVirtualFuncWrapperForIncrCompilation(wrapper, *curVirMethodInfo.GetVirtualMethod());
             }
             if (!wrapper) {
                 continue;
@@ -162,7 +164,7 @@ void WrapVirtualFunc::HandleVirtualFuncWrapperForIncrCompilation(const FuncBase*
 }
 
 WrapVirtualFunc::WrapperFuncGenericTable WrapVirtualFunc::GetReplaceTableForVirtualFunc(
-    const ClassType& parentTy, const std::string& funcIdentifier, const VirtualFuncInfo& parentFuncInfo)
+    const ClassType& parentTy, const std::string& funcIdentifier, const VirtualMethodInfo& parentFuncInfo)
 {
     auto genericParentTypeArgs = parentTy.GetCustomTypeDef()->GetGenericTypeParams();
     auto instParentTypeArgs = parentTy.GetTypeArgs();
@@ -174,7 +176,7 @@ WrapVirtualFunc::WrapperFuncGenericTable WrapVirtualFunc::GetReplaceTableForVirt
     for (size_t i = 0; i < genericParentTypeArgs.size(); ++i) {
         resultTable.replaceTable.emplace(genericParentTypeArgs[i], instParentTypeArgs[i]);
     }
-    auto& parentMethodGenericTys = parentFuncInfo.typeInfo.methodGenericTypeParams;
+    auto parentMethodGenericTys = parentFuncInfo.GetGenericTypeParams();
     for (auto& parentMethodGenericTy : parentMethodGenericTys) {
         auto srcIdentifier = "fT" + std::to_string(newGenericIdx++);
         auto tyIdentifier = funcIdentifier + '_' + srcIdentifier;
@@ -194,7 +196,7 @@ WrapVirtualFunc::WrapperFuncGenericTable WrapVirtualFunc::GetReplaceTableForVirt
 }
 
 void WrapVirtualFunc::CreateWrapperFuncBody(Func& wrapperFunc,
-    const VirtualFuncInfo& childFuncInfo, Type& selfTy, WrapVirtualFunc::WrapperFuncGenericTable& genericTable)
+    const VirtualMethodInfo& childFuncInfo, Type& selfTy, WrapVirtualFunc::WrapperFuncGenericTable& genericTable)
 {
     /*
         interface I<T> {
@@ -208,7 +210,7 @@ void WrapVirtualFunc::CreateWrapperFuncBody(Func& wrapperFunc,
             }
     */
     // if there is override method in child class, `rawFunc` is this method, otherwise is parent class method
-    auto rawFunc = childFuncInfo.instance;
+    auto rawFunc = childFuncInfo.GetVirtualMethod();
     auto wrapperFuncType = wrapperFunc.GetFuncType();
     auto wrapperRetTy = wrapperFuncType->GetReturnType();
     auto body = builder.CreateBlockGroup(wrapperFunc);
@@ -225,7 +227,7 @@ void WrapVirtualFunc::CreateWrapperFuncBody(Func& wrapperFunc,
         CreateAndAppendExpression<Allocate>(builder, builder.GetType<RefType>(wrapperRetTy), wrapperRetTy, entry);
     wrapperFunc.SetReturnValue(*ret->GetResult());
 
-    Type* instParentType = childFuncInfo.typeInfo.parentType;
+    Type* instParentType = childFuncInfo.GetInstParentType();
     if (instParentType->IsClassOrArray() || (instParentType->IsStruct() && rawFunc->TestAttr(Attribute::MUT))) {
         instParentType = builder.GetType<RefType>(instParentType);
     }
@@ -302,16 +304,16 @@ FuncType* WrapVirtualFunc::RemoveThisArg(FuncType* funcTy)
 }
 
 // change this function to class method, to much args in functions called by this function
-FuncBase* WrapVirtualFunc::CreateVirtualWrapperIfNeeded(const VirtualFuncInfo& funcInfo,
-    const VirtualFuncInfo& parentFuncInfo, Type& selfTy, CustomTypeDef& customTypeDef, const ClassType& parentTy)
+FuncBase* WrapVirtualFunc::CreateVirtualWrapperIfNeeded(const VirtualMethodInfo& funcInfo,
+    const VirtualMethodInfo& parentFuncInfo, Type& selfTy, CustomTypeDef& customTypeDef, const ClassType& parentTy)
 {
-    auto curFunc = funcInfo.instance;
+    auto curFunc = funcInfo.GetVirtualMethod();
     // 1. Judge if need virtual wrapper
     if (!JudgeIfNeedVirtualWrapper(parentFuncInfo, *curFunc, selfTy, builder)) {
         return nullptr;
     }
     auto isStatic = curFunc->TestAttr(Attribute::STATIC);
-    auto parentFuncTy = parentFuncInfo.typeInfo.originalType;
+    auto parentFuncTy = parentFuncInfo.GetOriginalFuncType();
     auto parentFuncTyWithoutThisArg = !isStatic ? RemoveThisArg(parentFuncTy) : parentFuncTy;
     auto funcIdentifier = CHIRMangling::GenerateVirtualFuncMangleName(curFunc, customTypeDef, &parentTy, true);
     // ensure every method is wrapped exactly once. This occurs in split operator, where three vtable entries use
