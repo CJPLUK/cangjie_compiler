@@ -1206,6 +1206,11 @@ FuncBase* FuncBase::GetParamDftValHostFunc() const
     return paramDftValHostFunc;
 }
 
+void FuncBase::ClearParamDftValHostFunc()
+{
+    paramDftValHostFunc = nullptr;
+}
+
 // Func
 bool FuncBase::IsClassMethod() const
 {

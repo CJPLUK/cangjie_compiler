@@ -111,6 +111,20 @@ bool ShouldSkipUselessFuncElimination(const Package& package, const Cangjie::Glo
     return false;
 }
 
+void ClearRemovedFuncParamDftValHostFunc(Package& package)
+{
+    for (auto func : package.GetGlobalFuncs()) {
+        if (func->TestAttr(Attribute::IMPORTED)) {
+            continue;
+        }
+        auto hostFunc = func->GetParamDftValHostFunc();
+        if (hostFunc != nullptr && hostFunc->IsFuncWithBody() &&
+            Cangjie::StaticCast<Func*>(hostFunc)->GetBody() == nullptr) {
+            func->ClearParamDftValHostFunc();
+        }
+    }
+}
+
 bool ReflectPackageIsUsed(const Package& package)
 {
     for (auto def : package.GetAllImportedCustomTypeDef()) {
@@ -193,6 +207,7 @@ void DeadCodeElimination::UselessFuncElimination(Package& package, const GlobalO
         }
     } while (!funcsToBeRemoved.empty());
     package.SetGlobalFuncs(allFuncs);
+    ClearRemovedFuncParamDftValHostFunc(package);
 }
 
 void DeadCodeElimination::ReportUnusedCode(const Package& package, const GlobalOptions& opts)
