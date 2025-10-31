@@ -514,7 +514,7 @@ VarDecl& TypeChecker::TypeCheckerImpl::CreateFrame(ASTContext& ctx, TryExpr& te,
     // to ChkCallExpr would delete the desugaring information, so we bind the lambda to
     // a variable before calling the constructor
     auto lambdaVarDecl = CreateVarDecl("$frameLambda", std::move(te.tryLambda));
-    ctx.AddDeclName(std::make_pair("$freeLambda", lambdaVarDecl->scopeName), *lambdaVarDecl);
+    ctx.AddDeclName(std::make_pair("$frameLambda", lambdaVarDecl->scopeName), *lambdaVarDecl);
     auto lambdaVar = CreateRefExpr(*lambdaVarDecl);
     AST::CopyNodeScopeInfo(lambdaVar, re);
 
