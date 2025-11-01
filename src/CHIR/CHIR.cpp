@@ -499,6 +499,7 @@ void ToCHIR::RunConstantPropagation(ConstAnalysisWrapper& constAnalysis)
     if (threadNum == 1) {
         auto cp = CHIR::ConstPropagation(builder, &constAnalysis, opts);
         MergeEffectMap(cp.GetEffectMap(), effectMap);
+        cp.RunOnPackage(chirPkg, opts.chirDebugOptimizer, ci.isCJLint);
         dce.UnreachableBlockElimination(cp.GetFuncsNeedRemoveBlocks(), opts.chirDebugOptimizer);
     } else {
         bool isDebug = opts.chirDebugOptimizer;
