@@ -446,9 +446,10 @@ flatbuffers::Offset<NodeFormat::Expr> NodeWriter::SerializeTryExpr(AstExpr expr)
     for (auto& handler : tryExpr->handlers) {
         auto fbPos = FlatPosCreateHelper(handler.pos);
         auto fbCommandPattern = SerializePattern(handler.commandPattern.get());
+        auto fbResumptionPattern = SerializePattern(handler.resumptionPattern.get());
         auto fbHandleBlock = SerializeBlock(handler.block.get());
         auto fbHanlder =
-            NodeFormat::CreateHandler(builder, &fbPos, fbCommandPattern, fbHandleBlock);
+            NodeFormat::CreateHandler(builder, &fbPos, fbCommandPattern, fbResumptionPattern, fbHandleBlock);
         vecHandlers.push_back(fbHanlder);
     }
     auto fbHandlers = builder.CreateVector(vecHandlers);
@@ -483,12 +484,13 @@ flatbuffers::Offset<NodeFormat::Expr> NodeWriter::SerializeResumeExpr(AstExpr ex
 {
     auto resumeExpr = RawStaticCast<const ResumeExpr*>(expr);
     auto fbNodeBase = SerializeNodeBase(resumeExpr);
+    auto fbExpr = SerializeExpr(resumeExpr->expr.get());
     auto withPos = FlatPosCreateHelper(resumeExpr->withPos);
     auto withExpr = SerializeExpr(resumeExpr->withExpr);
     auto throwingPos = FlatPosCreateHelper(resumeExpr->throwingPos);
     auto throwingExpr = SerializeExpr(resumeExpr->throwingExpr);
     auto fbResumeExpr =
-        NodeFormat::CreateResumeExpr(builder, fbNodeBase, &withPos, withExpr, &throwingPos, throwingExpr);
+        NodeFormat::CreateResumeExpr(builder, fbNodeBase, fbExpr, &withPos, withExpr, &throwingPos, throwingExpr);
     return NodeFormat::CreateExpr(builder, fbNodeBase, NodeFormat::AnyExpr_RESUME_EXPR, fbResumeExpr.Union());
 }
 

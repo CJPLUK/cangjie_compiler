@@ -553,6 +553,10 @@ VisitAction WalkerT<NodeT>::Walk(Ptr<NodeT> curNode) const
                     if (Walk(handler.commandPattern.get()) == VisitAction::STOP_NOW) {
                         return VisitAction::STOP_NOW;
                     }
+                    if (auto& resumptionPattern = handler.resumptionPattern;
+                        resumptionPattern && Walk(resumptionPattern.get()) == VisitAction::STOP_NOW) {
+                        return VisitAction::STOP_NOW;
+                    }
                     if (Walk(handler.block.get()) == VisitAction::STOP_NOW) {
                         return VisitAction::STOP_NOW;
                     }
@@ -590,7 +594,8 @@ VisitAction WalkerT<NodeT>::Walk(Ptr<NodeT> curNode) const
             }
             case ASTKind::RESUME_EXPR: {
                 auto re = StaticAs<ASTKind::RESUME_EXPR>(curNode);
-                if (Walk(re->withExpr.get()) == VisitAction::STOP_NOW ||
+                if (Walk(re->expr.get()) == VisitAction::STOP_NOW ||
+                        Walk(re->withExpr.get()) == VisitAction::STOP_NOW ||
                         Walk(re->throwingExpr.get()) == VisitAction::STOP_NOW) {
                     return VisitAction::STOP_NOW;
                 }
@@ -1075,6 +1080,19 @@ VisitAction WalkerT<NodeT>::Walk(Ptr<NodeT> curNode) const
                     return VisitAction::STOP_NOW;
                 }
                 for (auto& i : commandPattern.types) {
+                    if (Walk(i.get()) == VisitAction::STOP_NOW) {
+                        return VisitAction::STOP_NOW;
+                    }
+                }
+                action = VisitAction::WALK_CHILDREN;
+                break;
+            }
+            case ASTKind::RESUMPTION_TYPE_PATTERN: {
+                auto& resumptionPattern = *StaticCast<ResumptionTypePattern*>(curNode);
+                if (Walk(resumptionPattern.pattern.get()) == VisitAction::STOP_NOW) {
+                    return VisitAction::STOP_NOW;
+                }
+                for (auto& i : resumptionPattern.types) {
                     if (Walk(i.get()) == VisitAction::STOP_NOW) {
                         return VisitAction::STOP_NOW;
                     }

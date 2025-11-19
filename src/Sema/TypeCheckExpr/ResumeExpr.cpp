@@ -12,15 +12,34 @@ using namespace AST;
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynResumeExpr(ASTContext& ctx, ResumeExpr& re)
 {
     Ty* resumptionParamTy = typeManager.GetAnyTy();
-
-    if (re.enclosing) {
-        resumptionParamTy = (*re.enclosing)->commandResultTy;
-        re.SetTy(TypeManager::GetNothingTy());
+    if (re.expr) {
+        // Resuming a deferred resumption - get result and return type from Resumption<Res, Ret>
+        CJC_NULLPTR_CHECK(re.expr);
+        auto exprTy = Synthesize({ctx, SynPos::EXPR_ARG}, re.expr.get());
+        if (!Ty::IsTyCorrect(exprTy)) {
+            return TypeManager::GetInvalidTy();
+        }
+        auto resumption = importManager.GetImportedDecl(EFFECT_PACKAGE_NAME, CLASS_RESUMPTION);
+        std::set<Ptr<Ty>> exprAsResumptionTy;
+        if (resumption) {
+            exprAsResumptionTy = promotion.Promote(*exprTy, *resumption->GetTy());
+        }
+        if (!resumption || exprAsResumptionTy.size() != 1) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_resume_wrong_resumption_type, *re.expr, exprTy->String());
+            re.SetTy(TypeManager::GetInvalidTy());
+            return re.GetTy();
+        }
+        resumptionParamTy = (*exprAsResumptionTy.begin())->typeArgs[0];
+        re.SetTy((*exprAsResumptionTy.begin())->typeArgs[1]);
     } else {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_implicit_resume_outside_handler, re);
-        re.SetTy(TypeManager::GetInvalidTy());
+        if (re.enclosing) {
+            resumptionParamTy = (*re.enclosing)->commandResultTy;
+            re.SetTy(TypeManager::GetNothingTy());
+        } else {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_implicit_resume_outside_handler, re);
+            re.SetTy(TypeManager::GetInvalidTy());
+        }
     }
-
     if (re.throwingExpr) {
         auto exception = importManager.GetCoreDecl<ClassDecl>(CLASS_EXCEPTION);
         auto error = importManager.GetCoreDecl<ClassDecl>(CLASS_ERROR);

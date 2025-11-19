@@ -236,6 +236,8 @@ flatbuffers::Offset<NodeFormat::Pattern> NodeWriter::SerializePattern(AstPattern
                 [](NodeWriter& nw, AstPattern pattern) { return nw.SerializeExceptTypePattern(pattern); }},
             {ASTKind::COMMAND_TYPE_PATTERN,
                 [](NodeWriter& nw, AstPattern pattern) { return nw.SerializeCommandTypePattern(pattern); }},
+            {ASTKind::RESUMPTION_TYPE_PATTERN,
+                [](NodeWriter& nw, AstPattern pattern) { return nw.SerializeResumptionTypePattern(pattern); }},
             {ASTKind::WILDCARD_PATTERN,
                 [](NodeWriter& nw, AstPattern pattern) { return nw.SerializeWildcardPattern(pattern); }},
         };
@@ -365,6 +367,27 @@ flatbuffers::Offset<NodeFormat::Pattern> NodeWriter::SerializeCommandTypePattern
         builder, fbNodeBase, fbPattern, &patternPos, &colonPos, fbTypes, bitOrPosVector);
     return NodeFormat::CreatePattern(
         builder, fbNodeBase, NodeFormat::AnyPattern_COMMAND_TYPE_PATTERN, fbCommandTypePattern.Union());
+}
+
+flatbuffers::Offset<NodeFormat::Pattern> NodeWriter::SerializeResumptionTypePattern(AstPattern pattern)
+{
+    auto resumptionTypePattern = RawStaticCast<const ResumptionTypePattern*>(pattern);
+    if (resumptionTypePattern == nullptr) {
+        auto fbResumptionTypePattern = flatbuffers::Offset<NodeFormat::ResumptionTypePattern>();
+        return NodeFormat::CreatePattern(
+            builder, emptyNodeBase, NodeFormat::AnyPattern_RESUMPTION_TYPE_PATTERN, fbResumptionTypePattern.Union());
+    }
+    auto fbNodeBase = SerializeNodeBase(resumptionTypePattern);
+    auto fbPattern = SerializePattern(resumptionTypePattern->pattern.get());
+    auto patternPos = FlatPosCreateHelper(resumptionTypePattern->patternPos);
+    auto colonPos = FlatPosCreateHelper(resumptionTypePattern->colonPos);
+    auto fbTypes = FlatVectorCreateHelper<NodeFormat::Type, Type, AstType>(
+        resumptionTypePattern->types, &NodeWriter::SerializeType);
+    auto bitOrPosVector = CreatePositionVector(resumptionTypePattern->bitOrPosVector);
+    auto fbResumptionTypePattern = NodeFormat::CreateResumptionTypePattern(
+        builder, fbNodeBase, fbPattern, &patternPos, &colonPos, fbTypes, bitOrPosVector);
+    return NodeFormat::CreatePattern(
+        builder, fbNodeBase, NodeFormat::AnyPattern_RESUMPTION_TYPE_PATTERN, fbResumptionTypePattern.Union());
 }
 
 flatbuffers::Offset<NodeFormat::FuncParam> NodeWriter::SerializeFuncParam(AstFuncParam funcParam)

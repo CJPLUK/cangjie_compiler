@@ -563,7 +563,7 @@ struct ASTHasherImpl {
     template <int whatTypeToHash> void HashResumeExpr(const ResumeExpr& re)
     {
         HashExpr<whatTypeToHash>(re);
-        SUPERHash<whatTypeToHash>(re.resumePos);
+        SUPERHash<whatTypeToHash>(re.resumePos, re.expr);
     }
     template <int whatTypeToHash> void HashTrailingClosureExpr(const TrailingClosureExpr& tce)
     {

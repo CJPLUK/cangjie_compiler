@@ -483,7 +483,14 @@ void TypeChecker::TypeCheckerImpl::EncloseTryLambda(ASTContext& ctx, OwnedPtr<AS
 */
 VarDecl& TypeChecker::TypeCheckerImpl::CreateFrame(ASTContext& ctx, TryExpr& te, std::vector<OwnedPtr<Node>>& block)
 {
+    // If no handlers use a resumption, we don't need to install a full frame
     auto frameClassName = CLASS_IMMEDIATE_FRAME;
+    for (auto& h : te.handlers) {
+        if (!h.IsImmediate()) {
+            frameClassName = CLASS_DEFERRED_FRAME;
+            break;
+        }
+    }
     // To: Frame({=> try{...} catch{...}})
     auto lambdaTy = DynamicCast<FuncTy*>(te.tryLambda->GetTy());
     CJC_NULLPTR_CHECK(lambdaTy);
@@ -507,7 +514,7 @@ VarDecl& TypeChecker::TypeCheckerImpl::CreateFrame(ASTContext& ctx, TryExpr& te,
     // to ChkCallExpr would delete the desugaring information, so we bind the lambda to
     // a variable before calling the constructor
     auto lambdaVarDecl = CreateVarDecl("$frameLambda", std::move(te.tryLambda));
-    ctx.AddDeclName(std::make_pair("$frameLambda", lambdaVarDecl->scopeName), *lambdaVarDecl);
+    ctx.AddDeclName(std::make_pair("$freeLambda", lambdaVarDecl->scopeName), *lambdaVarDecl);
     auto lambdaVar = CreateRefExpr(*lambdaVarDecl);
     AST::CopyNodeScopeInfo(lambdaVar, re);
 
@@ -567,8 +574,11 @@ void TypeChecker::TypeCheckerImpl::CreateSetHandler(
             auto re = CreateRefExpr(frame);
             AST::CopyNodeScopeInfo(re, handler.block);
             OwnedPtr<MemberAccess> ma;
-            ma = CreateMemberAccess(std::move(re), "setImmediateHandler");
-
+            if (handler.IsImmediate()) {
+                ma = CreateMemberAccess(std::move(re), "setImmediateHandler");
+            } else {
+                ma = CreateMemberAccess(std::move(re), "setDeferredHandler");
+            }
             // Function `CreateMemberAccess` will not initialise `ma.targets`,
             // so we need to assign `targets` by calling `ChkCallExpr` later
             OwnedPtr<Type> effectTypeArgument = ASTCloner::Clone(commandPattern->types[j].get());
@@ -581,299 +591,310 @@ void TypeChecker::TypeCheckerImpl::CreateSetHandler(
             ma->typeArguments.emplace_back(std::move(resumptionTypeArgument));
             ma->instTys.emplace_back(handler.commandResultTy);
 
-            // setImmediateHandler lives in HandlerFrame, which is not parameterized
-            // by return type, so it takes the return type as an extra type parameter
-            OwnedPtr<Type> resultTypeArgument = MakeOwned<Type>();
-            resultTypeArgument->SetTy(te.GetTy());
-            ma->typeArguments.emplace_back(std::move(resultTypeArgument));
-            ma->instTys.emplace_back(te.GetTy());
-
+            if (handler.IsImmediate()) {
+                // setImmediateHandler lives in HandlerFrame, which is not parameterized
+                // by return type, so it takes the return type as an extra type parameter
+                OwnedPtr<Type> resultTypeArgument = MakeOwned<Type>();
+                resultTypeArgument->SetTy(te.GetTy());
+                ma->typeArguments.emplace_back(std::move(resultTypeArgument));
+                ma->instTys.emplace_back(te.GetTy());
+            } else {
+                // We need to reconstruct the type of the parameter because the user has provided
+                // a function of type (Cmd, stdx.effect.Resumption<Res, Ret>) -> Ret, but in fact
+                // we want (Cmd, std.effect.Resumption<Res, Ret>) -> Ret. This is safe because at
+                // runtime stdx.effect.Resumption is a "fake" type and all of its instances are
+                // in fact instances of std.effect.Resumption
+                auto surfaceHandlerTy = StaticCast<FuncTy*>(handler.desugaredLambda->GetTy());
+                handler.desugaredLambda->SetTy(CastDeferredHandlerFn(surfaceHandlerTy));
+            }
             // We need to set the targets by hand, because the call to ChkCallExpr
             // below expects targets to be nonempty
             CJC_ASSERT(ma->target);
             ma->targets.emplace_back(StaticCast<FuncDecl*>(ma->target));
 
             OwnedPtr<AST::LambdaExpr> handlerLambda = std::move(handler.desugaredLambda);
-            /**
-             * When a handler is immediate we need to treat exceptions in the handler
-             * and results of the desugaredLambda differently, since the stack of the
-             * try expression needs to be unwinded. In here we modify the desugaredLambda
-             * to achieve that
-             *
-             * From:
-             * {(e:Eff) =>
-             *  <block>
-             * }
-             *
-             * To:
-             * {(e: Eff) =>
-             *  let result = try {
-             *      <block>
-             *  } catch (x: Exception) {
-             *      throw ImmediateFrameExceptionWrapper(HandlerFrame.getActiveFrame(), x)
-             *  } catch (x: Error) {
-             *      throw ImmediateFrameErrorWrapper(HandlerFrame.getActiveFrame(), x)
-             *  }
-             *  throw ImmediateFrameEarlyReturn(HandlerFrame.getActiveFrame(), result)
-             * }
-             */
-            // Get the inner block
-            OwnedPtr<AST::Block> innerBlock = std::move(handlerLambda->funcBody->body);
+            if (handler.IsImmediate()) {
+                /**
+                 * When a handler is immediate we need to treat exceptions in the handler
+                 * and results of the desugaredLambda differently, since the stack of the
+                 * try expression needs to be unwinded. In here we modify the desugaredLambda
+                 * to achieve that
+                 *
+                 * From:
+                 * {(e:Eff) =>
+                 *  <block>
+                 * }
+                 *
+                 * To:
+                 * {(e: Eff) =>
+                 *  let result = try {
+                 *      <block>
+                 *  } catch (x: Exception) {
+                 *      throw ImmediateFrameExceptionWrapper(HandlerFrame.getActiveFrame(), x)
+                 *  } catch (x: Error) {
+                 *      throw ImmediateFrameErrorWrapper(HandlerFrame.getActiveFrame(), x)
+                 *  }
+                 *  throw ImmediateFrameEarlyReturn(HandlerFrame.getActiveFrame(), result)
+                 * }
+                 */
+                // Get the inner block
+                OwnedPtr<AST::Block> innerBlock = std::move(handlerLambda->funcBody->body);
 
-            // remove return expr from inner block since we wan't to treat it as
-            // an exception now
-            if (auto lastExpr = std::move(innerBlock->body.back())) {
-                auto returnExpr = StaticCast<ReturnExpr*>(lastExpr.get());
-                CJC_NULLPTR_CHECK(returnExpr);
-                innerBlock->body.back() = std::move(returnExpr->expr);
-            }
-            innerBlock->SetTy(Ty::GetInitialTy());
-
-            // Get all declarations and types needed
-            // std.core.Exception
-            auto exceptionDecl = importManager.GetCoreDecl<ClassDecl>(CLASS_EXCEPTION);
-            CJC_NULLPTR_CHECK(exceptionDecl);
-            auto exceptionType = exceptionDecl->GetTy();
-            // std.core.Error
-            auto errorDecl = importManager.GetCoreDecl<ClassDecl>(CLASS_ERROR);
-            CJC_NULLPTR_CHECK(errorDecl);
-            auto errorType = errorDecl->GetTy();
-            // stdx.effect.ImmediateFrameExceptionWrapper
-            auto exceptionWrapperDecl = importManager.GetImportedDecl<ClassDecl>(
-                EFFECT_INTERNALS_PACKAGE_NAME, CLASS_FRAME_EXCEPTION_WRAPPER);
-            CJC_NULLPTR_CHECK(exceptionWrapperDecl);
-            auto exceptionWrapperTy = typeManager.GetClassTy(*exceptionWrapperDecl, {});
-            // stdx.effect.ImmediateFrameErrorWrapper
-            auto errorWrapperDecl =
-                importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_FRAME_ERROR_WRAPPER);
-            CJC_NULLPTR_CHECK(errorWrapperDecl);
-            auto errorWrapperTy = typeManager.GetClassTy(*errorWrapperDecl, {});
-            // stdx.effect.ImmediateEarlyReturn
-            auto earlyReturnDecl =
-                importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_EARLY_RETURN);
-            CJC_NULLPTR_CHECK(earlyReturnDecl);
-            auto earlyReturnTy = typeManager.GetClassTy(*earlyReturnDecl, {});
-
-            // `try { ... }
-            auto tryExpr = MakeOwnedNode<TryExpr>();
-            CopyBasicInfo(innerBlock, tryExpr);
-
-            {
-                // (v: Exception)
-                auto vp = CreateVarPattern(V_COMPILER, exceptionType);
-                AST::CopyNodeScopeInfo(vp->varDecl, innerBlock);
-
-                // ImmediateFrameExceptionWrapper( ... )
-                std::vector<Ptr<FuncDecl>> inits;
-                for (auto& decl : exceptionWrapperDecl->GetMemberDecls()) {
-                    CJC_NULLPTR_CHECK(decl);
-                    if (decl->astKind == ASTKind::FUNC_DECL && decl.get()->TestAttr(Attribute::CONSTRUCTOR)) {
-                        inits.emplace_back(StaticCast<FuncDecl*>(decl.get()));
-                    }
+                // remove return expr from inner block since we wan't to treat it as
+                // an exception now
+                if (auto lastExpr = std::move(innerBlock->body.back())) {
+                    auto returnExpr = StaticCast<ReturnExpr*>(lastExpr.get());
+                    CJC_NULLPTR_CHECK(returnExpr);
+                    innerBlock->body.back() = std::move(returnExpr->expr);
                 }
-                CJC_ASSERT(inits.size() == 1);
-                auto initDecl = inits.front();
+                innerBlock->SetTy(Ty::GetInitialTy());
 
-                CJC_ASSERT(Ty::IsTyCorrect(initDecl->GetTy()) && initDecl->GetTy()->IsFunc());
+                // Get all declarations and types needed
+                // std.core.Exception
+                auto exceptionDecl = importManager.GetCoreDecl<ClassDecl>(CLASS_EXCEPTION);
+                CJC_NULLPTR_CHECK(exceptionDecl);
+                auto exceptionType = exceptionDecl->GetTy();
+                // std.core.Error
+                auto errorDecl = importManager.GetCoreDecl<ClassDecl>(CLASS_ERROR);
+                CJC_NULLPTR_CHECK(errorDecl);
+                auto errorType = errorDecl->GetTy();
+                // stdx.effect.ImmediateFrameExceptionWrapper
+                auto exceptionWrapperDecl = importManager.GetImportedDecl<ClassDecl>(
+                    EFFECT_INTERNALS_PACKAGE_NAME, CLASS_FRAME_EXCEPTION_WRAPPER);
+                CJC_NULLPTR_CHECK(exceptionWrapperDecl);
+                auto exceptionWrapperTy = typeManager.GetClassTy(*exceptionWrapperDecl, {});
+                // stdx.effect.ImmediateFrameErrorWrapper
+                auto errorWrapperDecl =
+                    importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_FRAME_ERROR_WRAPPER);
+                CJC_NULLPTR_CHECK(errorWrapperDecl);
+                auto errorWrapperTy = typeManager.GetClassTy(*errorWrapperDecl, {});
+                // stdx.effect.ImmediateEarlyReturn
+                auto earlyReturnDecl =
+                    importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_EARLY_RETURN);
+                CJC_NULLPTR_CHECK(earlyReturnDecl);
+                auto earlyReturnTy = typeManager.GetClassTy(*earlyReturnDecl, {});
 
-                OwnedPtr<RefExpr> re2 = CreateRefExpr(CLASS_FRAME_EXCEPTION_WRAPPER);
-                re2->isAlone = false;
-                re2->ref.target = initDecl;
-                re2->SetTy(initDecl->GetTy());
-                CopyBasicInfo(innerBlock, re2.get());
+                // `try { ... }
+                auto tryExpr = MakeOwnedNode<TryExpr>();
+                CopyBasicInfo(innerBlock, tryExpr);
 
-                // (v)
-                std::vector<OwnedPtr<FuncArg>> args;
+                {
+                    // (v: Exception)
+                    auto vp = CreateVarPattern(V_COMPILER, exceptionType);
+                    AST::CopyNodeScopeInfo(vp->varDecl, innerBlock);
 
-                // HandlerFrame.getActiveFrame()
-                auto getActiveFrame = GetHelperFrameMethod(*innerBlock, "getActiveFrame", {});
-                auto getActiveFrameCall = CreateCallExpr(std::move(getActiveFrame), {});
-                SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, getActiveFrameCall.get());
+                    // ImmediateFrameExceptionWrapper( ... )
+                    std::vector<Ptr<FuncDecl>> inits;
+                    for (auto& decl : exceptionWrapperDecl->GetMemberDecls()) {
+                        CJC_NULLPTR_CHECK(decl);
+                        if (decl->astKind == ASTKind::FUNC_DECL && decl.get()->TestAttr(Attribute::CONSTRUCTOR)) {
+                            inits.emplace_back(StaticCast<FuncDecl*>(decl.get()));
+                        }
+                    }
+                    CJC_ASSERT(inits.size() == 1);
+                    auto initDecl = inits.front();
 
-                auto vpRef = CreateRefExpr(*vp->varDecl);
-                AST::CopyNodeScopeInfo(vpRef, innerBlock);
+                    CJC_ASSERT(Ty::IsTyCorrect(initDecl->GetTy()) && initDecl->GetTy()->IsFunc());
 
-                // ImmediateFrameExceptionWrapper(HandlerFrame.getActiveFrame(), v)
-                args.emplace_back(CreateFuncArg(std::move(getActiveFrameCall)));
-                args.emplace_back(CreateFuncArg(std::move(vpRef)));
-                auto wrapperCreation = AST::CreateCallExpr(
-                    std::move(re2), std::move(args), initDecl, exceptionWrapperTy, CallKind::CALL_OBJECT_CREATION);
-                CopyBasicInfo(innerBlock, wrapperCreation);
-                wrapperCreation->desugarArgs = {};
+                    OwnedPtr<RefExpr> re2 = CreateRefExpr(CLASS_FRAME_EXCEPTION_WRAPPER);
+                    re2->isAlone = false;
+                    re2->ref.target = initDecl;
+                    re2->SetTy(initDecl->GetTy());
+                    CopyBasicInfo(innerBlock, re2.get());
 
-                // throw ImmediateFrameExceptionWrapper(...)
-                auto throwExpr = MakeOwned<ThrowExpr>();
-                throwExpr->expr = std::move(wrapperCreation);
-                throwExpr->SetTy(TypeManager::GetNothingTy());
+                    // (v)
+                    std::vector<OwnedPtr<FuncArg>> args;
 
-                // {
-                //      throw ImmediateFrameExceptionWrapper(...)
-                // }
-                std::vector<OwnedPtr<Node>> catchBlockNodes;
-                (void)catchBlockNodes.emplace_back(std::move(throwExpr));
-                auto catchBlock = CreateBlock(std::move(catchBlockNodes));
+                    // HandlerFrame.getActiveFrame()
+                    auto getActiveFrame = GetHelperFrameMethod(*innerBlock, "getActiveFrame", {});
+                    auto getActiveFrameCall = CreateCallExpr(std::move(getActiveFrame), {});
+                    SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, getActiveFrameCall.get());
 
-                // (v: Exception)
-                auto exceptTypePattern = MakeOwnedNode<ExceptTypePattern>();
-                exceptTypePattern->pattern = std::move(vp);
-                (void)exceptTypePattern->types.emplace_back(CreateRefType(*exceptionDecl));
-                exceptTypePattern->SetTy(exceptionType);
+                    auto vpRef = CreateRefExpr(*vp->varDecl);
+                    AST::CopyNodeScopeInfo(vpRef, innerBlock);
 
-                // `catch (v: Exception) {
+                    // ImmediateFrameExceptionWrapper(HandlerFrame.getActiveFrame(), v)
+                    args.emplace_back(CreateFuncArg(std::move(getActiveFrameCall)));
+                    args.emplace_back(CreateFuncArg(std::move(vpRef)));
+                    auto wrapperCreation = AST::CreateCallExpr(
+                        std::move(re2), std::move(args), initDecl, exceptionWrapperTy, CallKind::CALL_OBJECT_CREATION);
+                    CopyBasicInfo(innerBlock, wrapperCreation);
+                    wrapperCreation->desugarArgs = {};
+
+                    // throw ImmediateFrameExceptionWrapper(...)
+                    auto throwExpr = MakeOwned<ThrowExpr>();
+                    throwExpr->expr = std::move(wrapperCreation);
+                    throwExpr->SetTy(TypeManager::GetNothingTy());
+
+                    // {
+                    //      throw ImmediateFrameExceptionWrapper(...)
+                    // }
+                    std::vector<OwnedPtr<Node>> catchBlockNodes;
+                    (void)catchBlockNodes.emplace_back(std::move(throwExpr));
+                    auto catchBlock = CreateBlock(std::move(catchBlockNodes));
+
+                    // (v: Exception)
+                    auto exceptTypePattern = MakeOwnedNode<ExceptTypePattern>();
+                    exceptTypePattern->pattern = std::move(vp);
+                    (void)exceptTypePattern->types.emplace_back(CreateRefType(*exceptionDecl));
+                    exceptTypePattern->SetTy(exceptionType);
+
+                    // `catch (v: Exception) {
+                    // `     throw ImmediateFrameExceptionWrapper(...)
+                    // `}
+                    (void)tryExpr->catchBlocks.emplace_back(std::move(catchBlock));
+                    (void)tryExpr->catchPatterns.emplace_back(std::move(exceptTypePattern));
+                }
+
+                {
+                    // (v: Error)
+                    auto vp = CreateVarPattern(V_COMPILER, errorType);
+                    AST::CopyNodeScopeInfo(vp->varDecl, innerBlock);
+
+                    // ImmediateFrameErrorWrapper( ... )
+                    std::vector<Ptr<FuncDecl>> inits;
+                    for (auto& decl : errorWrapperDecl->GetMemberDecls()) {
+                        CJC_NULLPTR_CHECK(decl);
+                        if (decl->astKind == ASTKind::FUNC_DECL && decl.get()->TestAttr(Attribute::CONSTRUCTOR)) {
+                            inits.emplace_back(StaticCast<FuncDecl*>(decl.get()));
+                        }
+                    }
+                    CJC_ASSERT(inits.size() == 1);
+                    auto initDecl = inits.front();
+
+                    CJC_ASSERT(Ty::IsTyCorrect(initDecl->GetTy()) && initDecl->GetTy()->IsFunc());
+
+                    OwnedPtr<RefExpr> re2 = CreateRefExpr(CLASS_FRAME_ERROR_WRAPPER);
+                    re2->isAlone = false;
+                    re2->ref.target = initDecl;
+                    re2->SetTy(initDecl->GetTy());
+                    CopyBasicInfo(innerBlock, re2.get());
+
+                    // (v)
+                    std::vector<OwnedPtr<FuncArg>> args;
+
+                    // HandlerFrame.getActiveFrame()
+                    auto getActiveFrame = GetHelperFrameMethod(*innerBlock, "getActiveFrame", {});
+                    auto getActiveFrameCall = CreateCallExpr(std::move(getActiveFrame), {});
+                    SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, getActiveFrameCall.get());
+
+                    auto vpRef = CreateRefExpr(*vp->varDecl);
+                    AST::CopyNodeScopeInfo(vpRef, innerBlock);
+
+                    // ImmediateFrameErrorWrapper(HandlerFrame.getActiveFrame(), v)
+                    args.emplace_back(CreateFuncArg(std::move(getActiveFrameCall)));
+                    args.emplace_back(CreateFuncArg(std::move(vpRef)));
+                    auto wrapperCreation = AST::CreateCallExpr(
+                        std::move(re2), std::move(args), initDecl, errorWrapperTy, CallKind::CALL_OBJECT_CREATION);
+                    CopyBasicInfo(innerBlock, wrapperCreation);
+                    wrapperCreation->desugarArgs = {};
+
+                    // throw ImmediateFrameErrorWrapper(...)
+                    auto throwExpr = MakeOwned<ThrowExpr>();
+                    throwExpr->expr = std::move(wrapperCreation);
+                    throwExpr->SetTy(TypeManager::GetNothingTy());
+
+                    // {
+                    //      throw ImmediateFrameErrorWrapper(...)
+                    // }
+                    std::vector<OwnedPtr<Node>> catchBlockNodes;
+                    (void)catchBlockNodes.emplace_back(std::move(throwExpr));
+                    auto catchBlock = CreateBlock(std::move(catchBlockNodes));
+
+                    // (v: Error)
+                    auto exceptTypePattern = MakeOwnedNode<ExceptTypePattern>();
+                    exceptTypePattern->pattern = std::move(vp);
+                    (void)exceptTypePattern->types.emplace_back(CreateRefType(*errorDecl));
+                    exceptTypePattern->SetTy(errorType);
+
+                    // `catch (v: Error) {
+                    // `     throw ImmediateFrameErrorWrapper(...)
+                    // `}
+                    (void)tryExpr->catchBlocks.emplace_back(std::move(catchBlock));
+                    (void)tryExpr->catchPatterns.emplace_back(std::move(exceptTypePattern));
+                }
+
+                tryExpr->tryBlock = std::move(innerBlock);
+
+                // Recover all types in the try expression
+                SynthesizeWithoutRecover({ctx, SynPos::NONE}, tryExpr); // none for now
+
+                std::vector<OwnedPtr<Cangjie::AST::Node>> nodes;
+
+                {
+                    // let result = try { ... } catch { ... }
+                    auto tryResult = CreateVarDecl(V_COMPILER, std::move(tryExpr));
+                    AST::CopyNodeScopeInfo(tryResult, tryResult);
+
+                    auto resRef = CreateRefExpr(*tryResult);
+                    CopyNodeScopeInfo(resRef, tryResult);
+
+                    std::vector<Ptr<FuncDecl>> inits;
+                    for (auto& decl : earlyReturnDecl->GetMemberDecls()) {
+                        CJC_NULLPTR_CHECK(decl);
+                        if (decl->astKind == ASTKind::FUNC_DECL && decl.get()->TestAttr(Attribute::CONSTRUCTOR)) {
+                            inits.emplace_back(StaticCast<FuncDecl*>(decl.get()));
+                        }
+                    }
+                    CJC_ASSERT(inits.size() == 1);
+                    auto initDecl = inits.front();
+                    CJC_ASSERT(Ty::IsTyCorrect(initDecl->GetTy()) && initDecl->GetTy()->IsFunc());
+
+                    // HandlerFrame.getActiveFrame()
+                    auto getActiveFrame = GetHelperFrameMethod(*tryResult, "getActiveFrame", {});
+                    auto getActiveFrameCall = CreateCallExpr(std::move(getActiveFrame), {});
+                    SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, getActiveFrameCall.get());
+
+                    // ImmediateEarlyReturn(...)
+                    OwnedPtr<RefExpr> re2 = CreateRefExpr(CLASS_EARLY_RETURN);
+                    re2->isAlone = false;
+                    re2->ref.target = initDecl;
+                    re2->SetTy(initDecl->GetTy());
+                    CopyBasicInfo(tryResult, re2.get());
+
+                    // ImmediateEarlyReturn(HandlerFrame.getActiveFrame(), result)
+                    std::vector<OwnedPtr<FuncArg>> args2;
+                    args2.emplace_back(CreateFuncArg(std::move(getActiveFrameCall)));
+                    args2.emplace_back(CreateFuncArg(std::move(resRef)));
+                    auto earlyCreation = AST::CreateCallExpr(
+                        std::move(re2), std::move(args2), initDecl, earlyReturnTy, CallKind::CALL_OBJECT_CREATION);
+                    CopyBasicInfo(tryResult, earlyCreation);
+                    earlyCreation->desugarArgs = {};
+
+                    // throw ImmediateEarlyReturn(...)
+                    auto throwExpr2 = MakeOwned<ThrowExpr>();
+                    throwExpr2->expr = std::move(earlyCreation);
+                    throwExpr2->SetTy(TypeManager::GetNothingTy());
+
+                    nodes.emplace_back(std::move(tryResult));
+                    nodes.emplace_back(std::move(throwExpr2));
+                }
+
+                // `let result = try {
+                // `     <block>
+                // `} catch (x: Exception) {
                 // `     throw ImmediateFrameExceptionWrapper(...)
                 // `}
-                (void)tryExpr->catchBlocks.emplace_back(std::move(catchBlock));
-                (void)tryExpr->catchPatterns.emplace_back(std::move(exceptTypePattern));
+                // `throw ImmediateFrameEarlyReturn(...)
+                auto resultBlock = CreateBlock(std::move(nodes));
+
+                // Recover the types of the whole block
+                SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, resultBlock);
+                handlerLambda->funcBody->body = std::move(resultBlock);
+
+                // Finally, we need to change the type of the try lambda from T
+                // to ImmediateHandlerReturn<T>
+                auto resultDecl =
+                    importManager.GetImportedDecl<EnumDecl>(EFFECT_INTERNALS_PACKAGE_NAME, "ImmediateHandlerReturn");
+                CJC_NULLPTR_CHECK(resultDecl);
+                auto resultDeclTy = typeManager.GetEnumTy(*resultDecl, {handler.commandResultTy});
+
+                handlerLambda->SetTy(
+                    typeManager.GetFunctionTy(DynamicCast<FuncTy*>(handlerLambda->GetTy())->paramTys, resultDeclTy));
+                handlerLambda->funcBody->SetTy(
+                    typeManager.GetFunctionTy(DynamicCast<FuncTy*>(handlerLambda->GetTy())->paramTys, resultDeclTy));
+                handlerLambda->funcBody->retType = CreateRefType(*resultDeclTy->decl);
             }
-
-            {
-                // (v: Error)
-                auto vp = CreateVarPattern(V_COMPILER, errorType);
-                AST::CopyNodeScopeInfo(vp->varDecl, innerBlock);
-
-                // ImmediateFrameErrorWrapper( ... )
-                std::vector<Ptr<FuncDecl>> inits;
-                for (auto& decl : errorWrapperDecl->GetMemberDecls()) {
-                    CJC_NULLPTR_CHECK(decl);
-                    if (decl->astKind == ASTKind::FUNC_DECL && decl.get()->TestAttr(Attribute::CONSTRUCTOR)) {
-                        inits.emplace_back(StaticCast<FuncDecl*>(decl.get()));
-                    }
-                }
-                CJC_ASSERT(inits.size() == 1);
-                auto initDecl = inits.front();
-
-                CJC_ASSERT(Ty::IsTyCorrect(initDecl->GetTy()) && initDecl->GetTy()->IsFunc());
-
-                OwnedPtr<RefExpr> re2 = CreateRefExpr(CLASS_FRAME_ERROR_WRAPPER);
-                re2->isAlone = false;
-                re2->ref.target = initDecl;
-                re2->SetTy(initDecl->GetTy());
-                CopyBasicInfo(innerBlock, re2.get());
-
-                // (v)
-                std::vector<OwnedPtr<FuncArg>> args;
-
-                // HandlerFrame.getActiveFrame()
-                auto getActiveFrame = GetHelperFrameMethod(*innerBlock, "getActiveFrame", {});
-                auto getActiveFrameCall = CreateCallExpr(std::move(getActiveFrame), {});
-                SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, getActiveFrameCall.get());
-
-                auto vpRef = CreateRefExpr(*vp->varDecl);
-                AST::CopyNodeScopeInfo(vpRef, innerBlock);
-
-                // ImmediateFrameErrorWrapper(HandlerFrame.getActiveFrame(), v)
-                args.emplace_back(CreateFuncArg(std::move(getActiveFrameCall)));
-                args.emplace_back(CreateFuncArg(std::move(vpRef)));
-                auto wrapperCreation = AST::CreateCallExpr(
-                    std::move(re2), std::move(args), initDecl, errorWrapperTy, CallKind::CALL_OBJECT_CREATION);
-                CopyBasicInfo(innerBlock, wrapperCreation);
-                wrapperCreation->desugarArgs = {};
-
-                // throw ImmediateFrameErrorWrapper(...)
-                auto throwExpr = MakeOwned<ThrowExpr>();
-                throwExpr->expr = std::move(wrapperCreation);
-                throwExpr->SetTy(TypeManager::GetNothingTy());
-
-                // {
-                //      throw ImmediateFrameErrorWrapper(...)
-                // }
-                std::vector<OwnedPtr<Node>> catchBlockNodes;
-                (void)catchBlockNodes.emplace_back(std::move(throwExpr));
-                auto catchBlock = CreateBlock(std::move(catchBlockNodes));
-
-                // (v: Error)
-                auto exceptTypePattern = MakeOwnedNode<ExceptTypePattern>();
-                exceptTypePattern->pattern = std::move(vp);
-                (void)exceptTypePattern->types.emplace_back(CreateRefType(*errorDecl));
-                exceptTypePattern->SetTy(errorType);
-
-                // `catch (v: Error) {
-                // `     throw ImmediateFrameErrorWrapper(...)
-                // `}
-                (void)tryExpr->catchBlocks.emplace_back(std::move(catchBlock));
-                (void)tryExpr->catchPatterns.emplace_back(std::move(exceptTypePattern));
-            }
-
-            tryExpr->tryBlock = std::move(innerBlock);
-
-            // Recover all types in the try expression
-            SynthesizeWithoutRecover({ctx, SynPos::NONE}, tryExpr); // none for now
-
-            std::vector<OwnedPtr<Cangjie::AST::Node>> nodes;
-
-            {
-                // let result = try { ... } catch { ... }
-                auto tryResult = CreateVarDecl(V_COMPILER, std::move(tryExpr));
-                AST::CopyNodeScopeInfo(tryResult, tryResult);
-
-                auto resRef = CreateRefExpr(*tryResult);
-                CopyNodeScopeInfo(resRef, tryResult);
-
-                std::vector<Ptr<FuncDecl>> inits;
-                for (auto& decl : earlyReturnDecl->GetMemberDecls()) {
-                    CJC_NULLPTR_CHECK(decl);
-                    if (decl->astKind == ASTKind::FUNC_DECL && decl.get()->TestAttr(Attribute::CONSTRUCTOR)) {
-                        inits.emplace_back(StaticCast<FuncDecl*>(decl.get()));
-                    }
-                }
-                CJC_ASSERT(inits.size() == 1);
-                auto initDecl = inits.front();
-                CJC_ASSERT(Ty::IsTyCorrect(initDecl->GetTy()) && initDecl->GetTy()->IsFunc());
-
-                // HandlerFrame.getActiveFrame()
-                auto getActiveFrame = GetHelperFrameMethod(*tryResult, "getActiveFrame", {});
-                auto getActiveFrameCall = CreateCallExpr(std::move(getActiveFrame), {});
-                SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, getActiveFrameCall.get());
-
-                // ImmediateEarlyReturn(...)
-                OwnedPtr<RefExpr> re2 = CreateRefExpr(CLASS_EARLY_RETURN);
-                re2->isAlone = false;
-                re2->ref.target = initDecl;
-                re2->SetTy(initDecl->GetTy());
-                CopyBasicInfo(tryResult, re2.get());
-
-                // ImmediateEarlyReturn(HandlerFrame.getActiveFrame(), result)
-                std::vector<OwnedPtr<FuncArg>> args2;
-                args2.emplace_back(CreateFuncArg(std::move(getActiveFrameCall)));
-                args2.emplace_back(CreateFuncArg(std::move(resRef)));
-                auto earlyCreation = AST::CreateCallExpr(
-                    std::move(re2), std::move(args2), initDecl, earlyReturnTy, CallKind::CALL_OBJECT_CREATION);
-                CopyBasicInfo(tryResult, earlyCreation);
-                earlyCreation->desugarArgs = {};
-
-                // throw ImmediateEarlyReturn(...)
-                auto throwExpr2 = MakeOwned<ThrowExpr>();
-                throwExpr2->expr = std::move(earlyCreation);
-                throwExpr2->SetTy(TypeManager::GetNothingTy());
-
-                nodes.emplace_back(std::move(tryResult));
-                nodes.emplace_back(std::move(throwExpr2));
-            }
-
-            // `let result = try {
-            // `     <block>
-            // `} catch (x: Exception) {
-            // `     throw ImmediateFrameExceptionWrapper(...)
-            // `}
-            // `throw ImmediateFrameEarlyReturn(...)
-            auto resultBlock = CreateBlock(std::move(nodes));
-
-            // Recover the types of the whole block
-            SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, resultBlock);
-            handlerLambda->funcBody->body = std::move(resultBlock);
-
-            // Finally, we need to change the type of the try lambda from T
-            // to ImmediateHandlerReturn<T>
-            auto resultDecl =
-                importManager.GetImportedDecl<EnumDecl>(EFFECT_INTERNALS_PACKAGE_NAME, "ImmediateHandlerReturn");
-            CJC_NULLPTR_CHECK(resultDecl);
-            auto resultDeclTy = typeManager.GetEnumTy(*resultDecl, {handler.commandResultTy});
-
-            handlerLambda->SetTy(
-                typeManager.GetFunctionTy(DynamicCast<FuncTy*>(handlerLambda->GetTy())->paramTys, resultDeclTy));
-            handlerLambda->funcBody->SetTy(
-                typeManager.GetFunctionTy(DynamicCast<FuncTy*>(handlerLambda->GetTy())->paramTys, resultDeclTy));
-            handlerLambda->funcBody->retType = CreateRefType(*resultDeclTy->decl);
 
             // Like in createFrame, we can't just pass the lambda to `setHandler`
             OwnedPtr<AST::VarDecl> handlerLambdaVarDecl = CreateVarDecl("$handlerLambda", std::move(handlerLambda));
@@ -892,6 +913,20 @@ void TypeChecker::TypeCheckerImpl::CreateSetHandler(
             block.emplace_back(std::move(setHandlerCall));
         }
     }
+}
+
+Ptr<FuncTy> TypeChecker::TypeCheckerImpl::CastDeferredHandlerFn(Ptr<FuncTy> stdxFuncTy)
+{
+    auto commandTy = stdxFuncTy->paramTys[0];
+    auto stdResumptionTy = ResumptionToInternalResumptionTy(stdxFuncTy->paramTys[1]);
+    return typeManager.GetFunctionTy({commandTy, stdResumptionTy}, stdxFuncTy->retTy);
+}
+
+Ptr<Ty> TypeChecker::TypeCheckerImpl::ResumptionToInternalResumptionTy(Ptr<Ty> stdxResumptionTy)
+{
+    auto stdResumptionDecl = RawStaticCast<ClassDecl*>(
+        importManager.GetImportedDecl(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_RESUMPTION_INTERNAL));
+    return typeManager.GetClassTy(*stdResumptionDecl, stdxResumptionTy->typeArgs);
 }
 
 /*
@@ -1039,7 +1074,73 @@ void TypeChecker::TypeCheckerImpl::DesugarResume(ASTContext& ctx, AST::ResumeExp
         // has not been run
         return;
     }
-    DesugarImmediateResume(ctx, re);
+    if (re.expr) {
+        DesugarDeferredResume(ctx, re);
+    } else {
+        DesugarImmediateResume(ctx, re);
+    }
+}
+
+/*
+    From: resume res with val
+    To: res.proceed(val)
+    (And similar for resume throwing)
+
+    Note that the resumption variable needs to be casted to an InternalResumption
+*/
+void TypeChecker::TypeCheckerImpl::DesugarDeferredResume([[maybe_unused]] ASTContext& ctx, AST::ResumeExpr& re)
+{
+    auto argTy = re.withExpr ? re.withExpr->GetTy() : TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    auto resumeFnName = "proceed";
+    if (re.throwingExpr) {
+        // Check whether we're throwing an error or an exception -- the base type
+        // is different, so we need to call a different method
+        auto exception = importManager.GetCoreDecl<ClassDecl>(CLASS_EXCEPTION);
+        CJC_NULLPTR_CHECK(exception);
+        if (typeManager.IsSubtype(re.throwingExpr->GetTy(), exception->GetTy())) {
+            resumeFnName = "failExn";
+        } else {
+            resumeFnName = "failErr";
+        }
+    }
+    OwnedPtr<Expr> resumeFn = GetHelperFrameMethod(re, resumeFnName, {argTy});
+
+    auto outerBlock = MakeOwnedNode<Block>();
+    CopyNodeScopeInfo(outerBlock, &re);
+    outerBlock->SetTy(re.GetTy());
+
+    // Create `let $tmp = resumption`
+    {
+        auto resVarDecl = CreateVarDecl("$resumption", std::move(re.expr));
+        CopyNodeScopeInfo(resVarDecl, &re);
+        resVarDecl->SetTy(ResumptionToInternalResumptionTy(resVarDecl->initializer->GetTy()));
+        outerBlock->body.emplace_back(std::move(resVarDecl));
+    }
+    auto& resVarDecl = *RawStaticCast<VarDecl*>(outerBlock->body.back().get());
+    auto resRef = CreateRefExpr(resVarDecl);
+    CopyNodeScopeInfo(resRef, &re);
+
+    // create function call of Frame
+    std::vector<OwnedPtr<FuncArg>> args;
+    args.emplace_back(CreateFuncArg(std::move(resRef)));
+    if (re.withExpr) {
+        args.emplace_back(CreateFuncArg(std::move(re.withExpr)));
+    } else if (re.throwingExpr) {
+        args.emplace_back(CreateFuncArg(std::move(re.throwingExpr)));
+    } else {
+        // Create a Unit argument if one is not explicitly provided, i.e. `resume r`
+        args.emplace_back(CreateFuncArg(AST::CreateUnitExpr(argTy)));
+    }
+
+    auto resumeCall = AST::CreateCallExpr(std::move(resumeFn), std::move(args));
+    auto typecheckOk = ChkCallExpr(ctx, re.GetTy(), *resumeCall);
+    CJC_ASSERT(typecheckOk);
+    // Checking for a call expr may get rid of some desugarings
+    DesugarForPropDecl(*resumeCall);
+
+    outerBlock->body.emplace_back(std::move(resumeCall));
+
+    re.desugarExpr = std::move(outerBlock);
 }
 
 /**

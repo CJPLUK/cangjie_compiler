@@ -62,13 +62,12 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTryExpr(ASTContext& ctx, TryExpr& te)
     }
 
     bool isWellTyped;
+    CJC_NULLPTR_CHECK(te.tryBlock);
+    isWellTyped = SynthesizeAndReplaceIdealTy({ctx, SynPos::NONE}, *te.tryBlock);
     if (!te.handlers.empty() && te.tryLambda) {
         // For a try-handle expression, the try block has been replaced by a lambda,
         // but only if there were no syntax errors.
         isWellTyped = SynthesizeAndReplaceIdealTy({ctx, SynPos::EXPR_ARG}, *te.tryLambda);
-    } else {
-        CJC_NULLPTR_CHECK(te.tryBlock);
-        isWellTyped = SynthesizeAndReplaceIdealTy({ctx, SynPos::EXPR_ARG}, *te.tryBlock);
     }
 
     auto optJTy = SynTryExprCatchesAndHandles(ctx, te);
@@ -191,6 +190,13 @@ bool TypeChecker::TypeCheckerImpl::ChkHandler(ASTContext& ctx, Handler& handler,
     }
     std::vector<Ptr<Ty>> args;
     args.emplace_back(cmdTy);
+    if (!handler.IsImmediate()) {
+        auto resTy = StaticAs<ASTKind::RESUMPTION_TYPE_PATTERN>(handler.resumptionPattern.get())->pattern->GetTy();
+        if (resTy->IsInvalid()) {
+            return false;
+        }
+        args.emplace_back(resTy);
+    }
     Ptr<Ty> handleLambdaTy = typeManager.GetFunctionTy(args, &tgtTy);
     if (!Check(ctx, handleLambdaTy, handler.desugaredLambda)) {
         DiagMismatchedTypes(diag, *handler.desugaredLambda->funcBody->body, tgtTy);
@@ -214,6 +220,12 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExpr(ASTContext& ctx, Ty& tgtTy, TryExp
     }
     CJC_NULLPTR_CHECK(te.tryBlock);
     bool isWellTyped = true;
+    if (!Check(ctx, &tgtTy, te.tryBlock.get())) {
+        isWellTyped = false;
+        if (!CanSkipDiag(*te.tryBlock) && !typeManager.IsSubtype(te.tryBlock->GetTy(), &tgtTy)) {
+            DiagMismatchedTypes(diag, *te.tryBlock, tgtTy);
+        }
+    }
     if (!te.handlers.empty()) {
         // Careful: if there are handlers, then the body of the try is empty because we turned
         // it into a lambda during parsing
@@ -223,11 +235,6 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExpr(ASTContext& ctx, Ty& tgtTy, TryExp
             if (!CanSkipDiag(*te.tryBlock) && !typeManager.IsSubtype(te.tryBlock->GetTy(), &tgtTy)) {
                 DiagMismatchedTypes(diag, *te.tryBlock, tgtTy);
             }
-        }
-    } else if (!Check(ctx, &tgtTy, te.tryBlock.get())) {
-        isWellTyped = false;
-        if (!CanSkipDiag(*te.tryBlock) && !typeManager.IsSubtype(te.tryBlock->GetTy(), &tgtTy)) {
-            DiagMismatchedTypes(diag, *te.tryBlock, tgtTy);
         }
     }
     isWellTyped = ChkTryExprCatchesAndHandles(ctx, tgtTy, te) && isWellTyped;
@@ -239,8 +246,12 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExpr(ASTContext& ctx, Ty& tgtTy, TryExp
 bool TypeChecker::TypeCheckerImpl::ChkTryExprCatchesAndHandles(ASTContext& ctx, Ty& tgtTy, TryExpr& te)
 {
     bool isWellTyped = ChkTryExprCatchPatterns(ctx, te) && ChkTryExprHandlePatterns(ctx, te);
+    if (!te.handlers.empty()) {
+        isWellTyped = isWellTyped && ValidateBlockInTryHandle(*te.tryBlock);
+    }
     for (auto& catchBlock : te.catchBlocks) {
-        if (Check(ctx, &tgtTy, catchBlock.get())) {
+        if (Check(ctx, &tgtTy, catchBlock.get()) &&
+            (te.handlers.empty() || ValidateBlockInTryHandle(*catchBlock))) {
             continue;
         }
         isWellTyped = false;
@@ -313,11 +324,12 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExprHandlePatterns(ASTContext& ctx, Try
     std::vector<Ptr<Ty>> included{};
     for (auto& handler : te.handlers) {
         if (handler.commandPattern.get()->astKind != ASTKind::COMMAND_TYPE_PATTERN ||
+            (!handler.IsImmediate() && handler.resumptionPattern.get()->astKind != ASTKind::RESUMPTION_TYPE_PATTERN) ||
             !handler.desugaredLambda) {
             // Parse error has already been reported.
             continue;
         }
-        if (!ChkHandlePatterns(ctx, handler, included)) {
+        if (!ChkHandlePatterns(ctx, te, handler, included)) {
             return false;
         }
     }
@@ -328,7 +340,7 @@ bool TypeChecker::TypeCheckerImpl::ValidateHandler(Handler& h)
 {
     bool valid = ValidateBlockInTryHandle(*h.block);
     std::vector<Ptr<Node>> scopeChanges;
-    if (valid) {
+    if (valid && h.IsImmediate()) {
         // If the handler is immediate, then we need to walk the body of the handle blocks
         // and bind any implicit `resume` to it.
         if (!h.desugaredLambda) {
@@ -339,7 +351,9 @@ bool TypeChecker::TypeCheckerImpl::ValidateHandler(Handler& h)
             switch (node->astKind) {
                 case ASTKind::RESUME_EXPR: {
                     auto re = StaticAs<ASTKind::RESUME_EXPR>(node);
-                    re->enclosing = &h;
+                    if (!re->expr) {
+                        re->enclosing = &h;
+                    }
                     return VisitAction::WALK_CHILDREN;
                 }
                 case ASTKind::FUNC_BODY:
