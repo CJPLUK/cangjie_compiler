@@ -1744,11 +1744,6 @@ llvm::Value* IRBuilder2::GetSizeFromTypeInfo(llvm::Value* typeInfo)
 llvm::Value* IRBuilder2::GetLayoutSize_32(const CHIR::Type& type)
 {
     auto baseType = DeRef(type);
-    if (auto gt = DynamicCast<const CHIR::GenericType*>(baseType); gt && gt->orphanFlag) {
-        CJC_ASSERT(gt->GetUpperBounds().size() == 1U);
-        baseType = gt->GetUpperBounds()[0];
-    }
-
     auto cgType = CGType::GetOrCreate(cgMod, baseType);
     if (auto s = cgType->GetSize()) {
         return llvm::ConstantInt::get(getInt32Ty(), s.value());
@@ -1760,11 +1755,6 @@ llvm::Value* IRBuilder2::GetLayoutSize_32(const CHIR::Type& type)
 llvm::Value* IRBuilder2::GetLayoutSize_64(const CHIR::Type& type)
 {
     auto baseType = DeRef(type);
-    if (auto gt = DynamicCast<const CHIR::GenericType*>(baseType); gt && gt->orphanFlag) {
-        CJC_ASSERT(gt->GetUpperBounds().size() == 1U);
-        baseType = gt->GetUpperBounds()[0];
-    }
-
     auto cgType = CGType::GetOrCreate(cgMod, baseType);
     if (auto s = cgType->GetSize()) {
         return llvm::ConstantInt::get(getInt64Ty(), s.value());
@@ -1776,10 +1766,6 @@ llvm::Value* IRBuilder2::GetLayoutSize_64(const CHIR::Type& type)
 llvm::Value* IRBuilder2::GetSize_32(const CHIR::Type& type)
 {
     auto baseType = DeRef(type);
-    if (auto gt = DynamicCast<const CHIR::GenericType*>(baseType); gt && gt->orphanFlag) {
-        CJC_ASSERT(gt->GetUpperBounds().size() == 1U);
-        baseType = gt->GetUpperBounds()[0];
-    }
     if (baseType->IsGeneric()) {
         auto [refSizeBB, nonRefSizeBB, exitBB] = Vec2Tuple<3>(CreateAndInsertBasicBlocks(
             {GenNameForBB("get_ref_size"), GenNameForBB("get_non_ref_size"), GenNameForBB("get_size_exit")}));
@@ -1920,11 +1906,6 @@ llvm::Value* IRBuilder2::CreateTypeInfoIsReferenceCall(llvm::Value* ti)
 llvm::Value* IRBuilder2::CreateTypeInfoIsReferenceCall(const CHIR::Type& chirType)
 {
     auto baseType = DeRef(chirType);
-    if (auto gt = DynamicCast<const CHIR::GenericType*>(baseType); gt && gt->orphanFlag) {
-        CJC_ASSERT(gt->GetUpperBounds().size() == 1U);
-        baseType = gt->GetUpperBounds()[0];
-    }
-
     if (baseType->IsGeneric()) {
         auto baseTypeTI = CreateTypeInfo(*baseType);
         return CreateTypeInfoIsReferenceCall(baseTypeTI);

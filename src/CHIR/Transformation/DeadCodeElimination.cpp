@@ -876,6 +876,9 @@ bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions
     if (!func.GetUsers().empty()) {
         return false;
     }
+    if (func.GetFuncKind() == CHIR::FuncKind::ANNOFACTORY_FUNC) {
+        return false;
+    }
     if (func.GetIdentifierWithoutPrefix() == USER_MAIN_MANGLED_NAME) {
         return false;
     }

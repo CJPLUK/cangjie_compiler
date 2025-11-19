@@ -4,29 +4,30 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include "cangjie/CHIR/Transformation/ReplaceSrcCodeImportedVal.h"
+
 #include "cangjie/CHIR/Analysis/Utils.h"
 #include "cangjie/CHIR/CHIR.h"
-#include "cangjie/CHIR/Expression/Terminator.h"
-#include "cangjie/CHIR/Package.h"
-#include "cangjie/CHIR/Visitor/Visitor.h"
-#include "cangjie/CHIR/CHIRCasting.h"
+#include "cangjie/CHIR/IR/Expression/Terminator.h"
+#include "cangjie/CHIR/IR/Package.h"
+#include "cangjie/CHIR/Utils/Visitor/Visitor.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
-namespace Cangjie::CHIR {
+using namespace Cangjie::CHIR;
 namespace {
 void ReplaceCustomTypeDefVtable(CustomTypeDef& def, const std::unordered_map<Value*, Value*>& symbol)
 {
-    auto vtable = def.GetVTable();
+    auto& vtable = def.GetModifiableDefVTable().GetModifiableTypeVTables();
     for (auto& vtableIt : vtable) {
-        for (size_t i = 0; i < vtableIt.second.size(); ++i) {
-            auto res = symbol.find(vtableIt.second[i].instance);
+        for (auto& it : vtableIt.GetModifiableVirtualMethods()) {
+            auto res = symbol.find(it.GetVirtualMethod());
             if (res != symbol.end()) {
-                vtableIt.second[i].instance = VirtualCast<FuncBase*>(res->second);
+                it.SetVirtualMethod(Cangjie::VirtualCast<FuncBase*>(res->second));
             }
         }
     }
-    def.SetVTable(vtable);
 }
 
 void ReplaceCustomTypeDefAndExtendVtable(CustomTypeDef& def, const std::unordered_map<Value*, Value*>& symbol)
@@ -46,7 +47,7 @@ void ReplaceParentAndSubClassVtable(CustomTypeDef& def, const std::unordered_map
     if (!def.IsClassLike()) {
         return;
     }
-    auto& classDef = StaticCast<ClassDef&>(def);
+    auto& classDef = Cangjie::StaticCast<ClassDef&>(def);
     auto it = subClasses.find(&classDef);
     if (it == subClasses.end()) {
         return;
@@ -66,7 +67,7 @@ void ReplaceMethodAndStaticVar(
         for (size_t i = 0; i < methods.size(); ++i) {
             auto res = it.second.find(methods[i]);
             if (res != it.second.end()) {
-                methods[i] = VirtualCast<FuncBase*>(res->second);
+                methods[i] = Cangjie::VirtualCast<FuncBase*>(res->second);
             }
         }
         it.first->SetMethods(methods);
@@ -76,16 +77,16 @@ void ReplaceMethodAndStaticVar(
         for (size_t i = 0; i < staticVars.size(); ++i) {
             auto res = it.second.find(staticVars[i]);
             if (res != it.second.end()) {
-                staticVars[i] = VirtualCast<GlobalVarBase*>(res->second);
+                staticVars[i] = Cangjie::VirtualCast<GlobalVarBase*>(res->second);
             }
         }
         it.first->SetStaticMemberVars(staticVars);
 
         for (auto& it2 : it.second) {
-            if (auto func = DynamicCast<Func*>(it2.first)) {
+            if (auto func = Cangjie::DynamicCast<Func*>(it2.first)) {
                 func->DestroySelf();
             } else {
-                VirtualCast<GlobalVarBase*>(it2.first)->DestroySelf();
+                Cangjie::VirtualCast<GlobalVarBase*>(it2.first)->DestroySelf();
             }
         }
     }
@@ -93,12 +94,12 @@ void ReplaceMethodAndStaticVar(
 
 bool IsEmptyInitFunc(Func& func)
 {
-    if (func.GetFuncKind() != CHIR::FuncKind::GLOBALVAR_INIT) {
+    if (func.GetFuncKind() != Cangjie::CHIR::FuncKind::GLOBALVAR_INIT) {
         return false;
     }
     bool isEmpty = true;
     auto preVisit = [&isEmpty](Expression& e) {
-        if (e.GetExprKind() != CHIR::ExprKind::EXIT && e.GetExprKind() != CHIR::ExprKind::RAISE_EXCEPTION) {
+        if (e.GetExprKind() != Cangjie::CHIR::ExprKind::EXIT && e.GetExprKind() != Cangjie::CHIR::ExprKind::RAISE_EXCEPTION) {
             isEmpty = false;
         }
         return VisitResult::CONTINUE;
@@ -120,8 +121,41 @@ std::unordered_map<ClassDef*, std::unordered_set<CustomTypeDef*>> CollectSubClas
     return subClasses;
 }
 
-void CreateSrcImportedFuncSymbol(
-    CHIRBuilder& builder, Func& fn, std::unordered_map<Func*, ImportedFunc*>& srcCodeImportedFuncMap)
+void RemoveFromPackage(Package& package,
+    const std::unordered_set<Func*>& toBeRemovedFuncs, const std::unordered_set<GlobalVar*>& toBeRemovedVars)
+{
+    std::vector<Func*> globalFuncs;
+    for (auto func : package.GetGlobalFuncs()) {
+        if (toBeRemovedFuncs.find(func) != toBeRemovedFuncs.end()) {
+            continue;
+        } else if (IsEmptyInitFunc(*func)) {
+            for (auto user : func->GetUsers()) {
+                user->RemoveSelfFromBlock();
+            }
+            func->DestroySelf();
+            continue;
+        }
+        globalFuncs.emplace_back(func);
+    }
+    package.SetGlobalFuncs(globalFuncs);
+
+    std::vector<GlobalVar*> globalVars;
+    for (auto var : package.GetGlobalVars()) {
+        if (toBeRemovedVars.find(var) == toBeRemovedVars.end()) {
+            globalVars.emplace_back(var);
+        }
+    }
+    package.SetGlobalVars(std::move(globalVars));
+}
+}
+
+ReplaceSrcCodeImportedVal::ReplaceSrcCodeImportedVal(
+    Package& package, std::unordered_map<std::string, FuncBase*>& implicitFuncs, CHIRBuilder& builder)
+    : package(package), implicitFuncs(implicitFuncs), builder(builder)
+{
+}
+
+void ReplaceSrcCodeImportedVal::CreateSrcImportedFuncSymbol(Func& fn)
 {
     auto genericParamTy = fn.GetGenericTypeParams();
     auto pkgName = fn.GetPackageName();
@@ -134,59 +168,60 @@ void CreateSrcImportedFuncSymbol(
     importedFunc->AppendAttributeInfo(fn.GetAttributeInfo());
     importedFunc->SetFuncKind(fn.GetFuncKind());
     if (auto hostFunc = fn.GetParamDftValHostFunc()) {
-        auto it = srcCodeImportedFuncMap.find(StaticCast<Func*>(hostFunc));
-        CJC_ASSERT(it != srcCodeImportedFuncMap.end());
-        importedFunc->SetParamDftValHostFunc(*it->second);
+        importedFunc->SetParamDftValHostFunc(*hostFunc);
     }
     importedFunc->SetFastNative(fn.IsFastNative());
     importedFunc->Set<LinkTypeInfo>(Linkage::EXTERNAL);
     srcCodeImportedFuncMap.emplace(&fn, importedFunc);
 }
 
-void CreateSrcImportedVarSymbol(
-    CHIRBuilder& builder, Value& gv, std::unordered_map<GlobalVar*, ImportedVar*>& srcCodeImportedVarMap)
+void ReplaceSrcCodeImportedVal::CreateSrcImportedVarSymbol(GlobalVar& gv)
 {
-    auto globalVar = VirtualCast<GlobalVar*>(&gv);
-    auto mangledName = globalVar->GetIdentifierWithoutPrefix();
-    auto srcCodeName = globalVar->GetSrcCodeIdentifier();
-    auto rawMangledName = globalVar->GetRawMangledName();
-    auto packageName = globalVar->GetPackageName();
-    auto ty = globalVar->GetType();
+    auto mangledName = gv.GetIdentifierWithoutPrefix();
+    auto srcCodeName = gv.GetSrcCodeIdentifier();
+    auto rawMangledName = gv.GetRawMangledName();
+    auto packageName = gv.GetPackageName();
+    auto ty = gv.GetType();
     auto importedVar =
         builder.CreateImportedVarOrFunc<ImportedVar>(ty, mangledName, srcCodeName, rawMangledName, packageName);
-    importedVar->AppendAttributeInfo(globalVar->GetAttributeInfo());
+    importedVar->AppendAttributeInfo(gv.GetAttributeInfo());
     importedVar->Set<LinkTypeInfo>(gv.Get<LinkTypeInfo>());
-    srcCodeImportedVarMap.emplace(globalVar, importedVar);
+    srcCodeImportedVarMap.emplace(&gv, importedVar);
 }
 
-void CreateSrcImpotedValueSymbol(const std::unordered_set<Func*>& srcCodeImportedFuncs,
-    const std::unordered_set<GlobalVar*>& srcCodeImportedVars, CHIRBuilder& builder,
-    std::unordered_map<Func*, ImportedFunc*>& srcCodeImportedFuncMap,
-    std::unordered_map<GlobalVar*, ImportedVar*>& srcCodeImportedVarMap)
+void ReplaceSrcCodeImportedVal::CreateSrcImpotedValueSymbol(const std::unordered_set<Func*>& srcCodeImportedFuncs,
+    const std::unordered_set<GlobalVar*>& srcCodeImportedVars)
 {
+    for (auto func : srcCodeImportedFuncs) {
+        CreateSrcImportedFuncSymbol(*func);
+    }
     for (auto func : builder.GetCurPackage()->GetGlobalFuncs()) {
-        CJC_NULLPTR_CHECK(func);
-        if (srcCodeImportedFuncs.find(func) != srcCodeImportedFuncs.end()) {
-            CreateSrcImportedFuncSymbol(builder, *func, srcCodeImportedFuncMap);
+        if (auto genericDecl = func->GetGenericDecl(); genericDecl && genericDecl->IsFuncWithBody()) {
+            auto importedFunc = srcCodeImportedFuncMap.find(StaticCast<Func*>(genericDecl));
+            if (importedFunc != srcCodeImportedFuncMap.end()) {
+                func->SetGenericDecl(*importedFunc->second);
+            }
+        }
+    }
+    for (auto& it : srcCodeImportedFuncMap) {
+        if (auto hostFunc = it.second->GetParamDftValHostFunc()) {
+            auto importedFunc = srcCodeImportedFuncMap.find(StaticCast<Func*>(hostFunc));
+            CJC_ASSERT(importedFunc != srcCodeImportedFuncMap.end());
+            it.second->SetParamDftValHostFunc(*importedFunc->second);
         }
     }
     for (auto gv : builder.GetCurPackage()->GetGlobalVars()) {
         CJC_NULLPTR_CHECK(gv);
         if (srcCodeImportedVars.find(gv) != srcCodeImportedVars.end()) {
-            CreateSrcImportedVarSymbol(builder, *gv, srcCodeImportedVarMap);
+            CreateSrcImportedVarSymbol(*gv);
         }
     }
 }
-}
 
-void ToCHIR::ReplaceSrcCodeImportedValueWithSymbol()
+std::unordered_set<Func*> ReplaceSrcCodeImportedVal::RemoveUselessDefFromCC(
+    const std::unordered_set<ClassDef*>& uselessClasses, const std::unordered_set<Func*>& uselessLambda)
 {
     std::unordered_set<Func*> toBeRemovedFuncs;
-    std::unordered_set<GlobalVar*> toBeRemovedVars;
-    std::unordered_map<Func*, ImportedFunc*> srcCodeImportedFuncMap;
-    std::unordered_map<GlobalVar*, ImportedVar*> srcCodeImportedVarMap;
-    CreateSrcImpotedValueSymbol(
-        srcCodeImportedFuncs, srcCodeImportedVars, builder, srcCodeImportedFuncMap, srcCodeImportedVarMap);
     for (auto lambda : uselessLambda) {
         for (auto user : lambda->GetUsers()) {
             user->RemoveSelfFromBlock();
@@ -206,15 +241,19 @@ void ToCHIR::ReplaceSrcCodeImportedValueWithSymbol()
         }
     }
     std::vector<ClassDef*> newClasses;
-    auto classes = chirPkg->GetClasses();
+    auto classes = package.GetClasses();
     for (auto def : classes) {
         if (uselessClasses.find(def) == uselessClasses.end()) {
             newClasses.emplace_back(def);
         }
     }
-    chirPkg->SetClasses(std::move(newClasses));
+    package.SetClasses(std::move(newClasses));
+    return toBeRemovedFuncs;
+}
 
-    std::unordered_map<CustomTypeDef*, std::unordered_map<Value*, Value*>> replaceTable;
+void ReplaceSrcCodeImportedVal::ReplaceSrcCodeImportedFuncUsers(std::unordered_set<Func*>& toBeRemovedFuncs,
+    std::unordered_map<CustomTypeDef*, std::unordered_map<Value*, Value*>>& replaceTable)
+{
     for (auto& it : srcCodeImportedFuncMap) {
         auto funcWithBody = it.first;
         auto importedSymbol = it.second;
@@ -233,6 +272,12 @@ void ToCHIR::ReplaceSrcCodeImportedValueWithSymbol()
             implicitIt->second = importedSymbol;
         }
     }
+}
+
+void ReplaceSrcCodeImportedVal::ReplaceSrcCodeImportedVarUsers(
+    std::unordered_set<Func*>& toBeRemovedFuncs, std::unordered_set<GlobalVar*>& toBeRemovedVars,
+    std::unordered_map<CustomTypeDef*, std::unordered_map<Value*, Value*>>& replaceTable)
+{
     for (auto& it : srcCodeImportedVarMap) {
         auto varWithInit = it.first;
         auto importedSymbol = it.second;
@@ -254,30 +299,28 @@ void ToCHIR::ReplaceSrcCodeImportedValueWithSymbol()
         }
         toBeRemovedVars.emplace(varWithInit);
     }
-    auto subClasses = CollectSubClasses(*chirPkg, builder);
+}
+
+void ReplaceSrcCodeImportedVal::Run(const std::unordered_set<Func*>& srcCodeImportedFuncs,
+    const std::unordered_set<GlobalVar*>& srcCodeImportedVars, const std::unordered_set<ClassDef*>& uselessClasses,
+    const std::unordered_set<Func*>& uselessLambda)
+{
+    // 1. create imported value symbol
+    CreateSrcImpotedValueSymbol(srcCodeImportedFuncs, srcCodeImportedVars);
+
+    // 2. remove useless def that created in closure conversion
+    auto toBeRemovedFuncs = RemoveUselessDefFromCC(uselessClasses, uselessLambda);
+
+    // 3. replace src code imported func and vars' users with imported symbol
+    std::unordered_map<CustomTypeDef*, std::unordered_map<Value*, Value*>> replaceTable;
+    ReplaceSrcCodeImportedFuncUsers(toBeRemovedFuncs, replaceTable);
+    std::unordered_set<GlobalVar*> toBeRemovedVars;
+    ReplaceSrcCodeImportedVarUsers(toBeRemovedFuncs, toBeRemovedVars, replaceTable);
+    
+    // 4. replace method and static vars' pointer in custom type def
+    auto subClasses = CollectSubClasses(package, builder);
     ReplaceMethodAndStaticVar(replaceTable, subClasses);
 
-    std::vector<Func*> globalFuncs;
-    for (auto func : chirPkg->GetGlobalFuncs()) {
-        if (toBeRemovedFuncs.find(func) != toBeRemovedFuncs.end()) {
-            continue;
-        } else if (IsEmptyInitFunc(*func)) {
-            for (auto user : func->GetUsers()) {
-                user->RemoveSelfFromBlock();
-            }
-            func->DestroySelf();
-            continue;
-        }
-        globalFuncs.emplace_back(func);
-    }
-    chirPkg->SetGlobalFuncs(globalFuncs);
-
-    std::vector<GlobalVar*> globalVars;
-    for (auto var : chirPkg->GetGlobalVars()) {
-        if (toBeRemovedVars.find(var) == toBeRemovedVars.end()) {
-            globalVars.emplace_back(var);
-        }
-    }
-    chirPkg->SetGlobalVars(std::move(globalVars));
+    // 5. remove src code imported func and vars from package
+    RemoveFromPackage(package, toBeRemovedFuncs, toBeRemovedVars);
 }
-}  // namespace Cangjie::CHIR
