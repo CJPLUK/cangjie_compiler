@@ -598,6 +598,7 @@ void Collector::CollectTryExpr(ASTContext& ctx, TryExpr& te, bool buildTrie)
         AddSymbol(ctx, handleBlockNodeInfo, buildTrie);
         scopeManager.InitializeScope(ctx);
         BuildSymbolTable(ctx, handler.commandPattern.get(), buildTrie);
+        BuildSymbolTable(ctx, handler.resumptionPattern.get(), buildTrie);
         // handle block has the same scope as effect and resumption patterns.
         for (auto& n : handler.block->body) {
             BuildSymbolTable(ctx, n.get(), buildTrie);
@@ -1140,6 +1141,7 @@ void Collector::BuildSymbolTable(ASTContext& ctx, Ptr<Node> node, bool buildTrie
             auto re = StaticAs<ASTKind::RESUME_EXPR>(node);
             auto nodeInfo = NodeInfo(*re, "", ctx.currentScopeLevel, ctx.currentScopeName);
             AddSymbol(ctx, nodeInfo, buildTrie);
+            BuildSymbolTable(ctx, re->expr.get(), buildTrie);
             BuildSymbolTable(ctx, re->withExpr.get(), buildTrie);
             BuildSymbolTable(ctx, re->throwingExpr.get(), buildTrie);
             break;
@@ -1246,6 +1248,14 @@ void Collector::BuildSymbolTable(ASTContext& ctx, Ptr<Node> node, bool buildTrie
             auto etp = StaticAs<ASTKind::COMMAND_TYPE_PATTERN>(node);
             BuildSymbolTable(ctx, etp->pattern.get(), buildTrie);
             for (auto& type : etp->types) {
+                BuildSymbolTable(ctx, type.get(), buildTrie);
+            }
+            break;
+        }
+        case ASTKind::RESUMPTION_TYPE_PATTERN: {
+            auto rtp = StaticAs<ASTKind::RESUMPTION_TYPE_PATTERN>(node);
+            BuildSymbolTable(ctx, rtp->pattern.get(), buildTrie);
+            for (auto& type : rtp->types) {
                 BuildSymbolTable(ctx, type.get(), buildTrie);
             }
             break;

@@ -234,6 +234,8 @@ OwnedPtr<Expr> ASTLoader::ASTLoaderImpl::LoadPerformExpr(const PackageFormat::Ex
 OwnedPtr<Expr> ASTLoader::ASTLoaderImpl::LoadResumeExpr(const PackageFormat::Expr& expr, int64_t exprIndex)
 {
     auto re = CreateAndLoadBasicInfo<ResumeExpr>(expr, exprIndex);
+    CJC_ASSERT(expr.operands()->size() == 1);
+    re->expr = LoadExpr(expr.operands()->Get(0));
     return re;
 }
 
@@ -540,6 +542,8 @@ OwnedPtr<Pattern> ASTLoader::ASTLoaderImpl::LoadPattern(const PackageFormat::Pat
             return LoadExceptTypePattern(pattern);
         case PackageFormat::PatternKind_CommandTypePattern:
             return LoadCommandTypePattern(pattern);
+        case PackageFormat::PatternKind_ResumptionTypePattern:
+            return LoadResumptionTypePattern(pattern);
         default:
             CJC_ABORT(); // Should be unreachable.
             return CreateAndLoadBasicInfo<InvalidPattern>(pattern, INVALID_FORMAT_INDEX);
@@ -618,6 +622,14 @@ OwnedPtr<Pattern> ASTLoader::ASTLoaderImpl::LoadExceptTypePattern(const PackageF
 OwnedPtr<Pattern> ASTLoader::ASTLoaderImpl::LoadCommandTypePattern(const PackageFormat::Pattern& pattern)
 {
     auto ctp = CreateAndLoadBasicInfo<CommandTypePattern>(pattern, INVALID_FORMAT_INDEX);
+    CJC_ASSERT(pattern.patterns()->size() == 1);
+    ctp->pattern = LoadPattern(*pattern.patterns()->Get(0));
+    return ctp;
+}
+
+OwnedPtr<Pattern> ASTLoader::ASTLoaderImpl::LoadResumptionTypePattern(const PackageFormat::Pattern& pattern)
+{
+    auto ctp = CreateAndLoadBasicInfo<ResumptionTypePattern>(pattern, INVALID_FORMAT_INDEX);
     CJC_ASSERT(pattern.patterns()->size() == 1);
     ctp->pattern = LoadPattern(*pattern.patterns()->Get(0));
     return ctp;

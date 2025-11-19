@@ -603,6 +603,7 @@ private:
     void DesugarPerform(ASTContext& ctx, AST::PerformExpr& pe);
     void DesugarResume(ASTContext& ctx, AST::ResumeExpr& re);
     void DesugarImmediateResume(ASTContext& ctx, AST::ResumeExpr& re);
+    void DesugarDeferredResume(ASTContext& ctx, AST::ResumeExpr& re);
     OwnedPtr<AST::Expr> GetHelperFrameMethod(
         AST::Node& base, const std::string& methodName, std::vector<Ptr<AST::Ty>> typeArgs);
     void CreateResult(
@@ -612,6 +613,8 @@ private:
     void CreateSetFinally(
         ASTContext& ctx, AST::TryExpr& te, AST::VarDecl& frame, std::vector<OwnedPtr<AST::Node>>& block);
     AST::VarDecl& CreateFrame(ASTContext& ctx, AST::TryExpr& te, std::vector<OwnedPtr<AST::Node>>& block);
+    Ptr<AST::FuncTy> CastDeferredHandlerFn(Ptr<AST::FuncTy> stdxFuncTy);
+    Ptr<AST::Ty> ResumptionToInternalResumptionTy(Ptr<AST::Ty> stdxResumptionTy);
     void EncloseTryLambda(ASTContext& ctx, OwnedPtr<AST::LambdaExpr>& tryLambda);
 
     /* Synthesize specialized for desugar after sema. Will not recover previous desugar results */
@@ -1109,10 +1112,11 @@ private:
     bool ChkEnumPattern(ASTContext& ctx, AST::Ty& target, AST::EnumPattern& p);
     bool ChkVarOrEnumPattern(ASTContext& ctx, AST::Ty& target, AST::VarOrEnumPattern& p);
     bool ChkExceptTypePattern(ASTContext& ctx, AST::ExceptTypePattern& etp, std::vector<Ptr<AST::Ty>>& included);
-    bool ChkHandlePatterns(ASTContext& ctx, AST::Handler& h,
+    bool ChkHandlePatterns(ASTContext& ctx, const AST::TryExpr& te, AST::Handler& h,
         std::vector<Ptr<AST::Ty>>& included);
     std::optional<Ptr<AST::Ty>> ChkCommandTypePattern(
         ASTContext& ctx, AST::CommandTypePattern& ctp, std::vector<Ptr<AST::Ty>>& included);
+    std::optional<Ptr<AST::Ty>> ChkResumptionTypePattern(const AST::TryExpr& te, AST::ResumptionTypePattern& rtp);
     bool ChkTryWildcardPattern(Ptr<AST::Ty> target, AST::WildcardPattern& p, std::vector<Ptr<AST::Ty>>& included);
     void FindEnumPatternTarget(ASTContext& ctx, Ptr<AST::EnumDecl> ed, AST::EnumPattern& ep);
     std::vector<Ptr<AST::Decl>> FindEnumPatternTargets(ASTContext& ctx, Ptr<AST::EnumDecl> ed, AST::EnumPattern& ep);
