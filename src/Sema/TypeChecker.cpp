@@ -1195,6 +1195,7 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
                 // These patterns are supported, so do type infer framework.
             case ASTKind::EXCEPT_TYPE_PATTERN:
             case ASTKind::COMMAND_TYPE_PATTERN:
+            case ASTKind::RESUMPTION_TYPE_PATTERN:
             case ASTKind::WILDCARD_PATTERN:
             case ASTKind::CONST_PATTERN:
             case ASTKind::TYPE_PATTERN:

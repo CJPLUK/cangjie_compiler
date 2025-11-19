@@ -650,18 +650,22 @@ void PrintTryExpr(unsigned indent, const TryExpr& expr, std::ostream& stream = s
         PrintIndent(stream, indent + ONE_INDENT, "}");
     }
     for (const auto& handler : expr.handlers) {
-        PrintIndent(stream, indent + ONE_INDENT, "Handle", "{");
-        PrintIndent(stream, indent + TWO_INDENT, "HandlePattern", "{");
-        PrintIndent(stream, indent + THREE_INDENT, "CommandTypePattern:");
+        PrintIndent(indent + ONE_INDENT, "Handle", "{");
+        PrintIndent(indent + TWO_INDENT, "HandlePattern", "{");
+        PrintIndent(indent + THREE_INDENT, "CommandTypePattern:");
         PrintNode(handler.commandPattern.get(), indent + THREE_INDENT, "", stream);
-        PrintIndent(stream, indent + TWO_INDENT, "}");
-        PrintIndent(stream, indent + TWO_INDENT, "HandleBlock", "{");
+        if (handler.resumptionPattern) {
+            PrintIndent(indent + THREE_INDENT, "ResumptionTypePattern:");
+            PrintNode(handler.resumptionPattern.get(), indent + THREE_INDENT, "", stream);
+        }
+        PrintIndent(indent + TWO_INDENT, "}");
+        PrintIndent(indent + TWO_INDENT, "HandleBlock", "{");
         PrintNode(handler.block.get(), indent + THREE_INDENT, "", stream);
-        PrintIndent(stream, indent + TWO_INDENT, "}");
-        PrintIndent(stream, indent + TWO_INDENT, "DesugaredLambda", "{");
+        PrintIndent(indent + TWO_INDENT, "}");
+        PrintIndent(indent + TWO_INDENT, "DesugaredLambda", "{");
         PrintNode(handler.desugaredLambda.get(), indent + THREE_INDENT, "", stream);
-        PrintIndent(stream, indent + TWO_INDENT, "}");
-        PrintIndent(stream, indent + ONE_INDENT, "}");
+        PrintIndent(indent + TWO_INDENT, "}");
+        PrintIndent(indent + ONE_INDENT, "}");
     }
     PrintIndent(stream, indent + ONE_INDENT, "FinallyBlock", "{");
     PrintNode(expr.finallyBlock.get(), indent + TWO_INDENT, "", stream);
@@ -697,6 +701,7 @@ void PrintResumeExpr(unsigned indent, const ResumeExpr& expr, std::ostream& stre
 {
     PrintIndent(stream, indent, "ResumeExpr", "{");
     PrintBasic(indent + ONE_INDENT, expr, stream);
+    PrintNode(expr.expr.get(), indent + ONE_INDENT, "ResumeExpr", stream);
     PrintNode(expr.withExpr.get(), indent + ONE_INDENT, "WithExpr", stream);
     PrintNode(expr.throwingExpr.get(), indent + ONE_INDENT, "ThrowingExpr", stream);
     PrintIndent(stream, indent, "}");
@@ -1384,6 +1389,14 @@ void PrintCommandTypePattern(
     }
 }
 
+void PrintResumptionTypePattern(unsigned indent, const ResumptionTypePattern& resumptionTypePattern, std::ostream& stream = std::cout)
+{
+    PrintNode(resumptionTypePattern.pattern.get(), indent + ONE_INDENT, "", stream);
+    for (auto& type : resumptionTypePattern.types) {
+        PrintNode(type.get(), indent + ONE_INDENT, "", stream);
+    }
+}
+
 void PrintFeatureId(unsigned indent, const FeatureId& featureId, std::ostream& stream = std::cout)
 {
     PrintIndent(stream, indent, "FeatureId ", featureId.ToString(), " {");
@@ -1404,8 +1417,7 @@ void PrintFeaturesSet(unsigned indent, const FeaturesSet& featuresSet, std::ostr
 }
 
 void PrintFeaturesDirective(
-    unsigned indent, const FeaturesDirective& featuresDirective, std::ostream& stream = std::cout)
-{
+    unsigned indent, const FeaturesDirective& featuresDirective, std::ostream& stream = std::cout) {
     PrintIndent(stream, indent, "FeaturesDirective:", "features", "{");
     PrintBasic(indent + ONE_INDENT, featuresDirective, stream);
     PrintIndent(stream, indent + ONE_INDENT, "annotations: [");
@@ -1566,16 +1578,14 @@ void PrintNode(Ptr<const Node> node, unsigned indent, const std::string& additio
         [&indent, &stream](const InvalidType&) { PrintIndent(stream, indent, "InvalidType: Need to be fixed!"); },
         // -----------pattern----------------------
         [&indent, &stream](const ConstPattern& constPattern) { PrintConstPattern(indent, constPattern, stream); },
-        [&indent, &stream](
-            const WildcardPattern& /* WildcardPattern */) { PrintIndent(stream, indent, "WildcardPattern:", "_"); },
+        [&indent, &stream](const WildcardPattern& /* WildcardPattern */) { PrintIndent(stream, indent, "WildcardPattern:", "_"); },
         [&indent, &stream](const VarPattern& varPattern) { PrintVarPattern(indent, varPattern, stream); },
         [&indent, &stream](const TuplePattern& tuplePattern) { PrintTuplePattern(indent, tuplePattern, stream); },
         [&indent, &stream](const TypePattern& typePattern) { PrintBasicpePattern(indent, typePattern, stream); },
         [&indent, &stream](const EnumPattern& enumPattern) { PrintEnumPattern(indent, enumPattern, stream); },
-        [&indent, &stream](
-            const ExceptTypePattern& exceptTypePattern) { PrintExceptTypePattern(indent, exceptTypePattern, stream); },
-        [&indent, &stream](
-            const CommandTypePattern& cmdTypePattern) { PrintCommandTypePattern(indent, cmdTypePattern, stream); },
+        [&indent, &stream](const ExceptTypePattern& exceptTypePattern) { PrintExceptTypePattern(indent, exceptTypePattern, stream); },
+        [&indent, &stream](const CommandTypePattern& cmdTypePattern) { PrintCommandTypePattern(indent, cmdTypePattern, stream); },
+        [&indent, &stream](const ResumptionTypePattern& resTypePattern) { PrintResumptionTypePattern(indent, resTypePattern, stream); },
         [indent, &stream](const VarOrEnumPattern& ve) { PrintVarOrEnumPattern(indent, ve, stream); },
         // ----------- package----------------------
         [&indent, &stream](const FeatureId& featureId) { PrintFeatureId(indent, featureId, stream); },

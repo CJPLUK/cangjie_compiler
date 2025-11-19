@@ -150,6 +150,7 @@ OwnedPtr<Decl> ASTCloner::CloneVarDecl(const VarDecl& vd, const VisitFunc& visit
     ret->isResourceVar = vd.isResourceVar;
     ret->isIdentifierCompilerAdd = vd.isIdentifierCompilerAdd;
     ret->parentPattern = vd.parentPattern;
+    ret->symbol = vd.symbol;
     ret->EnableAttr(Attribute::COMPILER_ADD);
     return ret;
 }
@@ -539,6 +540,7 @@ OwnedPtr<TryExpr> ASTCloner::CloneTryExpr(const TryExpr& te, const VisitFunc& vi
         auto cloned = Handler();
         cloned.pos = handler.pos;
         cloned.commandPattern = ClonePattern(handler.commandPattern.get(), visitor);
+        cloned.resumptionPattern = ClonePattern(handler.resumptionPattern.get(), visitor);
         cloned.block = CloneExpr(handler.block.get(), visitor);
         if (handler.desugaredLambda) {
             cloned.desugaredLambda = CloneLambdaExpr(*handler.desugaredLambda, visitor);
@@ -583,6 +585,7 @@ OwnedPtr<ResumeExpr> ASTCloner::CloneResumeExpr(const ResumeExpr& re, const Visi
 {
     auto expr = MakeOwned<ResumeExpr>();
     expr->resumePos = re.resumePos;
+    expr->expr = CloneExpr(re.expr.get(), visitor);
     expr->withPos = re.withPos;
     expr->withExpr = CloneExpr(re.withExpr.get(), visitor);
     expr->throwingPos = re.throwingPos;
@@ -1252,6 +1255,20 @@ OwnedPtr<CommandTypePattern> ASTCloner::CloneCommandTypePattern(
     return ret;
 }
 
+OwnedPtr<ResumptionTypePattern> ASTCloner::CloneResumptionTypePattern(
+    const ResumptionTypePattern& rtp, const VisitFunc& visitor)
+{
+    auto ret = MakeOwned<ResumptionTypePattern>();
+    ret->pattern = ClonePattern(rtp.pattern.get(), visitor);
+    for (auto& i : rtp.types) {
+        ret->types.push_back(CloneType(i.get(), visitor));
+    }
+    ret->patternPos = rtp.patternPos;
+    ret->colonPos = rtp.colonPos;
+    ret->bitOrPosVector = rtp.bitOrPosVector;
+    return ret;
+}
+
 OwnedPtr<VarOrEnumPattern> ASTCloner::CloneVarOrEnumPattern(
     const VarOrEnumPattern& vep, const VisitFunc& visitor)
 {
@@ -1279,6 +1296,9 @@ OwnedPtr<Pattern> ASTCloner::ClonePattern(Ptr<Pattern> pattern, const VisitFunc&
         [&visitor](const EnumPattern& e) { return OwnedPtr<Pattern>(CloneEnumPattern(e, visitor)); },
         [&visitor](const ExceptTypePattern& e) { return OwnedPtr<Pattern>(CloneExceptTypePattern(e, visitor)); },
         [&visitor](const CommandTypePattern& e) { return OwnedPtr<Pattern>(CloneCommandTypePattern(e, visitor)); },
+        [&visitor](
+            const ResumptionTypePattern& e) { return OwnedPtr<Pattern>(CloneResumptionTypePattern(e, visitor)); },
+        [&visitor](const ExceptTypePattern& e) { return OwnedPtr<Pattern>(CloneExceptTypePattern(e, visitor)); },
         [&visitor](const VarOrEnumPattern& e) { return OwnedPtr<Pattern>(CloneVarOrEnumPattern(e, visitor)); },
         [](const InvalidPattern& e) { return OwnedPtr<Pattern>(MakeOwned<InvalidPattern>(e)); },
         []() { return OwnedPtr<Pattern>(MakeOwned<InvalidPattern>()); });

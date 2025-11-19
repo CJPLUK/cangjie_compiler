@@ -357,6 +357,7 @@ private:
     OwnedPtr<AST::Pattern> LoadEnumPattern(const PackageFormat::Pattern& pattern);
     OwnedPtr<AST::Pattern> LoadExceptTypePattern(const PackageFormat::Pattern& pattern);
     OwnedPtr<AST::Pattern> LoadCommandTypePattern(const PackageFormat::Pattern& pattern);
+    OwnedPtr<AST::Pattern> LoadResumptionTypePattern(const PackageFormat::Pattern& pattern);
 
     void LoadExprRefs(const PackageFormat::Expr& exprObj, AST::Expr& expr);
     void LoadSubNodeRefs(const PackageFormat::Expr& exprObj, AST::Expr& expr);

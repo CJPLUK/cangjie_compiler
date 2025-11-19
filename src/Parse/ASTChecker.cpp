@@ -740,6 +740,14 @@ void ASTChecker::CheckCommandTypePattern(Ptr<Node> node)
     VEC_AST_NULLPTR_CHECK(node, etp->types);
     VEC_ZERO_POS_CHECK(node, etp->bitOrPosVector);
 }
+void ASTChecker::CheckResumptionTypePattern(Ptr<Node> node)
+{
+    auto etp = StaticAs<ASTKind::RESUMPTION_TYPE_PATTERN>(node);
+    AST_NULLPTR_CHECK(node, etp->pattern);
+    ZERO_POSITION_CHECK(node, etp->patternPos);
+    ZERO_POSITION_CHECK(node, etp->colonPos);
+    VEC_AST_NULLPTR_CHECK(node, etp->types);
+}
 
 void ASTChecker::CheckTuplePattern(Ptr<Node> node)
 {
