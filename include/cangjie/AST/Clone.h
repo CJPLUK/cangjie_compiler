@@ -127,6 +127,8 @@ private:
     static OwnedPtr<ExceptTypePattern> CloneExceptTypePattern(const ExceptTypePattern& etp, const VisitFunc& visitor);
     static OwnedPtr<CommandTypePattern> CloneCommandTypePattern(
         const CommandTypePattern& ctp, const VisitFunc& visitor);
+    static OwnedPtr<ResumptionTypePattern> CloneResumptionTypePattern(
+        const ResumptionTypePattern& rtp, const VisitFunc& visitor);
     static OwnedPtr<VarOrEnumPattern> CloneVarOrEnumPattern(const VarOrEnumPattern& vep, const VisitFunc& visitor);
     static OwnedPtr<Block> CloneBlock(const Block& block, const VisitFunc& visitor = DefaultVisitFunc);
     static OwnedPtr<ClassBody> CloneClassBody(const ClassBody& cb, const VisitFunc& visitor);

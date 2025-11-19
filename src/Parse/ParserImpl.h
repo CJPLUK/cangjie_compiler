@@ -730,6 +730,7 @@ private:
     void ParseTryWithResource(const ScopeKind& scopeKind, AST::TryExpr& tryExpr);
     OwnedPtr<AST::Pattern> ParseExceptTypePattern();
     OwnedPtr<AST::Pattern> ParseCommandTypePattern();
+    OwnedPtr<AST::Pattern> ParseResumptionTypePattern();
     OwnedPtr<AST::ForInExpr> ParseForInExpr();
     OwnedPtr<AST::RefExpr> ParseRefExpr(ExprKind ek = ExprKind::ALL);
     OwnedPtr<AST::Expr> ParseWildcardExpr();

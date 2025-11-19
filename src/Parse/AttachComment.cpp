@@ -834,6 +834,18 @@ private:
                 }
                 break;
             }
+            case ASTKind::RESUMPTION_TYPE_PATTERN: {
+                auto p = StaticCast<ResumptionTypePattern>(node);
+                VisitChild(p->pattern);
+                VisitToken(p->colonPos);
+                for (size_t i{0}; i < p->types.size(); ++i) {
+                    VisitChild(p->types[i]);
+                    if (i < p->bitOrPosVector.size()) {
+                        VisitToken(p->bitOrPosVector[i]);
+                    }
+                }
+                break;
+            }
             case ASTKind::COMMAND_TYPE_PATTERN: {
                 auto p = StaticCast<CommandTypePattern>(node);
                 VisitChild(p->pattern);

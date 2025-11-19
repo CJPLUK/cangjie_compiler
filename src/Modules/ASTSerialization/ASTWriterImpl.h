@@ -241,6 +241,7 @@ private:
     TExprOffset SaveExpression(const AST::TypeConvExpr& tce, const NodeInfo& info);
     TExprOffset SaveExpression(const AST::ThrowExpr& te, const NodeInfo& info);
     TExprOffset SaveExpression(const AST::PerformExpr& pe, const NodeInfo& info);
+    TExprOffset SaveExpression(const AST::ResumeExpr& re, const NodeInfo& info);
     TExprOffset SaveExpression(const AST::SpawnExpr& se, const NodeInfo& info);
     TExprOffset SaveExpression(const AST::ArrayLit& al, const NodeInfo& info);
     TExprOffset SaveExpression(const AST::TupleLit& tl, const NodeInfo& info);
@@ -282,6 +283,7 @@ private:
         {AST::ASTKind::TYPE_CONV_EXPR, Proxy<AST::TypeConvExpr>(&ASTWriterImpl::SaveExpression)},
         {AST::ASTKind::THROW_EXPR, Proxy<AST::ThrowExpr>(&ASTWriterImpl::SaveExpression)},
         {AST::ASTKind::PERFORM_EXPR, Proxy<AST::PerformExpr>(&ASTWriterImpl::SaveExpression)},
+        {AST::ASTKind::RESUME_EXPR, Proxy<AST::ResumeExpr>(&ASTWriterImpl::SaveExpression)},
         {AST::ASTKind::SPAWN_EXPR, Proxy<AST::SpawnExpr>(&ASTWriterImpl::SaveExpression)},
         {AST::ASTKind::ARRAY_LIT, Proxy<AST::ArrayLit>(&ASTWriterImpl::SaveExpression)},
         {AST::ASTKind::TUPLE_LIT, Proxy<AST::TupleLit>(&ASTWriterImpl::SaveExpression)},
@@ -311,6 +313,7 @@ private:
     TPatternOffset SaveEnumPattern(const AST::EnumPattern& ep);
     TPatternOffset SaveExceptTypePattern(const AST::ExceptTypePattern& etp);
     TPatternOffset SaveCommandTypePattern(const AST::CommandTypePattern& ctp);
+    TPatternOffset SaveResumptionTypePattern(const AST::ResumptionTypePattern& rtp);
 
     // Save sema types.
     TTypeOffset SavePointerTy(const AST::PointerTy& type);

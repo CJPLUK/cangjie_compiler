@@ -608,21 +608,27 @@ struct DiscardedHelper {
         };
 
         auto unitifyTry = [&unitifyBlock](TryExpr& te) {
-            if (te.tryLambda) {
-                unitifyBlock(*(te.tryLambda->funcBody->body));
-            } else {
-                unitifyBlock(*(te.tryBlock));
-            }
-            for (auto& cb : te.catchBlocks) {
-                unitifyBlock(*cb);
-            }
-
-            for (auto& h : te.handlers) {
-                if (h.desugaredLambda) {
-                    unitifyBlock(*h.desugaredLambda->funcBody->body);
+            if (!te.HasDeferredHandlers()) {
+                // A deferred handler in a try expression is a (potential) capture
+                // of the return value of the try expression, since its bound to
+                // the captured resumption.
+                if (te.tryLambda) {
+                    unitifyBlock(*(te.tryLambda->funcBody->body));
+                } else {
+                    unitifyBlock(*(te.tryBlock));
                 }
-                CJC_NULLPTR_CHECK(h.block);
-                unitifyBlock(*h.block);
+                for (auto& cb : te.catchBlocks) {
+                    unitifyBlock(*cb);
+                }
+
+                for (auto& h : te.handlers) {
+                    CJC_ASSERT(h.IsImmediate());
+                    if (h.desugaredLambda) {
+                        unitifyBlock(*h.desugaredLambda->funcBody->body);
+                    }
+                    CJC_NULLPTR_CHECK(h.block);
+                    unitifyBlock(*h.block);
+                }
             }
         };
 
@@ -659,7 +665,8 @@ private:
                 (&node == StaticAs<ASTKind::IF_EXPR>(&parent)->thenBody.get() ||
                 &node == StaticAs<ASTKind::IF_EXPR>(&parent)->elseBody.get());
         // try expr to try blk and catch blk
-        bool tryBody = parent.astKind == ASTKind::TRY_EXPR && node.astKind == ASTKind::BLOCK;
+        bool tryBody = parent.astKind == ASTKind::TRY_EXPR && node.astKind == ASTKind::BLOCK &&
+            !StaticAs<ASTKind::TRY_EXPR>(&parent)->HasDeferredHandlers();
         // match expr to all cases
         bool matchCase = parent.astKind == ASTKind::MATCH_EXPR && (caseKinds.count(node.astKind) > 0);
         // match case to its body

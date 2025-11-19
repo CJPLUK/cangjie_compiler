@@ -625,11 +625,15 @@ bool TypeChecker::TypeCheckerImpl::ChkExceptTypePattern(
     return Check(ctx, etp.ty, etp.pattern.get());
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkHandlePatterns(ASTContext& ctx, Handler& h,
+bool TypeChecker::TypeCheckerImpl::ChkHandlePatterns(ASTContext& ctx, const TryExpr& te, Handler& h,
     std::vector<Ptr<Ty>>& included)
 {
     auto& ctp = *StaticAs<ASTKind::COMMAND_TYPE_PATTERN>(h.commandPattern.get());
     CJC_ASSERT(ctp.types.size() >= 1);
+    std::optional<Ptr<ResumptionTypePattern>> maybeRtp;
+    if (h.resumptionPattern) {
+        maybeRtp = StaticAs<ASTKind::RESUMPTION_TYPE_PATTERN>(h.resumptionPattern.get());
+    }
     auto maybeCtpTyAsCommand = ChkCommandTypePattern(ctx, ctp, included);
     if (!maybeCtpTyAsCommand) {
         return false;
@@ -637,6 +641,27 @@ bool TypeChecker::TypeCheckerImpl::ChkHandlePatterns(ASTContext& ctx, Handler& h
     auto& ctpTyAsCommand = **maybeCtpTyAsCommand;
     h.commandResultTy = ctpTyAsCommand.typeArgs[0];
 
+    if (maybeRtp) {
+        auto& rtp = **maybeRtp;
+        CJC_ASSERT(rtp.types.size() == 1);
+        auto maybeResPatTy = ChkResumptionTypePattern(te, rtp);
+        if (!maybeResPatTy.has_value()) {
+            return false;
+        }
+        auto resPatTy = *maybeResPatTy;
+        auto resArgTy = resPatTy->typeArgs[0];
+        // This can be generalized to be a subtype check, but it complicates the desugaring.
+        // We would have to make handlers generic on the whole resumption type, since there is no
+        // covariance in Cangjie
+        if (resArgTy != h.commandResultTy) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_command_resumption_mismatch, *rtp.types[0],
+                resArgTy->String(), h.commandResultTy->String());
+            return false;
+        }
+        if (!Check(ctx, rtp.ty, rtp.pattern.get())) {
+            return false;
+        }
+    }
     return Check(ctx, ctp.ty, ctp.pattern.get());
 }
 
@@ -685,4 +710,36 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::ChkCommandTypePattern(
         return {};
     }
     return cmdTypeAsCommand;
+}
+
+std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::ChkResumptionTypePattern(
+    const TryExpr& te, ResumptionTypePattern& rtp)
+{
+    constexpr size_t resumptionTypeArgs = 2;
+    CJC_ASSERT(rtp.types.size() == 1);
+    auto resumption = importManager.GetImportedDecl(EFFECT_PACKAGE_NAME, CLASS_RESUMPTION);
+    if (!resumption) {
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_resumption_handle_type_error, *rtp.types[0]);
+        return {};
+    }
+    auto type = rtp.types.begin()->get();
+    auto prTys = promotion.Promote(*type->ty, *resumption->ty);
+    if (type->ty->IsNothing() || prTys.empty() || !Ty::IsTyCorrect(type->ty)) {
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_resumption_handle_type_error, *type);
+        return {};
+    }
+    if (prTys.size() != 1 || (*prTys.begin())->typeArgs.size() != resumptionTypeArgs) {
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_resumption_handle_type_error, *type);
+        return {};
+    }
+    if (auto tryLambdaTy = DynamicCast<FuncTy*>(te.tryLambda->ty); tryLambdaTy) {
+        auto resumptionRetTy = (*prTys.begin())->typeArgs[1];
+        if (resumptionRetTy != tryLambdaTy->retTy) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_resumption_incorrect_return_type, *type,
+                resumptionRetTy->String(), tryLambdaTy->retTy->String());
+            return {};
+        }
+    }
+    rtp.ty = type->ty;
+    return *prTys.begin();
 }

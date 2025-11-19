@@ -537,6 +537,17 @@ static void DesugarTry(const OwnedPtr<TryExpr>& expr)
         std::vector<OwnedPtr<Node>> lambdaBodyExprs;
         lambdaBodyExprs.emplace_back(std::move(teWithoutHandle));
         lambdaBlock = CreateBlock(std::move(lambdaBodyExprs));
+
+        auto teWithoutHandle2 = ASTCloner::Clone(expr.get(), SetIsClonedSourceCode);
+        teWithoutHandle2->handlers.clear();
+        teWithoutHandle2->finallyBlock = nullptr;
+        teWithoutHandle2->ty = expr->ty;
+        std::vector<OwnedPtr<Node>> lambdaBodyExprs2;
+        lambdaBodyExprs2.emplace_back(std::move(teWithoutHandle2));
+        expr->tryBlock = CreateBlock(std::move(lambdaBodyExprs2));
+        CopyBasicInfo(expr, expr->tryBlock);
+
+
     }
     expr->tryLambda = CreateLambdaFromBlock(std::move(lambdaBlock), *expr->tryBlock, MakeOwned<FuncParamList>());
 
@@ -563,6 +574,26 @@ static void DesugarTry(const OwnedPtr<TryExpr>& expr)
         CopyBasicInfo(cmdPat->pattern, command);
         paramList->params.emplace_back(std::move(command));
 
+        if (handler.resumptionPattern) {
+            auto resPat = RawStaticCast<ResumptionTypePattern*>(handler.resumptionPattern.get());
+            if (resPat->TestAttr(Attribute::IS_BROKEN) || resPat->types[0]->TestAttr(Attribute::IS_BROKEN)) {
+                expr->EnableAttr(Attribute::HAS_BROKEN);
+                return;
+            }
+            auto originalResumptionPatternType = resPat->types[0].get();
+            auto resumptionTy = originalResumptionPatternType->ty;
+            auto resumptionPattern = ASTCloner::Clone(originalResumptionPatternType);
+            OwnedPtr<FuncParam> resumption;
+            if (auto varPattern = DynamicCast<VarPattern*>(resPat->pattern.get()); varPattern) {
+                resumption = CreateFuncParam(
+                    varPattern->varDecl->identifier, std::move(resumptionPattern), nullptr, resumptionTy);
+            } else {
+                resumption = CreateFuncParam("_", std::move(resumptionPattern), nullptr, resumptionTy);
+            }
+            CopyBasicInfo(resPat->pattern, resumption);
+            paramList->params.emplace_back(std::move(resumption));
+        }
+
         handler.desugaredLambda = CreateLambdaFromBlock(
             ASTCloner::Clone(handler.block.get(), SetIsClonedSourceCode), *handler.block, std::move(paramList));
     }
@@ -586,6 +617,9 @@ void ParserImpl::ParseHandleBlock(TryExpr& tryExpr)
     }
     // handle clause will have one or two arguments
     handler.commandPattern = ParseCommandTypePattern();
+    if (Skip(TokenKind::COMMA)) {
+        handler.resumptionPattern = ParseResumptionTypePattern();
+    }
     if (!Skip(TokenKind::RPAREN) && leftParenPos.line != 0 && !tryExpr.TestAttr(Attribute::HAS_BROKEN)) {
         DiagExpectedRightDelimiter("(", leftParenPos);
         tryExpr.EnableAttr(Attribute::HAS_BROKEN);
@@ -754,6 +788,37 @@ OwnedPtr<Pattern> ParserImpl::ParseCommandTypePattern()
     } else {
         ParseDiagnoseRefactor(
             DiagKindRefactor::parse_expected_wildcard_or_effect_pattern, lookahead, ConvertToken(lookahead));
+        return MakeInvalid<InvalidPattern>(lookahead.Begin());
+    }
+}
+
+OwnedPtr<Pattern> ParserImpl::ParseResumptionTypePattern()
+{
+    if (Seeing(TokenKind::WILDCARD) || Seeing(TokenKind::IDENTIFIER)) {
+        auto resumptionTypePattern = MakeOwned<ResumptionTypePattern>();
+        auto begin = lookahead.Begin();
+        resumptionTypePattern->begin = begin;
+        if (Seeing(TokenKind::WILDCARD)) {
+            auto wildCardPos = lastToken.Begin();
+            resumptionTypePattern->pattern = MakeOwned<WildcardPattern>(wildCardPos);
+        } else {
+            auto ident = ParseIdentifierFromToken(lookahead);
+            resumptionTypePattern->pattern = MakeOwned<VarPattern>(std::move(ident), begin);
+        }
+        resumptionTypePattern->patternPos = lookahead.Begin();
+        Next();
+        if (!Skip(TokenKind::COLON)) {
+            ParseDiagnoseRefactor(
+                DiagKindRefactor::parse_expected_colon_in_resumption_pattern, lookahead, ConvertToken(lookahead));
+        }
+        resumptionTypePattern->colonPos = lastToken.Begin();
+        resumptionTypePattern->types.emplace_back(ParseType());
+        if (!resumptionTypePattern->types.empty()) {
+            resumptionTypePattern->end = resumptionTypePattern->types.back()->end;
+        }
+        return resumptionTypePattern;
+    } else {
+        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_resumption_pattern, lookahead, ConvertToken(lookahead));
         return MakeInvalid<InvalidPattern>(lookahead.Begin());
     }
 }
@@ -978,6 +1043,12 @@ OwnedPtr<ResumeExpr> ParserImpl::ParseResumeExpr()
     ret->resumePos = lastToken.Begin();
     ret->begin = lookahead.Begin();
     ret->end = lookahead.End();
+    if (SeeingExpr()) {
+        ret->expr = ParseExpr();
+        if (ret->expr) {
+            ret->end = ret->expr->end;
+        }
+    }
     if (Skip(TokenKind::WITH)) {
         ret->withPos = lastToken.Begin();
         ret->withExpr = ParseExpr();
