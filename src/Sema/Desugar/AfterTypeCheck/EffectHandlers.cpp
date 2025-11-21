@@ -1112,13 +1112,13 @@ void TypeChecker::TypeCheckerImpl::DesugarDeferredResume([[maybe_unused]] ASTCon
     // Create `let $tmp = resumption`
     {
         auto resVarDecl = CreateVarDecl("$resumption", std::move(re.expr));
-        CopyNodeScopeInfo(resVarDecl, &re);
+        ctx.AddDeclName(std::make_pair("$resumption", resVarDecl->scopeName), *resVarDecl);
         resVarDecl->SetTy(ResumptionToInternalResumptionTy(resVarDecl->initializer->GetTy()));
         outerBlock->body.emplace_back(std::move(resVarDecl));
     }
     auto& resVarDecl = *RawStaticCast<VarDecl*>(outerBlock->body.back().get());
     auto resRef = CreateRefExpr(resVarDecl);
-    CopyNodeScopeInfo(resRef, &re);
+    AST::CopyNodeScopeInfo(resRef, &re);
 
     // create function call of Frame
     std::vector<OwnedPtr<FuncArg>> args;
