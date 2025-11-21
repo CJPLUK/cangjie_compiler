@@ -650,22 +650,22 @@ void PrintTryExpr(unsigned indent, const TryExpr& expr, std::ostream& stream = s
         PrintIndent(stream, indent + ONE_INDENT, "}");
     }
     for (const auto& handler : expr.handlers) {
-        PrintIndent(indent + ONE_INDENT, "Handle", "{");
-        PrintIndent(indent + TWO_INDENT, "HandlePattern", "{");
-        PrintIndent(indent + THREE_INDENT, "CommandTypePattern:");
+        PrintIndent(stream, indent + ONE_INDENT, "Handle", "{");
+        PrintIndent(stream, indent + TWO_INDENT, "HandlePattern", "{");
+        PrintIndent(stream, indent + THREE_INDENT, "CommandTypePattern:");
         PrintNode(handler.commandPattern.get(), indent + THREE_INDENT, "", stream);
         if (handler.resumptionPattern) {
-            PrintIndent(indent + THREE_INDENT, "ResumptionTypePattern:");
+            PrintIndent(stream, indent + THREE_INDENT, "ResumptionTypePattern:");
             PrintNode(handler.resumptionPattern.get(), indent + THREE_INDENT, "", stream);
         }
-        PrintIndent(indent + TWO_INDENT, "}");
-        PrintIndent(indent + TWO_INDENT, "HandleBlock", "{");
+        PrintIndent(stream, indent + TWO_INDENT, "}");
+        PrintIndent(stream, indent + TWO_INDENT, "HandleBlock", "{");
         PrintNode(handler.block.get(), indent + THREE_INDENT, "", stream);
-        PrintIndent(indent + TWO_INDENT, "}");
-        PrintIndent(indent + TWO_INDENT, "DesugaredLambda", "{");
+        PrintIndent(stream, indent + TWO_INDENT, "}");
+        PrintIndent(stream, indent + TWO_INDENT, "DesugaredLambda", "{");
         PrintNode(handler.desugaredLambda.get(), indent + THREE_INDENT, "", stream);
-        PrintIndent(indent + TWO_INDENT, "}");
-        PrintIndent(indent + ONE_INDENT, "}");
+        PrintIndent(stream, indent + TWO_INDENT, "}");
+        PrintIndent(stream, indent + ONE_INDENT, "}");
     }
     PrintIndent(stream, indent + ONE_INDENT, "FinallyBlock", "{");
     PrintNode(expr.finallyBlock.get(), indent + TWO_INDENT, "", stream);
