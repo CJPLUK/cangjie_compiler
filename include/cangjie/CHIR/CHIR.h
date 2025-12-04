@@ -148,7 +148,7 @@ private:
     void RunUnreachableMarkBlockRemoval();
     void RunMergingBlocks(const std::string& firstName, const std::string& secondName);
     bool RunVarInitChecking();
-    void RunConstantPropagation(ConstAnalysisWrapper& constAnalysis);
+    void RunConstantPropagation();
     void RunRangePropagation();
     bool RunNativeFFIChecks();
     void RunArrayListConstStartOpt();

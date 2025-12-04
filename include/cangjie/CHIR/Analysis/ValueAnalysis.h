@@ -25,7 +25,7 @@
 #include <vector>
 
 namespace {
-// judge if generic type is instance of a certain type. 
+// judge if generic type is instance of a certain type.
 template <class T, template<class...> class U>
 inline constexpr bool IsInstanceOfValue = std::false_type{};
 

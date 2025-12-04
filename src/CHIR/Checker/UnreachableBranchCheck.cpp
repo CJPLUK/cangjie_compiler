@@ -112,7 +112,7 @@ void UnreachableBranchCheck::PrintWarning(
 }
 
 template <typename TConstDomain>
-void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result) 
+void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
 {
     const auto actionBeforeVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
     const auto actionAfterVisitExpr = [](const TConstDomain&, Expression*, size_t) {};

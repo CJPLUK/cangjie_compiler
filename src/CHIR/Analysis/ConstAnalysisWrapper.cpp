@@ -11,20 +11,18 @@ namespace Cangjie::CHIR {
 static constexpr size_t OVERHEAD_BLOCK_SIZE = 1000U;
 static constexpr size_t USE_ACTIVE_BLOCK_SIZE = 300U;
 
-// Helper: get block size for a lambda expression (0 if not lambda)
 size_t ConstAnalysisWrapper::GetBlockSize(const Expression& expr)
 {
     size_t blockSize = 0;
     if (expr.GetExprKind() != ExprKind::LAMBDA) {
         return blockSize;
     }
-    auto lambdaBody = Cangjie::StaticCast<const Lambda&>(expr).GetBody();
-    blockSize += lambdaBody->GetBlocks().size();
-    auto postVisit = [&blockSize](Expression& e) {
-        blockSize += GetBlockSize(e);
+    auto preVisit = [&blockSize](Block&) {
+        blockSize++;
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(*lambdaBody, postVisit);
+    auto lambdaBody = Cangjie::StaticCast<const Lambda&>(expr).GetBody();
+    Visitor::Visit(*lambdaBody, preVisit);
     return blockSize;
 }
 
@@ -87,7 +85,7 @@ ConstAnalysisWrapper::AnalysisStrategy ConstAnalysisWrapper::ChooseAnalysisStrat
         return AnalysisStrategy::SkipAnalysis;
     }
     if (IsSTDFunction(func)) {
-        return AnalysisStrategy::FullStatePool;;
+        return AnalysisStrategy::FullStatePool;
     }
     size_t blockSize = CountBlockSize(func);
     if (blockSize > OVERHEAD_BLOCK_SIZE) {

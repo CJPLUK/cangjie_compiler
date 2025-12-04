@@ -877,7 +877,7 @@ bool ToCHIR::RunAnalysisForCJLint()
         return false;
     }
     UnreachableBlockElimination();
-    RunConstantPropagation(constAnalysisWrapper);
+    RunConstantPropagation();
     if (diag.GetErrorCount() > 0) {
         return false;
     }
