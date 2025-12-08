@@ -305,10 +305,7 @@ OwnedPtr<AST::GenericParamDecl> CreateGenericParamDecl(
     AST::Decl& decl, const std::string& name, TypeManager& typeManager);
 OwnedPtr<AST::GenericParamDecl> CreateGenericParamDecl(AST::Decl& decl, TypeManager& typeManager);
 
-static bool const IS_GENERIC_INSTANTIATION_ENABLED =
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    false;
-#endif
+static bool const IS_GENERIC_INSTANTIATION_ENABLED = false;
 
 template <typename T> T* GetMemberDecl(
     const AST::Decl& decl, const std::string& identifier, std::vector<Ptr<AST::Ty>> paramTys, TypeManager& typeManager)

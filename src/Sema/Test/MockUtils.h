@@ -39,7 +39,8 @@ enum class AccessorKind : uint8_t {
 
 class MockUtils {
 public:
-    explicit MockUtils(ImportManager& importManager, TypeManager& typeManager, GenericInstantiationManager* gim);
+    explicit MockUtils(
+        ImportManager& importManager, TypeManager& typeManager, BaseMangler& mangler, GenericInstantiationManager* gim);
     static bool IsMockAccessor(const AST::Decl& decl);
 
     template <typename T> static OwnedPtr<T> CreateType(const Ptr<AST::Ty> ty)
@@ -142,7 +143,7 @@ private:
     ImportManager& importManager;
     TypeManager& typeManager;
     GenericInstantiationManager* gim {nullptr};
-    BaseMangler mangler;
+    BaseMangler& mangler;
 
     Ptr<AST::FuncDecl> getTypeForTypeParamDecl = nullptr;
     Ptr<AST::FuncDecl> isSubtypeTypesDecl = nullptr;

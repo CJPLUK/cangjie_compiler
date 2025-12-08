@@ -40,10 +40,12 @@ static constexpr std::string_view ZERO_VALUE_INTRINSIC_NAME = "zeroValue";
 
 } // namespace
 
-MockUtils::MockUtils(ImportManager& importManager, TypeManager& typeManager, GenericInstantiationManager* gim)
+MockUtils::MockUtils(
+    ImportManager& importManager, TypeManager& typeManager, BaseMangler& mangler, GenericInstantiationManager* gim)
     : importManager(importManager),
       typeManager(typeManager),
       gim(gim),
+      mangler(mangler),
       arrayDecl(importManager.GetCoreDecl<StructDecl>(STD_LIB_ARRAY)),
       stringDecl(importManager.GetCoreDecl<StructDecl>(STD_LIB_STRING)),
       optionDecl(importManager.GetCoreDecl<EnumDecl>(STD_LIB_OPTION)),

@@ -26,6 +26,7 @@
 #include "MockManager.h"
 #include "MockSupportManager.h"
 #include "MockUtils.h"
+#include "MockContext.h"
 
 namespace Cangjie {
 
@@ -60,17 +61,17 @@ bool IsAnyTypeParamUsedInTypeArgs(
 
 TestManager::TestManager(
     ImportManager& im, TypeManager& tm, DiagnosticEngine& diag, const GlobalOptions& compilationOptions)
-    : importManager(im),
+    : ctx(MakeOwned<MockContext>()),
+      importManager(im),
       typeManager(tm),
       diag(diag),
       testEnabled(compilationOptions.enableCompileTest),
       mockMode(compilationOptions.mock),
       mockCompatibleIfNeeded(testEnabled && mockMode == MockMode::DEFAULT),
-      mockCompatible(mockCompatibleIfNeeded || mockMode == MockMode::ON)
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-      , exportForTest(compilationOptions.exportForTest)
-#endif
-{}
+      mockCompatible(mockCompatibleIfNeeded || mockMode == MockMode::ON),
+      exportForTest(compilationOptions.exportForTest)
+{
+}
 
 void TestManager::ReportDoesntSupportMocking(
     const Expr& reportOn, const std::string& name, const std::string& package)
@@ -284,7 +285,7 @@ VisitAction TestManager::HandleMockAnnotatedLambda(const LambdaExpr& lambda)
     return VisitAction::WALK_CHILDREN;
 }
 
-void TestManager::HandleMockCalls(Package& pkg)
+void TestManager::HandleCreateMock(Package& pkg)
 {
     Walker(&pkg, Walker::GetNextWalkerID(), [this, &pkg](auto node) {
         if (!node->IsSamePackage(pkg)) {
@@ -292,16 +293,15 @@ void TestManager::HandleMockCalls(Package& pkg)
         }
         if (auto callExpr = As<ASTKind::CALL_EXPR>(node); callExpr) {
             return HandleCreateMockCall(*callExpr, pkg);
-        } else if (auto lambda = As<ASTKind::LAMBDA_EXPR>(node); lambda) {
-            return HandleMockAnnotatedLambda(*lambda);
         }
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+
+        // TODO: Move to check stage?
         if (auto funcDecl = As<ASTKind::FUNC_DECL>(node); funcDecl &&
             funcDecl->TestAttr(Attribute::CONTAINS_MOCK_CREATION_CALL) && funcDecl->funcBody &&
             funcDecl->funcBody->generic && !funcDecl->HasAnno(AnnotationKind::FROZEN)) {
             ReportFrozenRequired(*funcDecl);
         }
-#endif
+
         return VisitAction::WALK_CHILDREN;
     }).Walk();
 
@@ -309,6 +309,25 @@ void TestManager::HandleMockCalls(Package& pkg)
         mockManager->WriteGeneratedClasses();
     }
 }
+
+void TestManager::HandleEnsurePreparedToMock(Package& pkg)
+{
+    Walker(&pkg, Walker::GetNextWalkerID(), [this, &pkg](auto node) {
+        if (!node->IsSamePackage(pkg)) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        if (auto lambda = As<ASTKind::LAMBDA_EXPR>(node); lambda) {
+            return HandleMockAnnotatedLambda(*lambda);
+        }
+
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+
+    if (mockCompatible && testEnabled) {
+        mockManager->WriteGeneratedClasses();
+    }
+}
+
 
 Ptr<ClassDecl> TestManager::GenerateMockClassIfNeededAndGet(const CallExpr& callExpr, Package& pkg)
 {
@@ -803,47 +822,20 @@ bool TestManager::IsThereMockUsage(Package& pkg) const
     return false;
 }
 
-namespace {
-
-struct ManglerCtxGuard final {
-public:
-    ManglerCtxGuard(BaseMangler& mangler, Package& pkg) : mangler(mangler), pkg(pkg)
-    {
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-        manglerCtx = mangler.PrepareContextForPackage(&pkg);
-#endif
-    }
-
-    ~ManglerCtxGuard()
-    {
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-        mangler.manglerCtxTable.erase(
-            ManglerContext::ReduceUnitTestPackageName(pkg.fullPackageName));
-#endif
-    }
-
-private:
-    [[maybe_unused]] BaseMangler& mangler;
-    [[maybe_unused]] Package& pkg;
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    std::unique_ptr<ManglerContext> manglerCtx;
-#endif
-};
-
-} // namespace
-
-void TestManager::PreparePackageForTestIfNeeded(Package& pkg)
+void TestManager::BeforeInstantiation(AST::Package& pkg)
 {
     if (pkg.files.empty()) {
         return;
     }
 
-    std::optional<ManglerCtxGuard> manglerCtxGuard;
     if (mockMode == MockMode::ON || (mockCompatibleIfNeeded && IsThereMockUsage(pkg))) {
-        manglerCtxGuard.emplace(mockUtils->mangler, pkg);
+        ctx->PrepareManglerContext(&pkg);
 
         mockUtils->SetGetTypeForTypeParamDecl(pkg);
         mockUtils->SetIsSubtypeTypes(pkg);
+
+        // TODO: In almost every stage there is a AST walk.
+        // Do it once, collecting all nodes, that needs to be handled in some way
         CollectInternalDeclUsages(pkg);
         GenerateAccessors(pkg);
         PrepareToSpy(pkg);
@@ -853,7 +845,12 @@ void TestManager::PreparePackageForTestIfNeeded(Package& pkg)
     } else {
         CheckIfNoMockSupportDependencies(pkg);
     }
-    HandleMockCalls(pkg);
+    HandleEnsurePreparedToMock(pkg);
+}
+
+void TestManager::AfterInstantiation(AST::Package& pkg)
+{
+    HandleCreateMock(pkg);
 }
 
 void TestManager::Init(GenericInstantiationManager* instantiationManager)
@@ -862,7 +859,7 @@ void TestManager::Init(GenericInstantiationManager* instantiationManager)
         return;
     }
 
-    mockUtils = new MockUtils(importManager, typeManager, instantiationManager);
+    mockUtils = new MockUtils(importManager, typeManager, ctx->GetMangler(), instantiationManager);
     mockSupportManager = MakeOwned<MockSupportManager>(typeManager, mockUtils);
 
     if (mockCompatible && testEnabled) {
