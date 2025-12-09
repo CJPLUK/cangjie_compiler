@@ -1679,7 +1679,6 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
     }
     obj.SetRawMangledName(buffer->rawMangledName()->str());
     obj.SetAnnoInfo(Create<AnnoInfo>(buffer->base()->annoInfo()));
-    obj.SetParentRawMangledName(buffer->parentName()->str());
     obj.AppendAttributeInfo(CreateAttr(buffer->base()->attributes()));
     if (compileSpecific) {
         obj.EnableAttr(Attribute::DESERIALIZED);
