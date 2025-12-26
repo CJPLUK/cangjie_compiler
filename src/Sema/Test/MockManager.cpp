@@ -253,6 +253,18 @@ MockManager::GeneratedClassResult MockManager::GenerateMockClassIfNeededAndGet(
     };
 }
 
+namespace {
+
+bool EndsWith(const std::string& s, const std::string& suffix)
+{
+    if (suffix.length() > s.length()) {
+        return false;
+    }
+    return std::string_view(s).substr(s.length() - suffix.length()) == suffix;
+}
+
+} // namespace
+
 void MockManager::AddMockedMembers(
     ClassLikeDecl& originalDecl, ClassDecl& mockedDecl, std::vector<TypeSubst>& classGenericSubsts)
 {
@@ -262,6 +274,10 @@ void MockManager::AddMockedMembers(
     for (auto& superDecl : originalDecl.GetAllSuperDecls()) {
         for (auto& member : superDecl->GetMemberDecls()) {
             if (foundOverrides.find(member.get()) != foundOverrides.end()) {
+                continue;
+            }
+            if (EndsWith(member->identifier.Val(), MockUtils::defaultAccessorSuffix)) {
+                // The accessors for methods with defaults are added afterwards
                 continue;
             }
             FindOverridesInSuperDecl(*superDecl, *member, foundOverrides);
@@ -1484,13 +1500,21 @@ std::tuple<Ptr<InterfaceDecl>, Ptr<FuncDecl>> MockManager::FindDefaultAccessorIn
         return {nullptr, nullptr};
     }
 
-    auto extendDecl = typeManager.GetExtendDeclByInterface(*baseFunc->baseExpr->ty, *accessorInterfaceDecl->ty);
-    if (!extendDecl) {
-        return {nullptr, nullptr};
+    if (auto extendDecl = typeManager.GetExtendDeclByInterface(*baseFunc->baseExpr->ty, *accessorInterfaceDecl->ty)) {
+        Ptr<FuncDecl> accessorImplDecl = MockUtils::FindMemberDecl<FuncDecl>(
+            *extendDecl.value(), mockUtils->Mangle(*original) + MockUtils::defaultAccessorSuffix);
+        CJC_ASSERT(accessorImplDecl);
+
+        return {accessorInterfaceDecl, accessorImplDecl};
     }
 
-    Ptr<FuncDecl> accessorImplDecl = MockUtils::FindMemberDecl<FuncDecl>(
-        *extendDecl.value(), mockUtils->Mangle(*original) + MockUtils::defaultAccessorSuffix);
+    auto baseDecl = Ty::GetDeclOfTy(baseFunc->baseExpr->ty);
+    Ptr<FuncDecl> accessorImplDecl =
+        MockUtils::FindMemberDecl<FuncDecl>(*baseDecl, mockUtils->Mangle(*original) + MockUtils::defaultAccessorSuffix);
+
+    if (!accessorImplDecl) {
+        return {nullptr, nullptr};
+    }
 
     return {accessorInterfaceDecl, accessorImplDecl};
 }

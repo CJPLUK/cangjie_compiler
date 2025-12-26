@@ -49,14 +49,17 @@ public:
         std::vector<Ptr<AST::InterfaceDecl>> interfacesWithDefaults;
 
         // Classes along with the interfaces that it implements (directly or through extend)
-        // with methods with default implementation
-        std::vector<std::tuple<Ptr<AST::ClassDecl>, Ptr<AST::InterfaceDecl>>> classWithInterfaceDefaults;
+        // with methods with default implementation. If implemented using extend, then there
+        // is also an extend decl
+        std::vector<std::tuple<Ptr<AST::ClassLikeDecl>, Ptr<AST::InterfaceDecl>, Ptr<AST::ExtendDecl>>>
+            classWithInterfaceDefaults;
     };
 
     void PrepareDecls(DeclsToPrepare&& decls);
     void CollectDeclsToPrepare(AST::Decl& decl, DeclsToPrepare& decls);
 
-    void PrepareClassWithDefaults(AST::ClassDecl& classDecl, AST::InterfaceDecl& interfaceDecl);
+    void PrepareClassLikeWithDefaults(
+        AST::ClassLikeDecl& classDecl, AST::InterfaceDecl& interfaceDecl, Ptr<AST::ExtendDecl> originalExtendDecl);
     void WriteUsedInternalDecl(AST::Decl& decl);
 
 private:
@@ -66,6 +69,8 @@ private:
     std::unordered_map<Ptr<AST::Decl>, Ptr<AST::VarDecl>> genericMockVarsDecls;
     std::unordered_set<Ptr<AST::Decl>> usedInternalDecls;
 
+    // NOTE: To check whether the class implements accessor interface for interface with defaults.
+    // Because TypeManager caches super types and extends (?)
     std::unordered_map<Ptr<AST::Ty>, std::unordered_set<Ptr<AST::Ty>>> defaultInterfaceAccessorExtends;
 
     bool HasDefaultInterfaceAccessor(Ptr<AST::Ty> declTy, Ptr<AST::Ty> accessorInterfaceDeclTy);

@@ -55,12 +55,21 @@ public:
     static std::string spyCallMarkerVarName;
     static std::string defaultAccessorSuffix;
 
-    template <typename T>
-    static Ptr<T> FindGlobalDecl(Ptr<AST::File> file, const std::string& identifier)
+    template <typename T> static Ptr<T> FindGlobalDecl(Ptr<AST::File> file, const std::string& identifier)
     {
         for (auto& decl : file->decls) {
             if (decl->identifier == identifier) {
                 return DynamicCast<T>(decl.get());
+            }
+        }
+        return nullptr;
+    }
+
+    template <typename T> static Ptr<T> FindGlobalDecl(Ptr<AST::Package> package, const std::string& identifier)
+    {
+        for (auto& file : package->files) {
+            if (auto decl = FindGlobalDecl<T>(file, identifier)) {
+                return decl;
             }
         }
         return nullptr;
@@ -209,6 +218,11 @@ private:
         return Ptr(RawStaticCast<T*>(GetInstantiatedDeclWithGenericInfo(*memberDeclInInstantiatedClass, instTys)));
     }
 
+    /**
+     * Extracts outer decl if it's class/interfacr/struct decl
+     * If outer decl is extend, extracts extended type
+     */
+    Ptr<AST::Decl> GetOuterDecl(AST::Decl& decl) const;
     Ptr<AST::ClassDecl> GetExtendedClassDecl(AST::FuncDecl& decl) const;
     void UpdateRefTypesTarget(
         Ptr<AST::Type> type, Ptr<AST::Generic> oldGeneric, Ptr<AST::Generic> newGeneric) const;
