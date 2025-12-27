@@ -40,52 +40,53 @@ bool IsStructOrCStruct(const Type& type, bool includeNormalStruct)
     return Cangjie::StaticCast<const StructType&>(type).GetStructDef()->IsCStruct();
 }
 
-bool IsOptionalCType(const Type& type, bool includeNormalStruct, bool includeCString)
+bool IsOptionalCType(const Type& type, bool includeNormalStruct)
 {
     if (auto varray = Cangjie::DynamicCast<const VArrayType*>(&type)) {
-        return IsOptionalCType(*varray->GetElementType(), includeNormalStruct, includeCString);
+        return IsOptionalCType(*varray->GetElementType(), includeNormalStruct);
     } else if (auto tuple = Cangjie::DynamicCast<const TupleType*>(&type)) {
         for (auto t : tuple->GetElementTypes()) {
-            if (!IsOptionalCType(*t, includeNormalStruct, includeCString)) {
+            if (!IsOptionalCType(*t, includeNormalStruct)) {
                 return false;
             }
         }
         return true;
     } else if (auto ref = Cangjie::DynamicCast<const RefType*>(&type)) {
-        return IsOptionalCType(*ref->GetBaseType(), includeNormalStruct, includeCString);
+        return IsOptionalCType(*ref->GetBaseType(), includeNormalStruct);
     } else if (auto cp = Cangjie::DynamicCast<const CPointerType*>(&type)) {
-        return IsOptionalCType(*cp->GetElementType(), includeNormalStruct, includeCString);
+        return IsOptionalCType(*cp->GetElementType(), includeNormalStruct);
     } else if (auto cf = Cangjie::DynamicCast<const FuncType*>(&type); cf && cf->IsCFunc()) {
-        if (!IsOptionalCType(*cf->GetReturnType(), includeNormalStruct, includeCString)) {
+        if (!IsOptionalCType(*cf->GetReturnType(), includeNormalStruct)) {
             return false;
         }
         for (auto t : cf->GetParamTypes()) {
-            if (!IsOptionalCType(*t, includeNormalStruct, includeCString)) {
+            if (!IsOptionalCType(*t, includeNormalStruct)) {
                 return false;
             }
         }
         return true;
-    } else if (includeCString && type.IsCString()) {
-        return true;
     }
     auto k = type.GetTypeKind();
-    return (k >= Type::TypeKind::TYPE_INT8 && k <= Type::TypeKind::TYPE_NOTHING) ||
-        type.IsCPointer() || IsStructOrCStruct(type, includeNormalStruct);
+    return (k >= Type::TypeKind::TYPE_INT8 && k <= Type::TypeKind::TYPE_VOID) ||
+        type.IsCPointer() || type.IsCString() || IsStructOrCStruct(type, includeNormalStruct);
 }
 
 bool IsCType(const Type& type)
 {
-    return IsOptionalCType(type, false, true);
+    return IsOptionalCType(type, false);
 }
 
 bool IsCTypeInVArray(const Type& type)
 {
-    return IsOptionalCType(type, true, true);
+    return IsOptionalCType(type, true);
 }
 
 bool IsCTypeInInout(const Type& type)
 {
-    return IsOptionalCType(type, true, false);
+    if (type.IsCString()) {
+        return false;
+    }
+    return IsOptionalCType(type, true);
 }
 
 std::string GetExpressionString(const Expression& expr)
@@ -360,6 +361,22 @@ std::string GetFuncIdentifier(const Value& func)
         return Cangjie::StaticCast<Lambda*>(lambda)->GetIdentifier();
     }
 }
+
+bool isAllowedToHaveAbstractMethod(const CustomTypeDef& def)
+{
+    if (def.IsInterface()) {
+        return true;
+    } else if (def.IsClass()) {
+        return def.TestAttr(Attribute::ABSTRACT);
+    } else if (def.IsExtend()) {
+        auto extendedType = Cangjie::StaticCast<const ExtendDef&>(def).GetExtendedType();
+        if (auto classType = Cangjie::DynamicCast<const ClassType*>(extendedType)) {
+            return classType->GetClassDef()->IsAbstract();
+        }
+        return false;
+    }
+    return false;
+}
 } // namespace
 
 CHIRChecker::CHIRChecker(const Package& package, const Cangjie::GlobalOptions& opts, CHIRBuilder& builder)
@@ -516,7 +533,7 @@ bool CHIRChecker::CheckHaveResult(const Expression& expr, const Func& topLevelFu
 
 void CHIRChecker::ShouldNotHaveResult(const Terminator& expr, const Func& topLevelFunc)
 {
-    if (auto result = expr.GetResult()) {
+    if (expr.GetResult()) {
         ErrorInExpr(topLevelFunc, expr, "this terminator shouldn't have result.");
     }
 }
@@ -531,7 +548,7 @@ bool CHIRChecker::TypeIsExpected(const Type& srcType, const Type& dstType)
         return true;
     }
     // maybe struct S <: I, S is sub type of I, but we can't send S to I directly
-    if (srcType.IsStruct() && dstType.IsClass()) {
+    if (srcType.IsValueType() && dstType.StripAllRefs()->IsClass()) {
         return false;
     }
     // we can set a sub type to a parent type, it's safe in llvm ir,
@@ -1065,9 +1082,9 @@ void CHIRChecker::CheckVTable(const CustomTypeDef& def)
             continue;
         }
         // 3. only interface or abstract class can have unimplemented virtual method
-        bool defIsInterfaceOrAbstract = def.IsInterface() || def.TestAttr(Attribute::ABSTRACT);
+        bool canHaveAbstractMethod = isAllowedToHaveAbstractMethod(def);
         for (size_t i = 0; i < it.GetMethodNum(); ++i) {
-            if (it.GetVirtualMethods()[i].GetVirtualMethod() == nullptr && !defIsInterfaceOrAbstract) {
+            if (it.GetVirtualMethods()[i].GetVirtualMethod() == nullptr && !canHaveAbstractMethod) {
                 Errorln("in vtable of " + def.GetIdentifier() + ", parent type " + parentInstType->ToString() +
                     ", the " + IndexToString(i) +
                     " virtual method is unimplemented, but only interface or abstract class can have this kind of "
@@ -1330,8 +1347,7 @@ void CHIRChecker::CheckLocalId(BlockGroup& blockGroup, const Func& topLevelFunc)
     }
     // 1. local id can't be duplicated in one block group
     // 2. local id can't be empty in one expression
-    std::function<VisitResult(Expression&)> preVisit =
-        [&allIds, &duplicatedLocalIds, &exprResWithoutId, &preVisit](Expression& expr) {
+    auto preVisit = [&allIds, &duplicatedLocalIds, &exprResWithoutId](Expression& expr) {
         auto result = expr.GetResult();
         if (result == nullptr) {
             return VisitResult::CONTINUE;
@@ -1347,7 +1363,6 @@ void CHIRChecker::CheckLocalId(BlockGroup& blockGroup, const Func& topLevelFunc)
                     duplicatedLocalIds.emplace(p->GetIdentifier());
                 }
             }
-            Visitor::Visit(*StaticCast<Lambda&>(expr).GetBody(), preVisit);
         }
         return VisitResult::CONTINUE;
     };
@@ -2563,7 +2578,7 @@ const std::vector<VirtualMethodInfo>* CHIRChecker::CheckVTableExist(
         res = CheckVTableExist(*bType, srcParentType);
     } else if (auto cType = DynamicCast<const CustomType*>(&thisType)) {
         res = CheckVTableExist(*cType, srcParentType);
-    } else if (auto tType = DynamicCast<const ThisType*>(&thisType)) {
+    } else if (Is<ThisType>(&thisType)) {
         res = CheckVTableExist(srcParentType, topLevelFunc);
     } else if (auto gType = DynamicCast<const GenericType*>(&thisType)) {
         res = CheckVTableExist(*gType, srcParentType);
@@ -3068,31 +3083,34 @@ void CHIRChecker::CheckInout(const IntrinsicBase& expr, const Func& topLevelFunc
     }
 
     // 7. result must be Func's or Intrinsic/pointerInit1's arg
-    for (auto user : expr.GetResult()->GetUsers()) {
-        auto errMsgBase = "the result is used in a wrong expression `" + user->ToString() + "`, ";
-        if (Is<ApplyWithException>(user) || Is<Apply>(user)) {
-            continue;
-        } else if (Is<InvokeWithException>(user) || Is<Invoke>(user)) {
-            auto invokeBase = InvokeBase(user);
-            if (invokeBase.GetMethodName() == GENERIC_VIRTUAL_FUNC) {
-                ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
-                    errMsgBase + "the result can't be used in FuncType with generic type.");
-            } else if (invokeBase.GetMethodName() != INST_VIRTUAL_FUNC) {
-                ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
-                    errMsgBase + "the result can't be used as virtual method's argument.");
+    std::function<void(const LocalVar&)> checkUsers = [this, &checkUsers, &expr, &topLevelFunc](const LocalVar& localVar) {
+        for (auto user : localVar.GetUsers()) {
+            auto errMsgBase = "the result is used in a wrong expression `" + user->ToString() + "`, ";
+            if (Is<ApplyWithException>(user) || Is<Apply>(user)) {
+                continue;
+            } else if (Is<InvokeWithException>(user) || Is<Invoke>(user)) {
+                auto funcName = InvokeBase(user).GetMethodName();
+                if (funcName != INST_VIRTUAL_FUNC && funcName != GENERIC_VIRTUAL_FUNC) {
+                    ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
+                        errMsgBase + "the result can't be used as virtual method's argument.");
+                }
+                continue;
+            } else if (Is<IntrinsicWithException>(user) || Is<Intrinsic>(user)) {
+                auto userBase = IntrinsicBase(user);
+                if (userBase.GetIntrinsicKind() != IntrinsicKind::CPOINTER_INIT1) {
+                    ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
+                        errMsgBase + "the result must be used as pointerInit1's argument.");
+                }
+                continue;
+            } else if (Is<TypeCast>(user)) {
+                checkUsers(*user->GetResult());
+                continue;
             }
-            continue;
-        } else if (Is<IntrinsicWithException>(user) || Is<Intrinsic>(user)) {
-            auto userBase = IntrinsicBase(user);
-            if (userBase.GetIntrinsicKind() != IntrinsicKind::CPOINTER_INIT1) {
-                ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
-                    errMsgBase + "the result must be used as pointerInit1's argument.");
-            }
-            continue;
+            ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
+                errMsgBase + "the result must be used as Func's or Intrinsic/pointerInit1's argument.");
         }
-        ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
-            errMsgBase + "the result must be used as Func's or Intrinsic/pointerInit1's argument.");
-    }
+    };
+    checkUsers(*expr.GetResult());
 }
 void CHIRChecker::CheckIntrinsicBase(const IntrinsicBase& expr, const Func& topLevelFunc)
 {
@@ -3649,11 +3667,12 @@ void CHIRChecker::CheckInstanceOf(const InstanceOf& expr, const Func& topLevelFu
     // 2. target type must be valid
     CheckTypeIsValid(*expr.GetType(), "target", expr, topLevelFunc);
 
-    // 3. source must be an object
+    // 3. source type and target type can't be both primitive type, otherwise it should be calculated in compile time.
     auto objectType = expr.GetObject()->GetType()->StripAllRefs();
-    if (!objectType->IsCustomType() && !objectType->IsGenericRelated() && !objectType->IsThis() &&
-        !objectType->IsCPointer()) {
-        TypeCheckError(expr, *expr.GetObject(), "custom type, generic type, this or CPointer", topLevelFunc);
+    if (objectType->IsPrimitive() && expr.GetType()->StripAllRefs()->IsPrimitive()) {
+        auto errMsg = "source type is " + objectType->ToString() + ", target type is " + expr.GetType()->ToString() +
+            ", they are both exact type, doesn't need to use `InstanceOf` to check in runtime.";
+        ErrorInFunc(topLevelFunc, errMsg);
     }
 }
 void CHIRChecker::CheckTypeCast([[maybe_unused]] const TypeCast& expr, [[maybe_unused]] const Func& topLevelFunc)
