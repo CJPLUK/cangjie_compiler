@@ -104,7 +104,7 @@ Type* GetRealGenericRetType(const Apply& apply, Type& genericType, const Func* c
 
 CHIRBuilder* TypeValue::builder{nullptr};
 template <> const std::string Analysis<TypeDomain>::name = "type-analysis";
-template <> const std::optional<unsigned> Analysis<TypeDomain>::blockLimit = 300;
+template <> const std::optional<unsigned> Analysis<TypeDomain>::blockLimit = std::nullopt;
 template <> TypeDomain::ChildrenMap ValueAnalysis<TypeValueDomain>::globalChildrenMap{};
 template <> TypeDomain::AllocatedRefMap ValueAnalysis<TypeValueDomain>::globalAllocatedRefMap{};
 template <> TypeDomain::AllocatedObjMap ValueAnalysis<TypeValueDomain>::globalAllocatedObjMap{};
@@ -152,9 +152,15 @@ bool TypeAnalysis::CheckFuncHasInvoke(const BlockGroup& body)
 
 bool TypeAnalysis::Filter(const Func& method)
 {
-    return CheckFuncHasInvoke(*method.GetBody());
+    if (!CheckFuncHasInvoke(*method.GetBody())) {
+        return false;
+    }
+    if (IsSTDFunction(method)) {
+        return true;
+    }
+    const static size_t OVERHEAD_BLOCK_SIZE = 300U;
+    return method.GetBody()->GetBlocks().size() <= OVERHEAD_BLOCK_SIZE;
 }
-
 
 void TypeAnalysis::PrintDebugMessage(const Expression* expr, const TypeValue* absVal) const
 {

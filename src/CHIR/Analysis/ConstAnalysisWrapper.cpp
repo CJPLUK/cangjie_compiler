@@ -86,6 +86,9 @@ ConstAnalysisWrapper::AnalysisStrategy ConstAnalysisWrapper::ChooseAnalysisStrat
         // judge condition inner analysis engine
         return AnalysisStrategy::SkipAnalysis;
     }
+    if (IsSTDFunction(func)) {
+        return AnalysisStrategy::FullStatePool;;
+    }
     size_t blockSize = CountBlockSize(func);
     if (blockSize > OVERHEAD_BLOCK_SIZE) {
         // huge function, skip analysis

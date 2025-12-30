@@ -1581,4 +1581,9 @@ uint64_t GetRefDims(const Type& type)
     }
     return dims;
 }
+
+bool IsSTDFunction(const FuncBase& func)
+{
+    return func.GetPackageName().substr(0, strlen(STD_PACKAGE_PREFIX)) == STD_PACKAGE_PREFIX;
+}
 } // namespace Cangjie::CHIR

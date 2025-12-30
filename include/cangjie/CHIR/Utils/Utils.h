@@ -32,6 +32,8 @@ namespace Cangjie::CHIR {
 
 const int LENGTH_OF_IF = 2;
 
+inline constexpr const char STD_PACKAGE_PREFIX[] = "std.";
+
 using OptEffectCHIRMap = std::unordered_map<Ptr<Value>, std::unordered_set<Ptr<Value>>>;
 
 // ==================================== for global var init ======================================
@@ -787,5 +789,12 @@ bool ReturnTypeShouldBeVoid(const FuncBase& func);
  * @return The reference dimensions of the type.
  */
 uint64_t GetRefDims(const Type& type);
+
+/**
+ * @brief Check whether func is from standard library of cangjie.
+ *
+ * @return True if func is from standard library.
+ */
+bool IsSTDFunction(const FuncBase& func);
 } // namespace Cangjie::CHIR
 #endif
