@@ -1896,7 +1896,8 @@ void MarkImplicitUsedFunctions(const Package& pkg)
             {"arrayInitByCollection", "arrayInitByFunction", "composition", "handleException",
                 "createOverflowExceptionMsg", "createArithmeticExceptionMsg", "getCommandLineArgs"}},
         {AST_PACKAGE_NAME,
-            {MACRO_OBJECT_NAME, "refreshTokensPosition", "refreshPos", "unsafePointerCastFromUint8Array"}}};
+            {MACRO_OBJECT_NAME, "refreshTokensPosition", "refreshPos", "unsafePointerCastFromUint8Array",
+                "transformTokens"}}};
     auto found = SPECIAL_EXPORTED_FUNCS.find(pkg.fullPackageName);
     if (found == SPECIAL_EXPORTED_FUNCS.end()) {
         return;

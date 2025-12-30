@@ -696,18 +696,18 @@ void DesugarQuoteExpr(QuoteExpr& qe)
             funcArgs.emplace_back(CreateFuncArg(std::move(tokensExpr)));
             qe.desugarExpr = CreateCallExpr(std::move(tokens1), std::move(funcArgs));
             qe.desugarExpr->EnableAttr(Attribute::COMPILER_ADD);
-        } else {
-            // Tokens().concat(Tokens1)
-            auto refExpr = CreateRefExprInAST("Tokens");
-            refExpr->begin = expr->begin;
-            refExpr->end = expr->end;
-            auto baseExpr = CreateCallExpr(std::move(refExpr), {});
-            auto tokens1 = CreateMemberAccess(std::move(baseExpr), "concat");
-            tokens1->begin = expr->begin;
-            tokens1->end = expr->end;
+        } else if (!(expr->astKind == ASTKind::QUOTE_EXPR || expr->astKind == ASTKind::TOKEN_PART)) {
+            auto transRef = CreateRefExprInAST("transformTokens");
+            transRef->begin = expr->begin;
+            transRef->end = expr->end;
             std::vector<OwnedPtr<FuncArg>> funcArgs;
-            funcArgs.emplace_back(CreateFuncArg(std::move(tokensExpr)));
-            qe.desugarExpr = CreateCallExpr(std::move(tokens1), std::move(funcArgs));
+            (void)funcArgs.emplace_back(CreateFuncArg(ASTCloner::Clone(expr.get(), SetIsClonedSourceCode)));
+            (void)funcArgs.emplace_back(CreateFuncArg(std::move(tokensExpr)));
+            auto transform = CreateCallExpr(std::move(transRef), std::move(funcArgs));
+            qe.desugarExpr = std::move(transform);
+            qe.desugarExpr->EnableAttr(Attribute::COMPILER_ADD);
+        } else {
+            qe.desugarExpr = std::move(tokensExpr);
             qe.desugarExpr->EnableAttr(Attribute::COMPILER_ADD);
         }
     }
