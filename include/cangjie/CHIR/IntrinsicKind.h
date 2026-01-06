@@ -88,6 +88,8 @@ static const std::string BIT_CAST_NAME = "bitCast";
 // Cannot assign the variable from other headers, variable may not be assigned yet on windows.
 static const std::string GET_TYPE_FOR_TYPE_PARAMETER_NAME = "getTypeForTypeParameter";
 static const std::string IS_SUBTYPE_TYPES_NAME = "isSubtypeTypes";
+// exclusiveScope is the name of the public function, so we add an "Impl" suffix.
+constexpr std::string_view EXCLUSIVE_SCOPE_NAME = "exclusiveScopeImpl";
 
 // Package runtime
 static const std::string INVOKE_GC_NAME = "invokeGC";
@@ -613,6 +615,9 @@ enum IntrinsicKind : uint16_t {
 
     GET_TYPE_FOR_TYPE_PARAMETER,
     IS_SUBTYPE_TYPES,
+
+    // cjnative only
+    EXCLUSIVE_SCOPE,
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
@@ -698,6 +703,8 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
 
     {GET_TYPE_FOR_TYPE_PARAMETER_NAME, GET_TYPE_FOR_TYPE_PARAMETER},
     {IS_SUBTYPE_TYPES_NAME, IS_SUBTYPE_TYPES},
+
+    {std::string{EXCLUSIVE_SCOPE_NAME}, EXCLUSIVE_SCOPE},
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> overflowIntrinsicMap = {

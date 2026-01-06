@@ -56,6 +56,7 @@ enum class CGIntrinsicKind {
     RUNTIME,
     EXCEPTION_CATCH,
     PREINITIALIZE,
+    EXCLUSIVE_SCOPE,
     UNKNOWN
 };
 
@@ -112,6 +113,7 @@ const std::unordered_set<CHIR::IntrinsicKind> BUILTIN_FUNC_SET = {
     CHIR::IntrinsicKind::IS_NULL,
     CHIR::IntrinsicKind::GET_TYPE_FOR_TYPE_PARAMETER,
     CHIR::IntrinsicKind::IS_SUBTYPE_TYPES,
+    CHIR::IntrinsicKind::EXCLUSIVE_SCOPE,
 };
 
 inline bool IsBuiltinIntrinsic(const CHIR::IntrinsicKind intrinsicKind)

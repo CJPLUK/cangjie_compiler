@@ -1693,6 +1693,9 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
         case IS_SUBTYPE_TYPES:
             ret = IntrinsicKind_IS_SUBTYPE_TYPES;
             break;
+        case EXCLUSIVE_SCOPE:
+            ret = IntrinsicKind_EXCLUSIVE_SCOPE;
+            break;
             // no defalut here, due to we need use compiler to check all value be handled.
     }
     return ret;
@@ -1882,7 +1885,7 @@ TEST_F(CHIRSerialzierTest, IntrinsicKindEnum)
 {
     using namespace PackageFormat;
     Cangjie::CHIR::IntrinsicKind enumBegin = NOT_INTRINSIC;
-    Cangjie::CHIR::IntrinsicKind enumEnd = IS_SUBTYPE_TYPES; // make sure this is max one we defined
+    Cangjie::CHIR::IntrinsicKind enumEnd = EXCLUSIVE_SCOPE; // make sure this is max one we defined
 
     EXPECT_EQ(static_cast<size_t>(enumBegin), 0);
     for (size_t i = static_cast<size_t>(enumBegin); i <= static_cast<size_t>(enumEnd); i++) {

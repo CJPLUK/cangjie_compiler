@@ -40,6 +40,8 @@ CGIntrinsicKind GetCGIntrinsicKind(CHIR::IntrinsicKind intrinsicKind)
         case CHIR::IntrinsicKind::GET_EXPORTED_REF:
         case CHIR::IntrinsicKind::REMOVE_EXPORTED_REF:
             return CGIntrinsicKind::INTEROP;
+        case CHIR::IntrinsicKind::EXCLUSIVE_SCOPE:
+            return CGIntrinsicKind::EXCLUSIVE_SCOPE;
         default:
             break;
     }
@@ -775,6 +777,16 @@ llvm::Value* GenerateInout(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& in
     return irBuilder.CreatePointerCast(argVal, i8PtrTy);
 }
 
+llvm::Value* GenerateExclusiveScope(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
+{
+    auto& cgMod = irBuilder.GetCGModule();
+    auto exec = cgMod | intrinsic.GetOperand(0);
+    auto closure = cgMod | intrinsic.GetOperand(1);
+    auto ty = CGType::GetOrCreate(cgMod, intrinsic.GetResult()->GetType());
+    return irBuilder.CallIntrinsicFunction(
+        ty->GetLLVMType(), PREFIX_OF_BACKEND_SYMS + "ExclusiveScope", {exec, closure}, {});
+}
+
 llvm::Value* GenerateIntrinsic(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
 {
     using GenerateFunc = std::function<llvm::Value*(IRBuilder2&, const CHIRIntrinsicWrapper&)>;
@@ -798,6 +810,7 @@ llvm::Value* GenerateIntrinsic(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper
         {CGIntrinsicKind::MATH, &GenerateMathIntrinsics},
         {CGIntrinsicKind::PREINITIALIZE, &GeneratePreInitializeIntrinsics},
         {CGIntrinsicKind::INTEROP, &GenerateInteropIntrinsics},
+        {CGIntrinsicKind::EXCLUSIVE_SCOPE, &GenerateExclusiveScope},
 #endif
         {CGIntrinsicKind::RUNTIME, &GenerateRuntimeIntrinsics},
     };

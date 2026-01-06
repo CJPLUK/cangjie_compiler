@@ -1150,6 +1150,9 @@ enum IntrinsicKind: uint16 {
 
   GET_TYPE_FOR_TYPE_PARAMETER,
   IS_SUBTYPE_TYPES,
+
+  // cjnative only
+  EXCLUSIVE_SCOPE,
 }
 
 table Expression {

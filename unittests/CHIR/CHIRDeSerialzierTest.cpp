@@ -1705,6 +1705,9 @@ IntrinsicKind DeSerialize(const PackageFormat::IntrinsicKind& kind)
         case IntrinsicKind_IS_SUBTYPE_TYPES:
             ret = IS_SUBTYPE_TYPES;
             break;
+        case IntrinsicKind_EXCLUSIVE_SCOPE:
+            ret = EXCLUSIVE_SCOPE;
+            break;
     }
     return ret;
 }
