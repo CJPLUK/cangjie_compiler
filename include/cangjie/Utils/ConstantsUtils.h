@@ -43,6 +43,7 @@ inline const std::string SANCOV_VARIABLE_FLAG = "$sancov$";
 
 // File extension.
 inline const std::string SERIALIZED_FILE_EXTENSION = ".cjo";
+constexpr std::string_view SERIALIZED_FILE_FLAG_EXTENSION = ".cjo.flag";
 inline const std::string CJ_D_FILE_EXTENSION = ".cj.d";
 inline const std::string FULL_BCHIR_SERIALIZED_FILE_EXTENSION = ".full.bchir";
 inline const std::string BCHIR_SERIALIZED_FILE_EXTENSION = ".bchir";

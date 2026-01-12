@@ -340,6 +340,10 @@ public:
     {
         return cjoManager->GetSearchPath();
     }
+    void UpdateSearchPath(const std::string& cangjieModules)
+    {
+        return cjoManager->UpdateSearchPath(cangjieModules);
+    }
     void DeleteASTWriters() noexcept;
     void DeleteASTLoaders() noexcept;
 

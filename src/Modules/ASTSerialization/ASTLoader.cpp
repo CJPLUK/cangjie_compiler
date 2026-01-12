@@ -625,6 +625,11 @@ void ASTLoader::ASTLoaderImpl::LoadDeclBasicInfo(const PackageFormat::Decl& decl
     for (uoffset_t i = 0; i < length; i++) {
         auto rawAnno = decl.annotations()->Get(i);
         auto anno = LoadAnnotation(*rawAnno);
+        if (rawAnno->kind() == PackageFormat::AnnoKind_Annotation) {
+            if (auto info = decl.info_as_ClassInfo()) {
+                anno->runtimeVisible = info->runtimeVisible();
+            }
+        }
         astDecl.annotations.emplace_back(std::move(anno));
     }
 }
@@ -633,56 +638,69 @@ OwnedPtr<Annotation> ASTLoader::ASTLoaderImpl::LoadAnnotation(const PackageForma
 {
     auto annotation = MakeOwned<Annotation>();
 
-    if (rawAnno.kind() == PackageFormat::AnnoKind_Deprecated) {
-        annotation->kind = AnnotationKind::DEPRECATED;
-    } else if (rawAnno.kind() == PackageFormat::AnnoKind_TestRegistration) {
-        annotation->kind = AnnotationKind::ATTRIBUTE;
-        annotation->attrs.emplace_back(TokenKind::IDENTIFIER, "TEST_REGISTER");
-    } else if (rawAnno.kind() == PackageFormat::AnnoKind_Frozen) {
-        annotation->kind = AnnotationKind::FROZEN;
-    } else if (rawAnno.kind() == PackageFormat::AnnoKind_JavaMirror) {
-        annotation->kind = AnnotationKind::JAVA_MIRROR;
-    } else if (rawAnno.kind() == PackageFormat::AnnoKind_JavaImpl) {
-        annotation->kind = AnnotationKind::JAVA_IMPL;
-    } else if (rawAnno.kind() == PackageFormat::AnnoKind_JavaHasDefault) {
-        annotation->kind = AnnotationKind::JAVA_HAS_DEFAULT;
-    } else if (rawAnno.kind() == PackageFormat::AnnoKind_ObjCMirror) {
-        annotation->kind = AnnotationKind::OBJ_C_MIRROR;
-    } else if (rawAnno.kind() == PackageFormat::AnnoKind_ObjCImpl) {
-        annotation->kind = AnnotationKind::OBJ_C_IMPL;
-    } else if (rawAnno.kind() == PackageFormat::AnnoKind_ForeignName) {
-        annotation->kind = AnnotationKind::FOREIGN_NAME;
-    } else if (rawAnno.kind() == PackageFormat::AnnoKind_Custom) {
-        annotation->kind = AnnotationKind::CUSTOM;
-        annotation->isCompileTimeVisible = true;
-    } else {
-        InternalError("Unhandled annotation kind.");
+    switch (rawAnno.kind()) {
+        case PackageFormat::AnnoKind_Deprecated:
+            annotation->kind = AnnotationKind::DEPRECATED;
+            break;
+        case PackageFormat::AnnoKind_TestRegistration:
+            annotation->kind = AnnotationKind::ATTRIBUTE;
+            annotation->attrs.emplace_back(TokenKind::IDENTIFIER, "TEST_REGISTER");
+            break;
+        case PackageFormat::AnnoKind_Frozen:
+            annotation->kind = AnnotationKind::FROZEN;
+            break;
+        case PackageFormat::AnnoKind_JavaMirror:
+            annotation->kind = AnnotationKind::JAVA_MIRROR;
+            break;
+        case PackageFormat::AnnoKind_JavaImpl:
+            annotation->kind = AnnotationKind::JAVA_IMPL;
+            break;
+        case PackageFormat::AnnoKind_JavaHasDefault:
+            annotation->kind = AnnotationKind::JAVA_HAS_DEFAULT;
+            break;
+        case PackageFormat::AnnoKind_ObjCMirror:
+            annotation->kind = AnnotationKind::OBJ_C_MIRROR;
+            break;
+        case PackageFormat::AnnoKind_ObjCImpl:
+            annotation->kind = AnnotationKind::OBJ_C_IMPL;
+            break;
+        case PackageFormat::AnnoKind_ForeignName:
+            annotation->kind = AnnotationKind::FOREIGN_NAME;
+            break;
+        case PackageFormat::AnnoKind_Custom:
+            annotation->kind = AnnotationKind::CUSTOM;
+            annotation->isCompileTimeVisible = true;
+            break;
+        case PackageFormat::AnnoKind_Annotation:
+            annotation->kind = AnnotationKind::ANNOTATION;
+            break;
+        default:
+            InternalError("Unhandled annotation kind.");
     }
     CJC_NULLPTR_CHECK(rawAnno.identifier());
     annotation->identifier = rawAnno.identifier()->str();
     CJC_NULLPTR_CHECK(rawAnno.args());
-    uoffset_t length = static_cast<uoffset_t>(rawAnno.args()->size());
-    for (uoffset_t i = 0; i < length; i++) {
-        auto rawArg = rawAnno.args()->Get(i);
-        auto arg = LoadAnnotationArg(*rawArg);
+    for (auto&& arg : LoadAnnotationArgs(rawAnno)) {
         annotation->args.emplace_back(std::move(arg));
     }
 
     return annotation;
 }
 
-OwnedPtr<FuncArg> ASTLoader::ASTLoaderImpl::LoadAnnotationArg(const PackageFormat::AnnoArg& rawArg)
+std::vector<OwnedPtr<FuncArg>> ASTLoader::ASTLoaderImpl::LoadAnnotationArgs(const PackageFormat::Anno& rawAnno)
 {
-    auto arg = MakeOwned<FuncArg>();
+    std::vector<OwnedPtr<FuncArg>> args;
 
-    arg->name = rawArg.name()->str();
-    arg->expr = LoadExpr(rawArg.expr());
-
-    if (arg->expr->astKind != ASTKind::LIT_CONST_EXPR) {
-        InternalError("Kind of deserialized argument must be constant literal.");
+    for (const auto& rawArg : *rawAnno.args()) {
+        auto arg = MakeOwned<FuncArg>();
+        arg->name = rawArg->name()->str();
+        arg->expr = LoadExpr(rawArg->expr());
+        if (rawAnno.kind() != PackageFormat::AnnoKind_Annotation && arg->expr->astKind != ASTKind::LIT_CONST_EXPR) {
+            InternalError("Kind of deserialized argument must be constant literal.");
+        }
+        args.emplace_back(std::move(arg));
     }
-
-    return arg;
+    return args;
 }
 
 OwnedPtr<Decl> ASTLoader::ASTLoaderImpl::LoadVarDecl(const PackageFormat::Decl& decl, int64_t declIndex)
@@ -860,14 +878,15 @@ void ASTLoader::ASTLoaderImpl::LoadInheritableDeclAdvancedInfo(const PackageForm
 {
     auto& members = id.GetMemberDecls();
     if (id.TestAttr(Attribute::IS_ANNOTATION)) {
-        auto ann = MakeOwned<Annotation>();
-        ann->kind = AnnotationKind::ANNOTATION;
-
         auto info = decl.info_as_ClassInfo();
         CJC_NULLPTR_CHECK(info);
-        LoadAnnoTargets(*info, *ann);
-        ann->runtimeVisible = info->runtimeVisible();
-        (void)id.annotations.emplace_back(std::move(ann));
+        if (info->annoTargets() || info->annoTargets2()) {
+            auto ann = MakeOwned<Annotation>();
+            ann->kind = AnnotationKind::ANNOTATION;
+            LoadAnnoTargets(*info, *ann);
+            ann->runtimeVisible = info->runtimeVisible();
+            (void)id.annotations.emplace_back(std::move(ann));
+        }
     }
     auto body = id.astKind == ASTKind::CLASS_DECL ? decl.info_as_ClassInfo()->body()
         : id.astKind == ASTKind::INTERFACE_DECL   ? decl.info_as_InterfaceInfo()->body()

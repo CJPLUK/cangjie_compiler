@@ -27,6 +27,7 @@ struct TempFileInfo {
 
 enum class TempFileKind {
     O_CJO,         // output .cjo file
+    O_CJO_FLAG,    // output .cjo.flag file
     O_FULL_BCHIR, // output .full.bchir file
     O_BCHIR,      // output .bchir file
     T_BC,          // temp .bc(bitcode) file

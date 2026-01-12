@@ -364,7 +364,7 @@ private:
     void LoadMatchCaseRef(FormattedIndex index, AST::MatchCase& mc, AST::Expr& selector);
 
     OwnedPtr<AST::Annotation> LoadAnnotation(const PackageFormat::Anno& rawAnno);
-    OwnedPtr<AST::FuncArg> LoadAnnotationArg(const PackageFormat::AnnoArg& rawArg);
+    std::vector<OwnedPtr<AST::FuncArg>> LoadAnnotationArgs(const PackageFormat::Anno& rawAnno);
 };
 } // namespace Cangjie
 

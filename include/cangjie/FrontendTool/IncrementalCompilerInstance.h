@@ -39,7 +39,7 @@ public:
     bool PerformMangling() override;
     bool PerformCHIRCompilation() override;
     bool PerformCodeGen() override;
-    virtual bool PerformCjoAndBchirSaving() override;
+    virtual bool PerformResultsSaving() override;
 
     CachedMangleMap cacheMangles;
     // Store the struct types who's layout has been changed and needs to be regenerated its IR.

@@ -33,13 +33,13 @@ public:
     bool PerformGenericInstantiation() override;
     bool PerformCHIRCompilation() override;
     bool PerformCodeGen() override;
-    bool PerformCjoAndBchirSaving() override;
+    bool PerformCjoSaving() override;
+    bool PerformResultsSaving() override;
 
     bool PerformMangling() override;
     void DumpDepPackage();
 
 protected:
-    bool SaveCjoAndBchir(AST::Package& pkg) const;
     bool SaveCjo(const AST::Package& pkg) const;
     void RearrangeImportedPackageDependence() const;
     bool CodegenOnePackage(AST::Package& pkg, bool enableIncrement) const;
