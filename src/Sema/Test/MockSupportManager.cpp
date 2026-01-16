@@ -135,8 +135,8 @@ void MockSupportManager::MarkNodeMockSupportedIfNeeded(Node& node)
         return;
     }
 
-    if (decl->TestAnyAttr(Attribute::COMMON, Attribute::PLATFORM, Attribute::FROM_COMMON_PART)) {
-        // TODO: cjmp common/platform support
+    if (decl->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC, Attribute::FROM_COMMON_PART)) {
+        // TODO: cjmp common/specific support
         return;
     }
 
@@ -290,9 +290,8 @@ void MockSupportManager::CollectDeclsToPrepare(Decl& decl, DeclsToPrepare& decls
             auto extendDecl = As<ASTKind::EXTEND_DECL>(&decl);
             CJC_ASSERT(extendDecl);
 
-            // auto mangleCtx = mockUtils->mangler.manglerCtxTable.at(extendDecl->fullPackageName);
             auto mangleCtx = mockUtils->mangler.manglerCtxTable.find(
-                        ManglerContext::ReduceUnitTestPackageName(extendDecl->fullPackageName));
+                ManglerContext::ReduceUnitTestPackageName(extendDecl->fullPackageName));
             CJC_ASSERT(mangleCtx != mockUtils->mangler.manglerCtxTable.end());
             mangleCtx->second->SaveExtend2CurFile(extendDecl->curFile, extendDecl);
 
@@ -525,8 +524,8 @@ void MockSupportManager::GenerateSpyCallMarker(Package& package)
         return;
     }
 
-    if (auto& file = package.files[0]; file->isCommon || file->isPlatform) {
-        // TODO: cjmp common/platform support
+    if (auto& file = package.files[0]; file->isCommon || file->isSpecific) {
+        // TODO: cjmp common/specific support
         return;
     }
 
@@ -749,8 +748,8 @@ void MockSupportManager::PrepareToSpy(Decl& decl)
 
 void MockSupportManager::GenerateAccessors(Decl& decl)
 {
-    if (decl.TestAnyAttr(Attribute::COMMON, Attribute::PLATFORM, Attribute::FROM_COMMON_PART)) {
-        // TODO: cjmp common/platform support
+    if (decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC, Attribute::FROM_COMMON_PART)) {
+        // TODO: cjmp common/specific support
         return;
     }
     if (auto varDecl = As<ASTKind::VAR_DECL>(&decl); varDecl && varDecl->TestAttr(Attribute::GLOBAL)) {
