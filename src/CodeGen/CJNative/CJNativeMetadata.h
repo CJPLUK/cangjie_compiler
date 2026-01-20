@@ -132,7 +132,8 @@ struct MetadataTypeItem {
     llvm::MDTuple* CreateMDTuple(llvm::LLVMContext& ctx, bool isEnum = false)
     {
         if (isEnum) {
-            return llvm::MDTuple::get(ctx, {name, instanceFields, instanceMethods, staticMethods, typeAttrs});
+            return llvm::MDTuple::get(ctx,
+                {name, instanceFields, declaredGenericTi, instanceMethods, staticMethods, typeAttrs});
         } else {
             return llvm::MDTuple::get(ctx,
                 {name, declaredGenericTi, instanceFields, staticFields, instanceMethods, staticMethods, typeAttrs});
