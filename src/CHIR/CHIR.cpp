@@ -21,7 +21,6 @@
 #include "cangjie/CHIR/Transformation/BoxRecursionValueType.h"
 #include "cangjie/CHIR/Transformation/ClosureConversion.h"
 #include "cangjie/CHIR/Optimization/ConstPropagation.h"
-#include "cangjie/CHIR/Transformation/CreateExtendDefForImportedParent.h"
 #include "cangjie/CHIR/Optimization/DeadCodeElimination.h"
 #include "cangjie/CHIR/Optimization/Devirtualization.h"
 #include "cangjie/CHIR/Transformation/FlatForInExpr.h"
@@ -1430,22 +1429,16 @@ void ToCHIR::Canonicalization()
     // 3. update callee of Apply, it may be replaced by mut wrapper func
     generator.UpdateFuncCall();
 
-    // 4. create compiler added extend def which declared in current package
-    //    because vtable may not be created in imported package
-    if (kind != IncreKind::INCR) {
-        CreateExtendDefForImportedParent(*chirPkg, builder).Run();
-    }
-
-    // 5. add has invited flag to class which has finalizer, in case of finalize before init
+    // 4. add has invited flag to class which has finalizer, in case of finalize before init
     MarkClassHasInited(builder).RunOnPackage(*chirPkg);
 
-    // 6. update member var path, from name to offset
+    // 5. update member var path, from name to offset
     UpdateMemberVarPath();
 
-    // 7. set mark on some functions that have no side effect
+    // 6. set mark on some functions that have no side effect
     NoSideEffectMarker(*chirPkg).Run();
 
-    // 8. create box type for recursion value type
+    // 7. create box type for recursion value type
     BoxRecursionValueType(*chirPkg, builder).Run();
 
     DumpCHIRToFile("Canonicalization");
