@@ -628,7 +628,6 @@ void CGType::GenTypeInfo()
     CJC_ASSERT(typeInfo);
 
     PreActionOfGenTypeInfo();
-
     auto& llvmCtx = cgMod.GetLLVMContext();
     if (layoutType && !typeInfo->hasMetadata(GC_TYPE_META_NAME)) {
         auto structName = layoutType->getStructName();
