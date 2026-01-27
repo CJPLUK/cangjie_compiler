@@ -492,7 +492,8 @@ llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& c
     auto [refBB, nonRefBB] = Vec2Tuple<2>(irBuilder.CreateAndInsertBasicBlocks({"ref", "nonRef"}));
     irBuilder.CreateCondBr(isRef, refBB, nonRefBB);
     irBuilder.SetInsertPoint(refBB);
-    irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
+    irBuilder.CreateRet(
+        irBuilder.CreateBitCast(CGType::GetZeroSizedCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
     irBuilder.SetInsertPoint(nonRefBB);
     irBuilder.CreateRet(irBuilder.CreateBitCast(CGType::GetBoolCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
 
@@ -507,8 +508,7 @@ llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& c
     auto [refBB2, nonRefBB2] = Vec2Tuple<2>(irBuilder.CreateAndInsertBasicBlocks({"ref", "nonRef"}));
     irBuilder.CreateCondBr(isRef, refBB2, nonRefBB2);
     irBuilder.SetInsertPoint(refBB2);
-    irBuilder.CreateRet(
-        irBuilder.CreateBitCast(CGType::GetZeroSizedCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
+    irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
     irBuilder.SetInsertPoint(nonRefBB2);
     irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
 
