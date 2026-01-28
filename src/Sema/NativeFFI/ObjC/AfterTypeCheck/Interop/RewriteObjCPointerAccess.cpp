@@ -117,6 +117,7 @@ void HandleObjCPointerWrite(InteropContext& ctx, CallExpr& callExpr)
     auto receiver = ASTCloner::Clone<Expr>(ma->baseExpr);
     CJC_ASSERT(callExpr.args.size() == 1);
     auto valueArg = ASTCloner::Clone<Expr>(callExpr.args[0]->expr);
+    CJC_ASSERT_WITH_MSG(!receiver->ty->typeArgs.empty(), "ObjCPointer typeArgs is empty");
     auto elementType = receiver->ty->typeArgs[0];
     auto rawCType = ctx.typeMapper.Cj2CType(elementType);
     Ptr<Ty> pointerType = ctx.typeManager.GetPointerTy(rawCType);
