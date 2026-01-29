@@ -14,6 +14,14 @@
 
 #include <unordered_map>
 
+namespace {
+using namespace Cangjie;
+GlobalOptions::OptimizationLevel GetEffectiveOptimizationLevel(const DriverOptions& driverOptions)
+{
+    return driverOptions.disableBackendOpt ? GlobalOptions::OptimizationLevel::O0 : driverOptions.optimizationLevel;
+}
+} // namespace
+
 namespace Cangjie::ToolOptions {
 
 void SetOptionStringArgs(SetFuncType setOptionHandler, const std::string& stringArg)
@@ -183,8 +191,7 @@ void SetPgoOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
 namespace LLC {
 void SetOptimizationLevelOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions)
 {
-    auto optimizationLevel =
-        driverOptions.disableBackendOpt ? GlobalOptions::OptimizationLevel::O0 : driverOptions.optimizationLevel;
+    auto optimizationLevel = GetEffectiveOptimizationLevel(driverOptions);
     // when the optimize option '-Os' or 'Oz' is enabled in opt stage, then it will trigger '-O2' in llc stage.
     if (optimizationLevel == GlobalOptions::OptimizationLevel::Os ||
         optimizationLevel == GlobalOptions::OptimizationLevel::Oz) {
@@ -226,6 +233,9 @@ void SetOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions
         // AVX instruction generation may cause runtime fail on stack tracing. Manually disable here.
         SetOptionIf(setOptionHandler, driverOptions.target.arch == Triple::ArchType::X86_64, "-mattr=-avx");
     }
+    // safepoint outline improves codesize but may lead to performance degrade.
+    SetOptionIf(setOptionHandler, GetEffectiveOptimizationLevel(driverOptions) == GlobalOptions::OptimizationLevel::O2,
+        "--cj-safepoint-outline=false");
 }
 
 void SetTripleOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions)
@@ -244,8 +254,7 @@ void SetTransparentOptions(SetFuncType setOptionHandler, const DriverOptions& dr
 namespace LLD {
 void SetLTOOptimizationLevelOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions)
 {
-    auto optimizationLevel =
-        driverOptions.disableBackendOpt ? GlobalOptions::OptimizationLevel::O0 : driverOptions.optimizationLevel;
+    auto optimizationLevel = GetEffectiveOptimizationLevel(driverOptions);
     switch (optimizationLevel) {
         case GlobalOptions::OptimizationLevel::O3:
             setOptionHandler("--lto-O3");
@@ -276,6 +285,11 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
     } else {
         // The backend lld defaults to supporting incremental compilation in thin LTO mode.
         setOptionHandler("--thinlto-cache-dir=" + driverOptions.compilationCachedPath);
+    }
+    // safepoint outline improves codesize but may lead to performance degrade.
+    if (GetEffectiveOptimizationLevel(driverOptions) == GlobalOptions::OptimizationLevel::O2) {
+        setOptionHandler("--mllvm");
+        setOptionHandler("--cj-safepoint-outline=false");
     }
     // Differentiate the optimization in the LLD and OPT phases.
     setOptionHandler("--mllvm");
