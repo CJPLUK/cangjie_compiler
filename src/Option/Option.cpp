@@ -800,6 +800,10 @@ bool GlobalOptions::ProcessInputs(const std::vector<std::string>& inputs)
         (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_chir_directory, DEFAULT_POSITION);
         return false;
     }
+    if (compilePackage && packagePaths.size() > 1) {
+        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_one_package_directory, DEFAULT_POSITION);
+        return false;
+    }
     return ret;
 }
 

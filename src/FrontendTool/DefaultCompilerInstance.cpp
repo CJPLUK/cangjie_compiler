@@ -140,9 +140,8 @@ std::string DefaultCIImpl::GenerateFileName(const std::string& fullPackageName, 
         fileName = (idx.empty() ? "" : (idx + "-")) + pkgNameSuffix;
     } else if (fullPackageName != DEFAULT_PACKAGE_NAME) {
         fileName = (idx.empty() ? "" : (idx + "-")) + pkgNameSuffix;
-    } else if (ci.invocation.globalOptions.srcFiles.empty()) {
-        fileName = (idx.empty() ? "" : (idx + "-")) + pkgNameSuffix;
     } else {
+        CJC_ASSERT(!ci.invocation.globalOptions.srcFiles.empty());
         fileName = (idx.empty() ? "" : (idx + "-")) +
             FileUtil::GetFileNameWithoutExtension(ci.invocation.globalOptions.srcFiles[0]);
     }
