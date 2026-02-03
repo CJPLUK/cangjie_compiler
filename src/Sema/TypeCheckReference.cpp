@@ -750,6 +750,11 @@ void TypeChecker::TypeCheckerImpl::CheckLegalityOfReference(ASTContext& ctx, Nod
         } else if (node->astKind == ASTKind::VAR_DECL) {
             ctx.currentCheckingNodes.push(node);
         }
+        if (node->IsFuncOrProp() && node->TestAttr(AST::Attribute::FROM_COMMON_PART)) {
+            // the declaration is deserialized from common part
+            // no need to perform the check as it's already checked during common compilation
+            return VisitAction::SKIP_CHILDREN;
+        }
         // If current node is desugared func argument, ignore the checking.
         if (node->astKind == ASTKind::FUNC_ARG && node->TestAttr(Attribute::HAS_INITIAL)) {
             return VisitAction::SKIP_CHILDREN;

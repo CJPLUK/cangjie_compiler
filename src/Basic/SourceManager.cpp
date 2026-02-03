@@ -170,7 +170,7 @@ std::string SourceManager::GetContentBetween(
 
     CJC_ASSERT(INVALID_POSITION < begin && begin <= end);
     CJC_ASSERT(!sources.empty());
-    auto& sourceWithFileID = fileID >= sources.size() ? sources[0] : sources[fileID];
+    auto& sourceWithFileID = fileID >= sources.size() ? sources.at(0) : sources.at(fileID);
 
     // Use OwnedPtr for temporary Source to avoid mixed return types in ternary operator (? tempObj : ref).
     // This helps compiler optimization by having consistent pointer types
