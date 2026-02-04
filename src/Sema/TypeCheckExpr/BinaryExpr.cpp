@@ -178,6 +178,71 @@ std::pair<std::string, std::string> GetDesugaredBinaryExprArgTys(const BinaryExp
 }
 } // namespace
 
+// Helper function to check return type inference errors in operator functions
+// Returns the operator function declaration if it has return type inference error, nullptr otherwise
+bool TypeChecker::TypeCheckerImpl::ChkOperatorFuncIfTyCannotBeInferred(ASTContext& ctx, BinaryExpr& be)
+{
+    auto callExpr = StaticCast<CallExpr*>(be.desugarExpr.get());
+    auto operatorFuncDecl = As<ASTKind::FUNC_DECL>(callExpr->resolvedFunction ? callExpr->resolvedFunction
+                                                                              : callExpr->baseFunc->GetTarget());
+    if (operatorFuncDecl && NeedSynOnUsed(*operatorFuncDecl)) {
+        auto targetTy = Synthesize(ctx, operatorFuncDecl);
+        if (targetTy->HasQuestTy()) {
+            // Mark nodes as broken but don't report diagnostics here
+            be.ty = TypeManager::GetInvalidTy();
+            be.EnableAttr(Attribute::IS_BROKEN);
+            operatorFuncDecl->EnableAttr(Attribute::IS_BROKEN);
+            DiagUnableToInferReturnType(diag, *operatorFuncDecl, be);
+            return true;
+        }
+    }
+    return false;
+}
+
+// Helper function to handle operator overload checking and return type inference errors
+// Returns true if operator overload succeeded, false otherwise
+bool TypeChecker::TypeCheckerImpl::TryCheckOperatorOverload(ASTContext& ctx, Ty* target, BinaryExpr& be)
+{
+    DesugarOperatorOverloadExpr(ctx, be);
+    {
+        auto ds = DiagSuppressor(diag);
+        if (Check(ctx, target, be.desugarExpr.get())) {
+            ds.ReportDiag();
+            CJC_NULLPTR_CHECK(be.desugarExpr);
+            be.ty = be.desugarExpr->ty;
+            CJC_ASSERT(be.desugarExpr->astKind == ASTKind::CALL_EXPR);
+            ReplaceTarget(&be, StaticCast<CallExpr*>(be.desugarExpr.get())->resolvedFunction);
+            return true;
+        }
+    }
+    // Check for return type inference errors but always return false since operator overload failed
+    ChkOperatorFuncIfTyCannotBeInferred(ctx, be);
+    RecoverToBinaryExpr(be);
+    PData::Reset(typeManager.constraints);
+    return false;
+}
+
+// Helper function to handle operator overload synthesis and return type inference errors
+// Returns true if operator overload succeeded, false otherwise
+bool TypeChecker::TypeCheckerImpl::TrySynthesizeOperatorOverload(ASTContext& ctx, BinaryExpr& be)
+{
+    DesugarOperatorOverloadExpr(ctx, be);
+    {
+        auto ds = DiagSuppressor(diag);
+        if (Ty::IsTyCorrect(Synthesize(ctx, be.desugarExpr.get()))) {
+            ds.ReportDiag();
+            be.ty = be.desugarExpr->ty;
+            ReplaceTarget(&be, StaticCast<CallExpr*>(be.desugarExpr.get())->resolvedFunction);
+            return true;
+        }
+    }
+    ChkOperatorFuncIfTyCannotBeInferred(ctx, be);
+    RecoverToBinaryExpr(be);
+    be.ty = TypeManager::GetInvalidTy();
+    PData::Reset(typeManager.constraints);
+    return false;
+}
+
 void TypeChecker::TypeCheckerImpl::MarkOutermostBinaryExpressions(Package& pkg) const
 {
     MarkOutermostBinaryExpr(true, pkg);
@@ -204,21 +269,13 @@ bool TypeChecker::TypeCheckerImpl::ChkBinaryExpr(ASTContext& ctx, Ty& target, Bi
         PData::Reset(typeManager.constraints);
     } // Do not throw stored errors, re-generated below.
 
+    // 2. Try operator overload if applicable
     if (TypeCheckUtil::IsOverloadableOperator(be.op)) {
-        DesugarOperatorOverloadExpr(ctx, be);
-        auto ds = DiagSuppressor(diag);
-        if (Check(ctx, &target, be.desugarExpr.get())) {
-            ds.ReportDiag();
-            CJC_NULLPTR_CHECK(be.desugarExpr);
-            be.ty = be.desugarExpr->ty;
-            CJC_ASSERT(be.desugarExpr->astKind == ASTKind::CALL_EXPR);
-            ReplaceTarget(&be, StaticCast<CallExpr*>(be.desugarExpr.get())->resolvedFunction);
+        if (TryCheckOperatorOverload(ctx, &target, be)) {
             return true;
-        } else {
-            RecoverToBinaryExpr(be);
-            PData::Reset(typeManager.constraints);
         }
     }
+    // 3. Handle failure case
     // Clear the node to `Synthesize` the literals and the corresponding expressions again.
     be.Clear();
     if (Ty::IsTyCorrect(SynthesizeWithNegCache(ctx, &be))) {
@@ -852,9 +909,10 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBinaryExpr(ASTContext& ctx, BinaryExpr&
     CJC_NULLPTR_CHECK(be.rightExpr);
 
     auto cs = PData::CommitScope(typeManager.constraints);
+    
+    // 1. Try built-in binary expression inference
     { // Create a scope for DiagSuppressor.
         auto ds = DiagSuppressor(diag);
-        // Infer builtin binary Expr.
         Ptr<Ty> inferRet = TypeManager::GetInvalidTy();
         if (auto optTy = InferBinaryExprCaseBuiltIn(ctx, be, inferRet)) {
             ds.ReportDiag();
@@ -868,23 +926,14 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBinaryExpr(ASTContext& ctx, BinaryExpr&
 
     PData::Reset(typeManager.constraints);
 
+    // 2. Try operator overload if applicable
     if (TypeCheckUtil::IsOverloadableOperator(be.op)) {
-        DesugarOperatorOverloadExpr(ctx, be);
-        auto ds = DiagSuppressor(diag);
-        if (Ty::IsTyCorrect(Synthesize(ctx, be.desugarExpr.get()))) {
-            ds.ReportDiag();
-            // Desugar SubscriptOverloadExpr guarantees the deref and StaticCast.
-            be.ty = be.desugarExpr->ty;
-            ReplaceTarget(&be, StaticCast<CallExpr*>(be.desugarExpr.get())->resolvedFunction);
-        } else {
-            // Recover to BinaryExpr.
-            RecoverToBinaryExpr(be);
-            be.ty = TypeManager::GetInvalidTy();
-            PData::Reset(typeManager.constraints);
-        }
+        TrySynthesizeOperatorOverload(ctx, be);
     } else {
         be.ty = TypeManager::GetInvalidTy();
     }
+    
+    // 3. Handle failure case
     if (be.TestAttr(Attribute::IS_OUTERMOST)) {
         SynBinaryLeafs(ctx, be); // NOTE: All used reference must be synthesized for lsp usage.
     }
