@@ -156,7 +156,7 @@ protected:
     llvm::MDTuple* GenerateMethodMetadata(const CHIR::FuncBase& method, bool isFromInterface = false);
     llvm::MDTuple* GenerateAttrsMetadata(const CHIR::AttributeInfo& attrs, ExtraAttribute extraAttr,
         const std::string& gettingAnnotationMethod, uint8_t hasSRetMode = SRetMode::NO_SRET,
-        const std::string& enumKind = "") const;
+        const std::string& enumKind = "", bool isUnknownSize = false) const;
     llvm::MDTuple* GenerateParametersMetadata(
         const std::vector<CHIR::Parameter*>& argsInfo, bool hasThis = false) const;
     llvm::MDTuple* GenerateParametersMetadata(

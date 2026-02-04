@@ -127,7 +127,8 @@ llvm::MDTuple* MetadataInfo::GenerateParametersMetadata(const std::vector<CHIR::
 }
 
 llvm::MDTuple* MetadataInfo::GenerateAttrsMetadata(const CHIR::AttributeInfo& attrs, ExtraAttribute extraAttr,
-    const std::string& gettingAnnotationMethod, uint8_t hasSRetMode, const std::string& enumKind) const
+    const std::string& gettingAnnotationMethod, uint8_t hasSRetMode, const std::string& enumKind,
+    bool isUnknownSize) const
 {
     static const std::map<CHIR::Attribute, std::string> TEST_ATTRS{
         {CHIR::Attribute::PUBLIC, "public"},
@@ -175,6 +176,10 @@ llvm::MDTuple* MetadataInfo::GenerateAttrsMetadata(const CHIR::AttributeInfo& at
 
     if (hasSRetMode != SRetMode::NO_SRET) {
         attrsStr.emplace("hasSRet" + std::to_string(hasSRetMode));
+    }
+
+    if (isUnknownSize) {
+        attrsStr.emplace("unknownSize");
     }
 
     for (auto& attr : TEST_ATTRS) {
@@ -389,11 +394,13 @@ void StructMetadataInfo::GenerateStructMetadata(const CHIR::StructDef& sd, std::
     std::vector<llvm::Metadata*> methodsVec{};
     std::vector<llvm::Metadata*> staticMethodsVec{};
     GenerateStructMethodMetadata(sd, methodsVec, staticMethodsVec);
-
+    auto cgType = CGType::GetOrCreate(module, sd.GetType());
+    bool isUnknownSize = !cgType->GetSize().has_value();
     MetadataTypeItem item(llvm::MDString::get(llvmCtx, tiOrTTName), llvm::MDString::get(llvmCtx, declaredGenericTi),
         GenerateStructFieldMetadata(sd), GenerateStructStaticFieldMetadata(sd), llvm::MDTuple::get(llvmCtx, methodsVec),
         llvm::MDTuple::get(llvmCtx, staticMethodsVec),
-        GenerateAttrsMetadata(sd.GetAttributeInfo(), ExtraAttribute::STRUCT, sd.GetAnnoInfo().mangledName));
+        GenerateAttrsMetadata(sd.GetAttributeInfo(), ExtraAttribute::STRUCT, sd.GetAnnoInfo().mangledName,
+            SRetMode::NO_SRET, "", isUnknownSize));
 
     auto mdTuple = item.CreateMDTuple(llvmCtx);
     typesMD->addOperand(mdTuple);
