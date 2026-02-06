@@ -29,12 +29,13 @@ namespace Cangjie::Interop::ObjC {
 struct InteropContext {
     explicit InteropContext(
         AST::Package& pkg, TypeManager& typeManager, ImportManager& importManager, DiagnosticEngine& diag,
-        const BaseMangler& mangler, const std::string& cjLibOutputPath,
+        const BaseMangler& mangler, const std::string& cjLibOutputPath, const std::string& outputObjCGenDir,
         const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& structMemberSignatures)
         : pkg(pkg), diag(diag), typeManager(typeManager), importManager(importManager), bridge(importManager, diag),
           typeMapper(bridge, typeManager), mangler(mangler), nameGenerator(mangler, typeManager),
           factory(bridge, typeManager, nameGenerator, typeMapper, importManager),
-          cjLibOutputPath(cjLibOutputPath), structMemberSignatures(structMemberSignatures)
+          cjLibOutputPath(cjLibOutputPath), outputObjCGenDir(outputObjCGenDir),
+          structMemberSignatures(structMemberSignatures)
     {
     }
 
@@ -61,6 +62,7 @@ struct InteropContext {
     NameGenerator nameGenerator;
     ASTFactory factory;
     const std::string& cjLibOutputPath;
+    const std::string& outputObjCGenDir;
     const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& structMemberSignatures;
 };
 

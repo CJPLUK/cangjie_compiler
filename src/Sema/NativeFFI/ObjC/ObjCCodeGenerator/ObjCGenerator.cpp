@@ -110,6 +110,8 @@ constexpr auto REGISTRY_ID_UNINIT_VALUE = "-1";
 
 constexpr auto INDENT_SIZE = 4;
 
+static const std::string DEFAULT_OUTPUT_DIR = "objc-gen";
+
 template <typename... Args> inline std::string Join(Args&&... args)
 {
     std::stringstream ss;
@@ -161,7 +163,7 @@ std::string ToDecl(ObjCFunctionType fType)
 
 ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<Decl> declArg, const std::string& outputFilePath,
     const std::string& cjLibOutputPath, InteropType interopType)
-    : outputFilePath(outputFilePath),
+    : outputFilePath(outputFilePath.empty() ? DEFAULT_OUTPUT_DIR : outputFilePath),
       cjLibOutputPath(cjLibOutputPath),
       decl(declArg),
       ctx(ctx),
@@ -172,7 +174,7 @@ ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<Decl> declArg, const std::
 ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
     const std::string& cjLibOutputPath, InteropType interopType, Native::FFI::GenericConfigInfo* genericConfig,
     bool isGenericGlueCode)
-    : outputFilePath(outputFilePath),
+    : outputFilePath(outputFilePath.empty() ? DEFAULT_OUTPUT_DIR : outputFilePath),
       cjLibOutputPath(cjLibOutputPath),
       decl(declArg),
       ctx(ctx),
