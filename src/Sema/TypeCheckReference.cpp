@@ -747,16 +747,13 @@ bool TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceIsSkip(Ptr<Node> node
     }
 }
 
-VisitAction TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceForExpr(
-    unsigned id, ASTContext& ctx, Ptr<AST::Expr> node)
+AST::VisitAction TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceForNameReferenceExpr(
+    ASTContext& ctx, Ptr<AST::NameReferenceExpr> nameRef)
 {
-    if (node->desugarExpr) {
-        // Only check desugared nodes.
-        CheckLegalityOfReference(id, ctx, *node->desugarExpr);
-        return VisitAction::SKIP_CHILDREN;
-    } else if (auto ref = DynamicCast<NameReferenceExpr*>(node); ref && !ref->instTys.empty()) {
-        CheckInstTypeCompleteness(ctx, *ref);
-    } else if (auto re = DynamicCast<RefExpr*>(node)) {
+    if (!nameRef->instTys.empty()) {
+        CheckInstTypeCompleteness(ctx, *nameRef);
+    }
+    if (auto re = DynamicCast<RefExpr*>(nameRef)) {
         if (re->isThis) {
             CheckUsageOfThis(ctx, *re);
         } else if (re->isSuper) {
@@ -764,6 +761,19 @@ VisitAction TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceForExpr(
         } else {
             CheckAccessLegalityOfRefExpr(ctx, *re);
         }
+    }
+    return VisitAction::WALK_CHILDREN;
+}
+
+VisitAction TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceForExpr(
+    unsigned id, ASTContext& ctx, Ptr<AST::Expr> node)
+{
+    if (node->desugarExpr) {
+        // Only check desugared nodes.
+        CheckLegalityOfReference(id, ctx, *node->desugarExpr);
+        return VisitAction::SKIP_CHILDREN;
+    } else if (auto ref = DynamicCast<NameReferenceExpr*>(node)) {
+        return CheckLegalityOfReferenceForNameReferenceExpr(ctx, ref);
     } else if (auto ae = DynamicCast<AssignExpr>(node)) {
         CheckMutationInStruct(ctx, *ae->leftValue);
     } else if (auto ide = DynamicCast<IncOrDecExpr>(node)) {

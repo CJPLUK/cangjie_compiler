@@ -19,6 +19,7 @@
 #include "ScopeManager.h"
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Walker.h"
@@ -1568,6 +1569,7 @@ private:
     void CheckStaticMemberAccessLegality(const AST::MemberAccess& ma, const AST::Decl& target);
     void CheckInstanceMemberAccessLegality(const ASTContext& ctx, const AST::MemberAccess& ma, const AST::Decl& target);
     bool CheckLegalityOfReferenceIsSkip(Ptr<AST::Node> node);
+    AST::VisitAction CheckLegalityOfReferenceForNameReferenceExpr(ASTContext& ctx, Ptr<AST::NameReferenceExpr> nameRef);
     AST::VisitAction CheckLegalityOfReferenceForExpr(unsigned id, ASTContext& ctx, Ptr<AST::Expr> node);
     void CheckLegalityOfReference(unsigned id, ASTContext& ctx, AST::Node& node);
     void CheckLegalityOfReference(ASTContext& ctx, AST::Node& node);
