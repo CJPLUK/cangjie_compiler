@@ -52,7 +52,7 @@ using GIM = GenericInstantiationManager;
 
 GIM::GenericInstantiationManagerImpl::GenericInstantiationManagerImpl(CompilerInstance& ci)
     : diag(ci.diag),
-      importManager(ci.importManager),
+      importManager(*ci.importManager),
       typeManager(*ci.typeManager),
       testManager(ci.testManager),
       promotion(*ci.typeManager),

@@ -27,11 +27,11 @@ public:
           opts(ci.invocation.globalOptions),
           typeManager(ci.typeManager),
           sourceManager(ci.GetSourceManager()),
-          importManager(ci.importManager),
+          importManager(*ci.importManager),
           gim(ci.gim),
           diagEngine(ci.diag),
           cangjieHome(ci.cangjieHome),
-          pkg(pkg),
+          pkg(&pkg),
           outputPath(ci.invocation.globalOptions.output),
           kind(ci.kind),
           cachedInfo(ci.cachedInfo),
@@ -174,6 +174,7 @@ private:
     void CFFIFuncWrapper();
     void ReplaceSrcCodeImportedValueWithSymbol();
     void Canonicalization();
+    void ClearASTResources();
 
     template <typename T>
     std::pair<Value*, Apply*> DoCFFIFuncWrapper(T& curFunc, bool isForeign, bool isExternal = true);
@@ -188,7 +189,7 @@ private:
     const GenericInstantiationManager* gim;
     DiagnosticEngine& diagEngine;
     const std::string& cangjieHome;
-    AST::Package& pkg;
+    AST::Package* pkg; // Prohibit the use after the ClearASTResources call.
     std::string outputPath;
     IncreKind kind;
     CompilationCache& cachedInfo;

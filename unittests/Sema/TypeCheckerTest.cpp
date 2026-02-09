@@ -87,7 +87,7 @@ TEST_F(TypeCheckerTest, DISABLED_MacroDeclTest)
     instance->PerformImportPackage();
     instance->PerformSema();
     std::vector<uint8_t> astData;
-    instance->importManager.ExportAST(false, astData, *instance->GetSourcePackages()[0]);
+    instance->importManager->ExportAST(false, astData, *instance->GetSourcePackages()[0]);
 
     EXPECT_EQ(diag.GetErrorCount(), 3);
 }

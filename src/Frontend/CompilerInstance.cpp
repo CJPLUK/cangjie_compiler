@@ -15,7 +15,6 @@
 #include <fstream>
 
 #include "PrintSymbolTable.h"
-
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"
@@ -54,16 +53,13 @@ using namespace Cangjie;
 using namespace AST;
 
 CompilerInstance::CompilerInstance(CompilerInvocation& invocation, DiagnosticEngine& diag)
-    : invocation(invocation),
-      diag(diag),
-      packageManager(new PackageManager(importManager)),
-      typeManager(new TypeManager()),
-      importManager(diag, *typeManager, invocation.globalOptions),
-      testManager(new TestManager(importManager, *typeManager, diag, invocation.globalOptions)),
-      mangler(std::make_unique<BaseMangler>())
+    : invocation(invocation), diag(diag), mangler(std::make_unique<BaseMangler>())
 {
-    CJC_NULLPTR_CHECK(typeManager);
-    CJC_NULLPTR_CHECK(packageManager);
+    // allocate managers in safe order
+    typeManager = new TypeManager();
+    importManager = new ImportManager(diag, *typeManager, invocation.globalOptions);
+    packageManager = new PackageManager(*importManager);
+    testManager = new TestManager(*importManager, *typeManager, diag, invocation.globalOptions);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     chirData = std::make_unique<CHIRData>();
     chirData->InitData(&fileNameMap, invocation.globalOptions.GetJobs());
@@ -85,21 +81,66 @@ CompilerInstance::CompilerInstance(CompilerInvocation& invocation, DiagnosticEng
 
 CompilerInstance::~CompilerInstance()
 {
+    delete compileStrategy;
+    if (astResourcesDestroyed) {
+        return;
+    }
+    delete typeChecker;
+    delete testManager;
+    delete packageManager;
+    delete importManager;
+    delete typeManager;
+    delete gim;
     // AST must be released before ASTContext for correct symbol detaching.
     srcPkgs.clear();
     pkgCtxMap.clear();
-    delete compileStrategy;
-    compileStrategy = nullptr;
+}
+
+void CompilerInstance::DestroyASTResources()
+{
+    // The following situations do not allow for the destruction or partial destruction of ast:
+    // 1. In the incremental mode, after the compilation is completed, the AST information needs to be cached in the
+    // cache file and cannot be deleted.
+    // 2. When used as an expression in cjdb cannot destroy the ast.
+    if (astResourcesDestroyed || invocation.globalOptions.enIncrementalCompilation ||
+        invocation.globalOptions.cjdbMode) {
+        return;
+    }
+    astResourcesDestroyed = true;
+
+    // Note: callers must ensure no background tasks are accessing these resources.
+
+    // 2) Delete TypeChecker as it may hold references to AST and TypeManager.
     delete typeChecker;
     typeChecker = nullptr;
-    delete typeManager;
-    typeManager = nullptr;
+
+    // 3) Delete TestManager which may depend on TypeManager and GenericInstantiationManager.
     delete testManager;
     testManager = nullptr;
+
+    // 4) Delete GenericInstantiationManager if exists.
     delete gim;
     gim = nullptr;
+
+    // 5) Delete PackageManager which holds reference to ImportManager->
     delete packageManager;
     packageManager = nullptr;
+
+    // 5.1) Delete ImportManager after PackageManager
+    delete importManager;
+    importManager = nullptr;
+
+    // 6) Release AST nodes before ASTContext for correct symbol detaching.
+    srcPkgs.clear();
+
+    // 7) Clear ASTContext map.
+    pkgCtxMap.clear();
+
+    // 8) Delete TypeManager last among managers that are heap-allocated here.
+    delete typeManager;
+    typeManager = nullptr;
+
+    Utils::FreeIdleMemoryToOS();
 }
 
 bool CompilerInstance::InitCompilerInstance()
@@ -344,9 +385,9 @@ bool CompilerInstance::PerformMacroExpand()
 
     // Constant evaluation and the interpreter needs to load bchir, which requires an AST loader.
     if (!invocation.globalOptions.IsConstEvalEnabled() && !invocation.globalOptions.interpreter) {
-        importManager.DeleteASTLoaders();
+        importManager->DeleteASTLoaders();
     }
-    importManager.ClearPackageBCHIRCache();
+    importManager->ClearPackageBCHIRCache();
 
     if (invocation.globalOptions.compileTestsOnly && invocation.globalOptions.enableVerbose) {
         Print("Source files to compile for the test-only mode: {");
@@ -583,7 +624,7 @@ bool CompilerInstance::PerformDesugarAfterSema()
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 bool CompilerInstance::PerformGenericInstantiation()
 {
-    if (!importManager.IsSourceCodeImported()) {
+    if (!importManager->IsSourceCodeImported()) {
         InternalError("Generic instantiation should not be performed when imported source code is not reparsed.");
         return false;
     }
@@ -780,7 +821,7 @@ void CompilerInstance::ManglingHelpFunction(const BaseMangler& baseMangler)
         }
     }
     if (invocation.globalOptions.disableInstantiation) {
-        for (auto& importPkg : importManager.GetAllImportedPackages()) {
+        for (auto& importPkg : importManager->GetAllImportedPackages()) {
             CJC_NULLPTR_CHECK(importPkg->srcPackage.get());
             // exclude current package
             if (!importPkg->srcPackage->TestAttr(AST::Attribute::IMPORTED)) {
@@ -815,7 +856,7 @@ bool CompilerInstance::PerformMangling()
     std::vector<std::unique_ptr<ManglerContext>> manglerCtxVec;
 
     // Get all imported packages and source packages.
-    for (auto& package : importManager.GetAllImportedPackages()) {
+    for (auto& package : importManager->GetAllImportedPackages()) {
         std::string pkgName = ManglerContext::ReduceUnitTestPackageName(package->fullPackageName);
         if (mangler->manglerCtxTable.find(pkgName) == mangler->manglerCtxTable.end()) {
             auto manglerCtx = std::make_unique<ManglerContext>();
@@ -1000,16 +1041,16 @@ bool CompilerInstance::ImportPackages()
     AddSourceToMember();
 
     if (invocation.globalOptions.scanDepPkg) {
-        importManager.UpdateSearchPath(cangjieModules);
+        importManager->UpdateSearchPath(cangjieModules);
         if (!invocation.globalOptions.inputCjoFile.empty()) {
-            depPackageInfo = importManager.GeneratePkgDepInfoByCjo(invocation.globalOptions.inputCjoFile);
+            depPackageInfo = importManager->GeneratePkgDepInfoByCjo(invocation.globalOptions.inputCjoFile);
         } else {
-            depPackageInfo = importManager.GeneratePkgDepInfo(pkgs);
+            depPackageInfo = importManager->GeneratePkgDepInfo(pkgs);
         }
         return true;
     }
 
-    if (!importManager.BuildIndex(cangjieModules, invocation.globalOptions, pkgs)) {
+    if (!importManager->BuildIndex(cangjieModules, invocation.globalOptions, pkgs)) {
         return false;
     }
     MergePackages();
@@ -1059,7 +1100,7 @@ std::vector<Ptr<Decl>> CompilerInstance::GetAllVisibleExtendMembers(
         return {};
     }
     for (auto& e : extends) {
-        if (!importManager.IsExtendAccessible(curFile, *e)) {
+        if (!importManager->IsExtendAccessible(curFile, *e)) {
             continue;
         }
         auto& extendMember = e->GetMemberDecls();
@@ -1067,7 +1108,7 @@ std::vector<Ptr<Decl>> CompilerInstance::GetAllVisibleExtendMembers(
             members.insert(members.end(), extendMember.begin(), extendMember.end());
         } else {
             for (auto& m : extendMember) {
-                if (importManager.IsExtendMemberAccessible(curFile, *m, *exprTy)) {
+                if (importManager->IsExtendMemberAccessible(curFile, *m, *exprTy)) {
                     members.emplace_back(m.get());
                 }
             }
@@ -1157,10 +1198,10 @@ bool CompilerInstance::DetectCangjieModules()
 bool CompilerInstance::ModularizeCompilation()
 {
     Utils::ProfileRecorder recorder("ImportPackages", "ModularizeCompilation");
-    for (auto& objFile : importManager.GetUsedSTDLibFiles(DepType::DIRECT)) {
+    for (auto& objFile : importManager->GetUsedSTDLibFiles(DepType::DIRECT)) {
         invocation.globalOptions.directBuiltinDependencies.insert(objFile);
     }
-    for (auto& objFile : importManager.GetUsedSTDLibFiles(DepType::INDIRECT)) {
+    for (auto& objFile : importManager->GetUsedSTDLibFiles(DepType::INDIRECT)) {
         invocation.globalOptions.indirectBuiltinDependencies.insert(objFile);
     }
     return packageManager->ResolveDependence(pkgs);
