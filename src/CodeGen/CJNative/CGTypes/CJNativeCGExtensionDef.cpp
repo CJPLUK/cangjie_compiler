@@ -323,7 +323,8 @@ llvm::Constant* CGExtensionDef::GenerateOuterTi(const CHIR::VirtualMethodInfo& f
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
     if (funcInfo.GetVirtualMethod() == nullptr) {
-        return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(llvmCtx));
+        return llvm::ConstantExpr::getIntToPtr(
+            llvm::ConstantInt::get(llvm::Type::getInt64Ty(llvmCtx), 0x1), llvm::Type::getInt8PtrTy(llvmCtx));
     }
     auto parentType = DeRef(*funcInfo.GetInstParentType());
     if (parentType->GetTypeArgs().empty()) {
@@ -341,13 +342,13 @@ llvm::Constant* CGExtensionDef::GenerateOuterTiFn(const CHIR::VirtualMethodInfo&
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
     if (funcInfo.GetVirtualMethod() == nullptr) {
-        return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(llvmCtx));
+        return llvm::ConstantExpr::getIntToPtr(
+            llvm::ConstantInt::get(llvm::Type::getInt64Ty(llvmCtx), 0x1), llvm::Type::getInt8PtrTy(llvmCtx));
     }
 
     auto fnName = extendDefName + "_" + funcInfo.GetVirtualMethod()->GetIdentifierWithoutPrefix() + "_GetOuterTiFn";
     auto getOuterTiFn = cgMod.GetLLVMModule()->getFunction(fnName);
     if (!getOuterTiFn) {
-        cgCtx.AddLLVMUsedVars(fnName);
         auto typeInfoPtrType = CGType::GetOrCreateTypeInfoPtrType(llvmCtx);
         llvm::FunctionType* getOuterTiFnType = llvm::FunctionType::get(typeInfoPtrType, {typeInfoPtrType}, false);
         getOuterTiFn =
