@@ -16,6 +16,7 @@
 #include <regex>
 #include <string>
 #include <unordered_map>
+#include <cctype>
 
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Print.h"
@@ -75,7 +76,6 @@ const std::unordered_map<ArchType, std::string> ARCH_STRING_MAP = {
 
 const std::unordered_map<OSType, std::string> OS_STRING_MAP = {
     {OSType::WINDOWS, "windows"},
-    {OSType::WINDOWS, "w64"},
     {OSType::LINUX, "linux"},
     {OSType::DARWIN, "darwin"},
     {OSType::IOS, "ios"},
@@ -532,8 +532,15 @@ bool GlobalOptions::CheckLtoOptions() const
         return true;
     }
     auto osType = target.GetOSFamily();
-    if (osType == OSType::WINDOWS) {
-        Errorln("Windows does not support LTO optimization.");
+    std::string osName = target.OSToString();
+    if (osType == OSType::IOS) {
+        osName = "iOS";
+    } else if (!osName.empty()) {
+        osName[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(osName[0])));
+    }
+    if (osType == OSType::DARWIN || osType == OSType::IOS || osType == OSType::WINDOWS) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_target_lto_unsupported, DEFAULT_POSITION, osName);
         return false;
     }
     if (outputMode == OutputMode::OBJ) {
@@ -572,7 +579,7 @@ bool GlobalOptions::CheckOutputModeOptions()
     return true;
 }
 
-bool GlobalOptions::CheckCompileAsExeOptions() const 
+bool GlobalOptions::CheckCompileAsExeOptions() const
 {
     if (!IsCompileAsExeEnabled()) {
         return true;
@@ -1206,7 +1213,6 @@ std::string GlobalOptions::GetCangjieLibTargetPathName() const
     }
     name += "_" + target.ArchToString() + "_" + BackendToString(backend);
     return name;
-    
 }
 
 void GlobalOptions::SetCompilationCachedPath()
