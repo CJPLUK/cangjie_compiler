@@ -96,6 +96,20 @@ private:
 };
 
 /**
+ * Creates and inserts a `$getObjCClass(): NativeObjCClass` function for each @ObjCMirror/@ObjCImpl class:
+ *
+ * ```cangjie
+ * public func $getObjCClass(): NativeObjCClass {
+ *     getClass("ClassName")
+ * }
+ * ```
+ */
+class InsertGetObjCClass : public Handler<InsertGetObjCClass, InteropContext> {
+public:
+    void HandleImpl(InteropContext& ctx);
+};
+
+/**
  * Creates and inserts constructors skeletons for each @ObjCMirror class:
  *
  * `public init($obj: NativeObjCId)`

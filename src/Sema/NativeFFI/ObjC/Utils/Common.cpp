@@ -35,17 +35,6 @@ Ptr<ClassDecl> GetMirrorSuperClass(const ClassLikeDecl& target)
     return nullptr;
 }
 
-Ptr<Decl> FindMirrorMember(const std::string_view& mirrorMemberIdent, const InheritableDecl& target)
-{
-    for (auto memberDecl : target.GetMemberDeclPtrs()) {
-        if (memberDecl->identifier == mirrorMemberIdent) {
-            return memberDecl;
-        }
-    }
-
-    return Ptr<Decl>(nullptr);
-}
-
 /**
  * @brief Generates a synthetic function stub based on an existing function declaration.
  *
@@ -89,6 +78,18 @@ void GenerateSyntheticClassPropStub([[maybe_unused]] ClassDecl& synthetic, [[may
 }
 
 } // namespace
+
+
+Ptr<Decl> FindMirrorMember(const std::string_view& mirrorMemberIdent, const InheritableDecl& target)
+{
+    for (auto memberDecl : target.GetMemberDeclPtrs()) {
+        if (memberDecl->identifier == mirrorMemberIdent) {
+            return memberDecl;
+        }
+    }
+
+    return Ptr<Decl>(nullptr);
+}
 
 bool HasMirrorSuperClass(const ClassLikeDecl& target)
 {

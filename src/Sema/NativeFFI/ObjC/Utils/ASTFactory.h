@@ -79,6 +79,8 @@ public:
     OwnedPtr<AST::Expr> CreateNativeHandleExpr(AST::ClassLikeTy& ty, Ptr<AST::File> curFile);
 
     OwnedPtr<AST::VarDecl> CreateNativeHandleField(AST::ClassDecl& target);
+    OwnedPtr<AST::FuncDecl> CreateGetObjCClassDecl(AST::ClassLikeDecl& target);
+    OwnedPtr<AST::FuncDecl> CreateGetObjCClass(AST::ClassLikeDecl& target);
     OwnedPtr<AST::FuncDecl> CreateInitCjObjectReturningObjCSelf(const AST::Decl& target, AST::FuncDecl& ctor);
     OwnedPtr<AST::FuncDecl> CreateInitCjObject(
         AST::Decl& target, AST::FuncDecl& ctor, bool generateForOneWayMapping = false,
@@ -104,11 +106,13 @@ public:
     OwnedPtr<AST::FuncDecl> CreateSetterWrapper(AST::VarDecl& field);
     OwnedPtr<AST::ThrowExpr> CreateThrowUnreachableCodeExpr(AST::File& file);
     OwnedPtr<AST::ThrowExpr> CreateThrowOptionalMethodUnimplemented(AST::File& file);
+    OwnedPtr<AST::ThrowExpr> CreateThrowStaticMethodCallOnInterfaceExpr(AST::File& file);
     std::set<Ptr<AST::FuncDecl>> GetAllParentCtors(AST::ClassDecl& target) const;
     OwnedPtr<AST::FuncDecl> CreateImplCtor(AST::FuncDecl& from);
     OwnedPtr<AST::FuncDecl> CreateBaseCtorDecl(AST::ClassDecl& target);
     bool IsGeneratedMember(const AST::Decl& decl) const;
     bool IsGeneratedNativeHandleField(const AST::Decl& decl) const;
+    bool IsGeneratedGetObjCClassFunction(const AST::Decl& decl) const;
     bool IsGeneratedHasInitedField(const AST::Decl& decl) const;
     bool IsGeneratedCtor(const AST::Decl& decl) const;
     bool IsGeneratedBaseCtor(const AST::Decl& decl) const;
@@ -124,7 +128,8 @@ public:
         const AST::PropDecl& field, OwnedPtr<AST::Expr> nativeHandle, OwnedPtr<AST::Expr> value);
     OwnedPtr<AST::CallExpr> CreateRegisterNameCall(OwnedPtr<AST::Expr> selectorExpr);
     OwnedPtr<AST::CallExpr> CreateRegisterNameCall(const std::string& selector, Ptr<AST::File> curFile);
-    OwnedPtr<AST::Expr> CreateGetClassCall(AST::ClassTy& ty, Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> CreateGetClassCall(const AST::ClassLikeDecl& ty, Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> CreateGetClassCall(AST::ClassLikeTy& ty, Ptr<AST::File> curFile);
     OwnedPtr<AST::Expr> CreateObjCRespondsToSelectorCall(OwnedPtr<AST::Expr> id, OwnedPtr<AST::Expr> sel, Ptr<AST::File> file);
     OwnedPtr<AST::Expr> CreateGetSuperClassExpr(OwnedPtr<AST::Expr> objCSuper, Ptr<AST::File> file);
 
