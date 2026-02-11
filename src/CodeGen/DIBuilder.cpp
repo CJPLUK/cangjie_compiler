@@ -272,7 +272,8 @@ void DIBuilder::SetSubprogram(const CHIR::Func* func, llvm::Function* function)
     llvm::DINode::DIFlags flags = llvm::DINode::FlagPrototyped;
     flags |= isGV ? llvm::DINode::FlagArtificial : llvm::DINode::FlagZero;
     llvm::DISubprogram::DISPFlags spFlags = llvm::DISubprogram::SPFlagDefinition;
-    if (func->GetSrcCodeIdentifier() == INST_VIRTUAL_FUNC || func->GetSrcCodeIdentifier() == GENERIC_VIRTUAL_FUNC) {
+    if ((func->GetSrcCodeIdentifier() == INST_VIRTUAL_FUNC || func->GetSrcCodeIdentifier() == GENERIC_VIRTUAL_FUNC)
+        && scopeLine == 0) {
         // To properly step in to the closure function body, need to set a valid value for scopeLine.
         scopeLine = 1;
     }

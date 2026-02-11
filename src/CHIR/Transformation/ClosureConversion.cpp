@@ -23,6 +23,36 @@ using namespace Cangjie::CHIR;
 namespace {
 const std::string GENERIC_THIS_SRC_NAME = "This";
 
+// Check if the srcFunc is a lambda with signature (JSContext, JSCallInfo) -> JSValue
+// Only such lambdas need debug location info for cross-lang debugging
+bool IsArkInteropLambdaSignature(const FuncBase& srcFunc)
+{
+    auto* originalType = srcFunc.GetOriginalLambdaType();
+    if (originalType == nullptr) {
+        return false;
+    }
+    auto paramTypes = originalType->GetParamTypes();
+    if (paramTypes.size() != 2) {  // 2 params: JSContext, JSCallInfo
+        return false;
+    }
+    auto* retType = originalType->GetReturnType();
+    auto getTypeName = [](Type* ty) -> std::string {
+        if (ty == nullptr) {
+            return "";
+        }
+        if (auto* refTy = DynamicCast<RefType*>(ty)) {
+            ty = refTy->GetRootBaseType();
+        }
+        if (auto* customTy = DynamicCast<CustomType*>(ty)) {
+            return customTy->GetCustomTypeDef()->GetSrcCodeIdentifier();
+        }
+        return "";
+    };
+    return getTypeName(paramTypes[0]) == "JSContext" &&
+           getTypeName(paramTypes[1]) == "JSCallInfo" &&
+           getTypeName(retType) == "JSValue";
+}
+
 bool IsCalleeOfApply(const Expression& user, const Value& op)
 {
     if (auto apply = DynamicCast<const Apply*>(&user)) {
@@ -1422,8 +1452,9 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
 
     // create override func
     auto mangledName = CHIRMangling::ClosureConversion::GenerateGenericOverrideFuncMangleName(srcFunc);
+    auto debugLoc = IsArkInteropLambdaSignature(srcFunc) ? srcFunc.GetDebugLocation() : INVALID_LOCATION;
     auto newFunc = builder.CreateFunc(
-        INVALID_LOCATION, newFuncTy, mangledName, GENERIC_VIRTUAL_FUNC, "", package.GetName());
+        debugLoc, newFuncTy, mangledName, GENERIC_VIRTUAL_FUNC, "", package.GetName());
     autoEnvImplDef.AddMethod(newFunc);
 
     // set attribute
@@ -1544,7 +1575,9 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
         .args = applyArgs,
         .instTypeArgs = instTyArgs,
         .thisType = thisTy}, entry);
-
+    if (IsArkInteropLambdaSignature(srcFunc)) {
+        callSrcFunc->SetDebugLocation(srcFunc.GetDebugLocation());
+    }
     auto applyRes = TypeCastOrBoxIfNeeded(
         *callSrcFunc->GetResult(), *newFuncRetType, builder, *entry, INVALID_LOCATION);
 
@@ -1571,8 +1604,9 @@ void ClosureConversion::CreateInstOverrideMethodInAutoEnvImplDef(ClassDef& autoE
 
     // create override func
     auto mangledName = CHIRMangling::ClosureConversion::GenerateInstOverrideFuncMangleName(srcFunc);
+    auto debugLoc = IsArkInteropLambdaSignature(srcFunc) ? srcFunc.GetDebugLocation() : INVALID_LOCATION;
     auto newFunc = builder.CreateFunc(
-        INVALID_LOCATION, newFuncTy, mangledName, INST_VIRTUAL_FUNC, "", package.GetName());
+        debugLoc, newFuncTy, mangledName, INST_VIRTUAL_FUNC, "", package.GetName());
     autoEnvImplDef.AddMethod(newFunc);
 
     // set attribute
@@ -1610,7 +1644,9 @@ void ClosureConversion::CreateInstOverrideMethodInAutoEnvImplDef(ClassDef& autoE
         .args = applyArgs,
         .instTypeArgs = instTyArgs,
         .thisType = thisTy}, entry);
-
+    if (IsArkInteropLambdaSignature(srcFunc)) {
+        callSrcFunc->SetDebugLocation(srcFunc.GetDebugLocation());
+    }
     // store return value and exit
     CreateAndAppendExpression<Store>(
         builder, builder.GetType<UnitType>(), callSrcFunc->GetResult(), retVal->GetResult(), entry);
