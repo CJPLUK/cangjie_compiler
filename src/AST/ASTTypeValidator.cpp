@@ -48,12 +48,6 @@ public:
             (void)checkStatus.erase(&node);
             return VisitAction::WALK_CHILDREN;
         }
-        if (node.TestAttr(Attribute::FROM_COMMON_PART)) {
-            return VisitAction::SKIP_CHILDREN;
-        }
-        if (node.TestAttr(Attribute::COMMON) && node.TestAttr(Attribute::IMPORTED)) {
-            return VisitAction::SKIP_CHILDREN;
-        }
         // Target can be ignored that:
         // 1. the target is type node's target.
         // 2. the target has ignored astKinds.
@@ -104,10 +98,15 @@ private:
         // 1. the node is added as initial arg.
         // 2. the node is generic.
         // 3. the node is marked as 'INCRE_COMPILE' which type is loaded from cache.
-        // 4. the node's kind is existed in ignore map.
+        // 4. the node is marked as 'FROM_COMMON_PART' and already passed validation when precompiled
+        // 5. the node is marked as 'COMMON' and 'IMPORTED'
+        // 6. the node's kind exists in ignore map.
         if (node.TestAttr(Attribute::GENERIC) || Utils::In(node.astKind, ignoreKinds) ||
             (node.astKind != ASTKind::PACKAGE && node.TestAttr(Attribute::INCRE_COMPILE)) ||
-            (node.astKind == ASTKind::FUNC_ARG && node.TestAttr(Attribute::HAS_INITIAL))) {
+            node.TestAttr(Attribute::FROM_COMMON_PART) ||
+            (node.TestAttr(Attribute::COMMON) && node.TestAttr(Attribute::IMPORTED)) ||
+            (node.astKind == ASTKind::FUNC_ARG && node.TestAttr(Attribute::HAS_INITIAL))
+        ) {
             action = VisitAction::SKIP_CHILDREN;
         } else if (Utils::In(node.astKind, noneTyKinds)) {
             // Do not check nodes that should not have sema ty.
