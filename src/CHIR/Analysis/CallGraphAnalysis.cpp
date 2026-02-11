@@ -141,13 +141,11 @@ void CallGraph::PopulateCallGraphNode(Node& node, BlockGroup& funcBlockGroup)
             AddVirtualEdgeToNode(node, expr);
         } else if (expr.GetExprKind() == ExprKind::APPLY || expr.GetExprKind() == ExprKind::APPLY_WITH_EXCEPTION) {
             AddDirectEdgeToNode(node, expr);
-        } else if (expr.GetExprKind() == ExprKind::LAMBDA) {
-            PopulateCallGraphNode(node, *(StaticCast<const Lambda*>(&expr)->GetBody()));
         }
         return VisitResult::CONTINUE;
     };
 
-    Visitor::Visit(funcBlockGroup, preVisit, []([[maybe_unused]] Expression& e) { return VisitResult::CONTINUE; });
+    Visitor::Visit(funcBlockGroup, preVisit);
 }
 
 void CallGraph::AddVirtualEdgeToNode(Node& node, const Expression& expression)

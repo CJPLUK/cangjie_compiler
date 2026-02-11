@@ -1625,9 +1625,12 @@ std::vector<Value*> Lambda::GetCapturedVariables() const
                 envs.emplace_back(op);
             }
         }
+        if (e.IsLambda()) {
+            return VisitResult::SKIP;
+        }
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(*GetBody(), preVisit, [](Expression&) { return VisitResult::CONTINUE; });
+    Visitor::Visit(*GetBody(), preVisit);
     return envs;
 }
 

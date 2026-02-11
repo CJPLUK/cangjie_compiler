@@ -1387,33 +1387,18 @@ void UpdateToField(FieldByName& rawExpr, CHIRBuilder& builder)
 
 void ToCHIR::UpdateMemberVarPath()
 {
-    std::vector<GetElementByName*> getByName;
-    std::vector<StoreElementByName*> storeByName;
-    std::vector<FieldByName*> fieldByName;
-    std::function<VisitResult(Expression&)> preVisit =
-        [&preVisit, &getByName, &storeByName, &fieldByName](Expression& e) {
-        if (auto lambda = DynamicCast<Lambda*>(&e)) {
-            Visitor::Visit(*lambda->GetBody(), preVisit);
-        } else if (auto get = DynamicCast<GetElementByName*>(&e)) {
-            getByName.emplace_back(get);
+    auto preVisit = [this](Expression& e) {
+        if (auto get = DynamicCast<GetElementByName*>(&e)) {
+            UpdateToGetElementRef(*get, builder);
         } else if (auto store = DynamicCast<StoreElementByName*>(&e)) {
-            storeByName.emplace_back(store);
+            UpdateToStoreElementRef(*store, builder);
         } else if (auto field = DynamicCast<FieldByName*>(&e)) {
-            fieldByName.emplace_back(field);
+            UpdateToField(*field, builder);
         }
         return VisitResult::CONTINUE;
     };
     for (auto func : chirPkg->GetGlobalFuncs()) {
         Visitor::Visit(*func, preVisit);
-    }
-    for (auto e : getByName) {
-        UpdateToGetElementRef(*e, builder);
-    }
-    for (auto e : storeByName) {
-        UpdateToStoreElementRef(*e, builder);
-    }
-    for (auto e : fieldByName) {
-        UpdateToField(*e, builder);
     }
 }
 

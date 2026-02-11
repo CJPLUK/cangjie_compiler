@@ -159,15 +159,9 @@ void ExprTypeConverter::VisitSubExpression(Lambda& o)
 {
     VisitExprDefaultImpl(o);
     o.funcTy = ConvertFuncParamsAndRetType(*o.funcTy);
-    auto postVisit = [this](Expression& o) {
-        VisitExpr(o);
-        return VisitResult::CONTINUE;
-    };
     for (auto& param : o.GetParams()) {
         VisitValue(*param);
     }
-    // no need to transfer retValue, because ret Value has been contained in body
-    Visitor::Visit(*o.GetBody(), [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
 }
 
 void ExprTypeConverter::VisitSubExpression(GetRTTIStatic& o)

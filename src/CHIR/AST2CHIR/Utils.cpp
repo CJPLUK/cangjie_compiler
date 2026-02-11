@@ -282,18 +282,14 @@ std::string OverflowStrategyPrefix(OverflowStrategy ovf)
 
 void SetCompileTimeValueFlagRecursivly(Func& initFunc)
 {
-    auto setConstFlagForLambda = [](BlockGroup& body) {
-        std::function<VisitResult(Expression&)> preVisit = [&preVisit](Expression& expr) {
-            if (expr.GetExprKind() == CHIR::ExprKind::LAMBDA) {
-                auto& lambda = StaticCast<Lambda&>(expr);
-                lambda.SetCompileTimeValue();
-                Visitor::Visit(*lambda.GetBody(), preVisit);
-            }
-            return VisitResult::CONTINUE;
-        };
-        Visitor::Visit(body, preVisit);
+    auto preVisit = [](Expression& expr) {
+        if (expr.GetExprKind() == CHIR::ExprKind::LAMBDA) {
+            auto& lambda = StaticCast<Lambda&>(expr);
+            lambda.SetCompileTimeValue();
+        }
+        return VisitResult::CONTINUE;
     };
-    setConstFlagForLambda(*initFunc.GetBody());
+    Visitor::Visit(initFunc, preVisit);
 }
 
 MemberVarInfo GetMemberVarByName(const CustomTypeDef& def, const std::string& varName)

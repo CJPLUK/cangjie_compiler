@@ -73,11 +73,7 @@ static const std::vector<FuncInfo> functionInlineBlackList = {
 
 void FunctionInline::InlineImpl(BlockGroup& bg)
 {
-    auto postVisit = [this](Expression& e) {
-        if (e.GetExprKind() == ExprKind::LAMBDA) {
-            auto lambda = StaticCast<Lambda*>(&e);
-            InlineImpl(*lambda->GetBody());
-        }
+    auto preVisit = [this](Expression& e) {
         if (e.GetExprKind() != ExprKind::APPLY) {
             return VisitResult::CONTINUE;
         }
@@ -89,7 +85,7 @@ void FunctionInline::InlineImpl(BlockGroup& bg)
 
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(bg, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+    Visitor::Visit(bg, preVisit);
 }
 
 void FunctionInline::Run(Func& func)
@@ -197,8 +193,8 @@ static size_t GetExprSize(const Expression& expr)
     if (expr.GetExprKind() != ExprKind::LAMBDA) {
         return ++exprSize;
     }
-    auto postVisit = [&exprSize](Expression& e) {
-        exprSize += GetExprSize(e);
+    auto postVisit = [&exprSize](Expression&) {
+        exprSize++;
         return VisitResult::CONTINUE;
     };
     Visitor::Visit(*Cangjie::StaticCast<const Lambda&>(expr).GetBody(), postVisit);
@@ -332,7 +328,7 @@ void FunctionInline::SetGroupDebugLocation(BlockGroup& group, const DebugLocatio
         expr.SetDebugLocation(loc);
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(group, changeLoc, []([[maybe_unused]] Expression& e) { return VisitResult::CONTINUE; });
+    Visitor::Visit(group, changeLoc);
 }
 
 void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& name)

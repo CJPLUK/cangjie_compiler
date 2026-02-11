@@ -1347,8 +1347,7 @@ void CHIRChecker::CheckLocalId(BlockGroup& blockGroup, const Func& topLevelFunc)
     }
     // 1. local id can't be duplicated in one block group
     // 2. local id can't be empty in one expression
-    std::function<VisitResult(Expression&)> preVisit =
-        [&allIds, &duplicatedLocalIds, &exprResWithoutId, &preVisit](Expression& expr) {
+    auto preVisit = [&allIds, &duplicatedLocalIds, &exprResWithoutId](Expression& expr) {
         auto result = expr.GetResult();
         if (result == nullptr) {
             return VisitResult::CONTINUE;
@@ -1364,7 +1363,6 @@ void CHIRChecker::CheckLocalId(BlockGroup& blockGroup, const Func& topLevelFunc)
                     duplicatedLocalIds.emplace(p->GetIdentifier());
                 }
             }
-            Visitor::Visit(*StaticCast<Lambda&>(expr).GetBody(), preVisit);
         }
         return VisitResult::CONTINUE;
     };

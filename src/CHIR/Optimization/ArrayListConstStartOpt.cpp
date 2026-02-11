@@ -168,7 +168,7 @@ void ArrayListConstStartOpt::RunOnPackage(const Ptr<const Package>& package)
             continue;
         }
 
-        auto postVisit = [this](Expression& e) {
+        auto preVisit = [this](Expression& e) {
             if (e.GetExprKind() != ExprKind::APPLY) {
                 return VisitResult::CONTINUE;
             }
@@ -181,8 +181,7 @@ void ArrayListConstStartOpt::RunOnPackage(const Ptr<const Package>& package)
 
             return VisitResult::CONTINUE;
         };
-        Visitor::Visit(
-            *func, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+        Visitor::Visit(*func, preVisit);
 
         // remove start opt
         auto removeStartVisit = [this, isArrayListIteratorFunc](Expression& e) {
@@ -199,8 +198,7 @@ void ArrayListConstStartOpt::RunOnPackage(const Ptr<const Package>& package)
 
             return VisitResult::CONTINUE;
         };
-        Visitor::Visit(
-            *func, [](Expression&) { return VisitResult::CONTINUE; }, removeStartVisit);
+        Visitor::Visit(*func, removeStartVisit);
     }
 }
 }  // namespace Cangjie::CHIR2

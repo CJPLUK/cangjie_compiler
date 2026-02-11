@@ -47,6 +47,11 @@ void UnitUnify::RunOnFunc(const Ptr<Func>& func, bool isDebug)
 {
     Ptr<Constant> optUnit;
     auto preAcation = [this, isDebug, &optUnit](Expression& expr) {
+        // skip lambda to avoid create many Constant expression to effect function inline
+        // maybe we can discuss later
+        if (Is<Lambda>(expr)) {
+            return VisitResult::SKIP;
+        }
         if (Is<GetRTTI>(expr) || Is<GetRTTIStatic>(expr)) {
             return VisitResult::CONTINUE;
         }

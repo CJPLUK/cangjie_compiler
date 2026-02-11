@@ -51,13 +51,13 @@ bool IsMutableVarType(const Value& value)
 }
 
 void CollectNestedLambdaExpr(
-    const Lambda& root, std::vector<Lambda*>& nestedFuncs, Func* curOutFunc, std::set<std::string>& ccOutFuncs)
+    const Lambda& root, std::vector<Lambda*>& nestedFuncs)
 {
-    CJC_NULLPTR_CHECK(curOutFunc);
-    auto preVisit = [&nestedFuncs, &curOutFunc, &ccOutFuncs](Expression& e) {
+    auto preVisit = [&nestedFuncs](Expression& e) {
         if (auto lambdaExpr = DynamicCast<Lambda*>(&e); lambdaExpr) {
-            CollectNestedLambdaExpr(*lambdaExpr, nestedFuncs, curOutFunc, ccOutFuncs);
+            CollectNestedLambdaExpr(*lambdaExpr, nestedFuncs);
             nestedFuncs.emplace_back(lambdaExpr);
+            return VisitResult::SKIP;
         }
         return VisitResult::CONTINUE;
     };
@@ -297,13 +297,12 @@ ClassType* InstantiateAutoEnvBaseType(ClassDef& autoEnvBaseDef, const FuncType& 
 
 void LiftCustomDefType(CustomTypeDef& def, TypeConverterForCC& converter)
 {
-    auto postVisit = [&converter](Expression& e) {
+    auto preVisit = [&converter](Expression& e) {
         converter.VisitExpr(e);
         return VisitResult::CONTINUE;
     };
     for (auto method : def.GetMethods()) {
-        Visitor::Visit(
-            *StaticCast<Func*>(method), [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+        Visitor::Visit(*StaticCast<Func*>(method), preVisit);
         converter.VisitValue(*method);
     }
     converter.VisitDef(def);
@@ -444,12 +443,11 @@ void ReplaceThisTypeInApplyAndInvoke(
         return ReplaceThisTypeToConcreteType(type, *ThisType, builder);
     };
     PrivateTypeConverter converter(convertFunc, builder);
-    auto postVisit = [&converter](Expression& e) {
+    auto preVisit = [&converter](Expression& e) {
         converter.VisitExpr(e);
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(
-        *nestedFunc.GetBody(), [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+    Visitor::Visit(*nestedFunc.GetBody(), preVisit);
 }
 
 std::vector<GenericType*> CreateGenericTypeParamForAutoEnvImplDef(const Value& srcFunc, CHIRBuilder& builder)
@@ -536,41 +534,6 @@ void PrintImportedFuncInfo(const ImportedFunc& func)
     std::cout << msg << std::endl;
 }
 
-void ConvertTypeCastToBox(const std::vector<TypeCast*>& typecastExprs, CHIRBuilder& builder)
-{
-    for (auto e : typecastExprs) {
-        auto box = builder.CreateExpression<Box>(e->GetResult()->GetType(), e->GetSourceValue(), e->GetParentBlock());
-        e->ReplaceWith(*box);
-    }
-}
-
-void ConvertTypeCastToUnBox(const std::vector<TypeCast*>& typecastExprs, CHIRBuilder& builder)
-{
-    for (auto e : typecastExprs) {
-        auto unbox =
-            builder.CreateExpression<UnBox>(e->GetResult()->GetType(), e->GetSourceValue(), e->GetParentBlock());
-        e->ReplaceWith(*unbox);
-    }
-}
-
-void ConvertBoxToTypeCast(const std::vector<Box*>& boxExprs, CHIRBuilder& builder)
-{
-    for (auto e : boxExprs) {
-        auto typecast =
-            builder.CreateExpression<TypeCast>(e->GetResult()->GetType(), e->GetSourceValue(), e->GetParentBlock());
-        e->ReplaceWith(*typecast);
-    }
-}
-
-void ConvertUnBoxToTypeCast(const std::vector<UnBox*>& unboxExprs, CHIRBuilder& builder)
-{
-    for (auto e : unboxExprs) {
-        auto typecast =
-            builder.CreateExpression<TypeCast>(e->GetResult()->GetType(), e->GetSourceValue(), e->GetParentBlock());
-        e->ReplaceWith(*typecast);
-    }
-}
-
 bool ApplyNeedConvertToInvoke(Expression& e)
 {
     if (e.GetExprKind() != CHIR::ExprKind::APPLY) {
@@ -640,33 +603,6 @@ bool UnBoxNeedConvertToTypeCast(Expression& e)
     return box->GetTargetTy()->IsCJFunc();
 }
 
-bool ApplyRetValNeedWrapper(Expression& e)
-{
-    if (e.GetExprKind() != CHIR::ExprKind::APPLY) {
-        return false;
-    }
-    auto& apply = StaticCast<Apply&>(e);
-    auto calleeType = apply.GetCallee()->GetType();
-    if (!calleeType->IsCJFunc()) {
-        return false;
-    }
-    /** func foo<T>(a: ()->T): ()->T {
-     *      return a
-     *  }
-     *  func goo(): Bool {
-     *      return true
-     *  }
-     *  var x: ()->Bool = foo<Bool>(goo)
-     *  return type of func foo is `()->T`, but x's type is ()->Bool
-     *  closure type of `()->T` is Class-$AutoEnvGenericBase, closure type of `()->Bool` is Class-$AutoEnvInstBase
-     *  Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
-     *  we can't cast type from parent type to sub type, a wrapper class is needed
-     */
-    auto declaredRetType = StaticCast<FuncType*>(calleeType)->GetReturnType()->StripAllRefs();
-    auto applyRetType = apply.GetResult()->GetType()->StripAllRefs();
-    return !declaredRetType->IsAutoEnvInstBase() && applyRetType->IsAutoEnvInstBase();
-}
-
 std::vector<size_t> OperandNeedTypeCast(
     const std::vector<Value*>& args, const std::vector<Type*>& paramTypes, size_t offset)
 {
@@ -687,104 +623,6 @@ std::vector<size_t> OperandNeedTypeCast(
     }
 
     return index;
-}
-
-std::pair<bool, std::vector<size_t>> ApplyArgNeedTypeCast(const Apply& e)
-{
-    std::vector<size_t> index;
-    auto calleeType = e.GetCallee()->GetType();
-    if (!calleeType->IsCJFunc()) {
-        return {false, index};
-    }
-    /** func foo<T>(a: ()->T): Int32 {
-     *      return true
-     *  }
-     *  func goo(): Bool {
-     *      return true
-     *  }
-     *  var x: Int32 = foo<Bool>(goo)
-     *  closure type of `()->T` is Class-$AutoEnvGenericBase, closure type of `()->Bool` is Class-$AutoEnvInstBase
-     *  Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
-     *  we can cast type from sub type to parent type
-     */
-    auto args = e.GetArgs();
-    auto paramTypes = StaticCast<FuncType*>(calleeType)->GetParamTypes();
-    index = OperandNeedTypeCast(args, paramTypes, 1);
-    return {!index.empty(), index};
-}
-
-bool ApplyWithExceptionRetValNeedWrapper(const ApplyWithException& e)
-{
-    auto calleeType = e.GetCallee()->GetType();
-    if (!calleeType->IsCJFunc()) {
-        return false;
-    }
-    auto declaredRetType = StaticCast<FuncType*>(calleeType)->GetReturnType()->StripAllRefs();
-    auto applyRetType = e.GetResult()->GetType()->StripAllRefs();
-    return !declaredRetType->IsAutoEnvInstBase() && applyRetType->IsAutoEnvInstBase();
-}
-
-bool InvokeRetValNeedWrapper(const Expression& e)
-{
-    if (e.GetExprKind() != CHIR::ExprKind::INVOKE && e.GetExprKind() != CHIR::ExprKind::INVOKESTATIC) {
-        return false;
-    }
-    // same reason with Apply
-    Type* declaredRetType = nullptr;
-    if (auto invoke = DynamicCast<const Invoke*>(&e)) {
-        declaredRetType = invoke->GetMethodType()->GetReturnType()->StripAllRefs();
-    } else {
-        declaredRetType = StaticCast<const InvokeStatic&>(e).GetMethodType()->GetReturnType()->StripAllRefs();
-    }
-    auto invokeRetType = e.GetResult()->GetType()->StripAllRefs();
-    return !declaredRetType->IsAutoEnvInstBase() && invokeRetType->IsAutoEnvInstBase();
-}
-
-bool InvokeWithExceptionRetValNeedWrapper(const Expression& e)
-{
-    if (e.GetExprKind() != CHIR::ExprKind::INVOKE_WITH_EXCEPTION &&
-        e.GetExprKind() != CHIR::ExprKind::INVOKESTATIC_WITH_EXCEPTION) {
-        return false;
-    }
-    // same reason with Apply
-    Type* declaredRetType = nullptr;
-    if (auto invoke = DynamicCast<const InvokeWithException*>(&e)) {
-        declaredRetType = invoke->GetMethodType()->GetReturnType()->StripAllRefs();
-    } else {
-        declaredRetType =
-            StaticCast<const InvokeStaticWithException>(e).GetMethodType()->GetReturnType()->StripAllRefs();
-    }
-    auto invokeRetType = e.GetResult()->GetType()->StripAllRefs();
-    return !declaredRetType->IsAutoEnvInstBase() && invokeRetType->IsAutoEnvInstBase();
-}
-
-bool GetElementRefRetValNeedWrapper(const Expression& e, CHIRBuilder& builder)
-{
-    if (e.GetExprKind() != CHIR::ExprKind::GET_ELEMENT_REF) {
-        return false;
-    }
-    const auto& getEleRef = StaticCast<const GetElementRef&>(e);
-    auto getEleRefRetType = getEleRef.GetResult()->GetType()->StripAllRefs();
-    // only Auto_Env_InstBase need wrapper
-    if (!getEleRefRetType->IsAutoEnvInstBase()) {
-        return false;
-    }
-    /** class A<T> {
-     *      var a: ()->T
-     *  }
-     *  var b: ()->Bool = A<Bool>().a
-     *
-     *  a's type is `()->T`, but b's type is ()->Bool
-     *  closure type of `()->T` is Class-$AutoEnvGenericBase, closure type of `()->Bool` is Class-$AutoEnvInstBase
-     *  Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
-     *  we can't cast type from parent type to sub type, a wrapper class is needed
-     */
-    auto locationType = getEleRef.GetLocation()->GetType();
-    for (auto& idx : getEleRef.GetPath()) {
-        locationType = GetFieldOfType(*locationType, idx, builder);
-        CJC_NULLPTR_CHECK(locationType);
-    }
-    return !locationType->StripAllRefs()->IsAutoEnvInstBase();
 }
 
 Type* GetFieldBaseType(const Value& base)
@@ -808,24 +646,20 @@ Type* GetFieldBaseType(const Value& base)
     }
 }
 
-bool FieldRetValNeedWrapper(const Expression& e, CHIRBuilder& builder)
+bool FieldRetValNeedWrapper(const Field& e, CHIRBuilder& builder)
 {
-    if (e.GetExprKind() != CHIR::ExprKind::FIELD) {
-        return false;
-    }
-    const auto& field = StaticCast<const Field&>(e);
-    auto fieldRetType = field.GetResult()->GetType()->StripAllRefs();
+    auto fieldRetType = e.GetResult()->GetType()->StripAllRefs();
     // only Auto_Env_InstBase need wrapper
     if (!fieldRetType->IsAutoEnvInstBase()) {
         return false;
     }
 
-    Type* declaredType = GetFieldBaseType(*field.GetBase());
+    Type* declaredType = GetFieldBaseType(*e.GetBase());
     if (declaredType == nullptr) {
         return true;
     }
     // same reason with `GetElementRef`
-    for (auto& idx : field.GetPath()) {
+    for (auto& idx : e.GetPath()) {
         declaredType = GetFieldOfType(*declaredType, idx, builder);
         CJC_NULLPTR_CHECK(declaredType);
     }
@@ -842,34 +676,6 @@ bool IsAutoEnvGenericType(const Type& type)
         return true;
     }
     return StaticCast<const ClassType&>(type).GetClassDef()->GetMethods().size() == 1;
-}
-
-bool TypeCastSrcValNeedWrapper(const Expression& e)
-{
-    if (e.GetExprKind() != CHIR::ExprKind::TYPECAST) {
-        return false;
-    }
-    /** Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
-     *  we can't cast type from parent type to sub type, a wrapper class is needed
-     */
-    const auto& typecast = StaticCast<const TypeCast&>(e);
-    auto srcType = typecast.GetSourceTy()->StripAllRefs();
-    auto targetType = typecast.GetTargetTy()->StripAllRefs();
-    return IsAutoEnvGenericType(*srcType) && targetType->IsAutoEnvInstBase();
-}
-
-std::pair<bool, std::vector<size_t>> ApplyWithExceptionArgNeedTypeCast(const ApplyWithException& e)
-{
-    std::vector<size_t> index;
-    const auto& apply = StaticCast<const ApplyWithException&>(e);
-    auto calleeType = apply.GetCallee()->GetType();
-    if (!calleeType->IsCJFunc()) {
-        return {false, index};
-    }
-    auto args = apply.GetArgs();
-    auto paramTypes = StaticCast<FuncType*>(calleeType)->GetParamTypes();
-    index = OperandNeedTypeCast(args, paramTypes, 1);
-    return {!index.empty(), index};
 }
 
 std::pair<bool, std::vector<size_t>> EnumConstructorNeedTypeCast(const Expression& e)
@@ -935,29 +741,6 @@ std::pair<bool, std::vector<size_t>> TupleNeedTypeCast(const Expression& e)
     return {!index.empty(), index};
 }
 
-std::pair<bool, std::vector<size_t>> RawArrayInitByValueNeedTypeCast(const Expression& e)
-{
-    std::vector<size_t> index;
-    if (e.GetExprKind() != CHIR::ExprKind::RAW_ARRAY_INIT_BY_VALUE) {
-        return {false, index};
-    }
-    /** %0: Int64 = Constant(1)
-     *  %1: RawArray<$AutoEnvGenericBase<Bool>>& = RawArrayAllocate(RawArray<$AutoEnvGenericBase<Unit>>, %0)
-     *  %2: $AutoEnvInstBase_Bool = xxx
-     *  %3: Unit = RawArrayInitByValue(%1, %0, %2)
-     *
-     *  in `RawArrayInitByValue`, type between %1 and %2 is mismatched,
-     *  $AutoEnvInstBase_Bool is sub type of $AutoEnvGenericBase<Bool>, we can cast type from sub type to parent type
-     */
-    const auto& init = StaticCast<const RawArrayInitByValue&>(e);
-    auto rawArrayType = StaticCast<RawArrayType*>(init.GetRawArray()->GetType()->StripAllRefs());
-    auto expectedType = std::vector<Type*>{rawArrayType->GetElementType()};
-    auto initValue = std::vector<Value*>{init.GetInitValue()};
-    const size_t opOffset = 2;
-    index = OperandNeedTypeCast(initValue, expectedType, opOffset);
-    return {!index.empty(), index};
-}
-
 void AddTypeCastForOperand(const std::pair<Expression*, std::vector<size_t>>& e, CHIRBuilder& builder)
 {
     auto expr = e.first;
@@ -970,32 +753,6 @@ void AddTypeCastForOperand(const std::pair<Expression*, std::vector<size_t>>& e,
         typecast->MoveBefore(expr);
         expr->ReplaceOperand(idx, typecast->GetResult());
     }
-}
-
-std::pair<bool, std::vector<size_t>> SpawnNeedTypeCast(const Expression& e)
-{
-    std::vector<size_t> index;
-    if (e.GetExprKind() != CHIR::ExprKind::SPAWN) {
-        return {false, index};
-    }
-    const auto& spawn = StaticCast<const Spawn&>(e);
-    if (!spawn.IsExecuteClosure()) {
-        // only check executeClosure, skip future Execute
-        return {false, index};
-    }
-    /** cj code `spawn { 0 }` is translated to
-     *  %0: ()->Int64 = lambda { reteurn 0 }
-     *  %1: Future<Int64> = Spawn(%0)
-     *
-     *  after redundant future removing, codegen is expected to use Future.executeClosure which declared in std.core
-     *  however, param type of `executeClosure` is `()->T`, it has gap to %0 which type is `()->Int64`
-     *  closure type of `()->T` is Class-$AutoEnvGenericBase, closure type of `()->Int64` is Class-$AutoEnvInstBase
-     *  Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
-     *  we can cast type from sub type to parent type
-     */
-    auto funcType = spawn.GetExecuteClosure()->GetFuncType();
-    index = OperandNeedTypeCast(spawn.GetOperands(), funcType->GetParamTypes(), 0);
-    return {!index.empty(), index};
 }
 
 void ReplaceOperandWithAutoEnvWrapperClass(
@@ -1041,17 +798,16 @@ std::vector<Lambda*> ClosureConversion::CollectNestedFunctions()
     Func* curOutFunc = nullptr;
     auto preVisit = [&nestedFuncs, &curOutFunc, this](Expression& e) {
         if (auto lambdaExpr = DynamicCast<Lambda*>(&e); lambdaExpr) {
-            // maybe there is another lambda in current lambda's body, but we can't visit another lambda
-            // by walking Func node, so we need to walk current lambda body manually
-            CollectNestedLambdaExpr(*lambdaExpr, nestedFuncs, curOutFunc, ccOutFuncsRawMangle);
             // we must collect inner lambda first, and then outer lambda,
             // because we need to lift lambda from inner to outer
+            CollectNestedLambdaExpr(*lambdaExpr, nestedFuncs);
             nestedFuncs.emplace_back(lambdaExpr);
             if (opts.enIncrementalCompilation) {
                 if (!curOutFunc->GetRawMangledName().empty()) {
                     ccOutFuncsRawMangle.emplace(curOutFunc->GetRawMangledName());
                 }
             }
+            return VisitResult::SKIP;
         }
         return VisitResult::CONTINUE;
     };
@@ -1575,7 +1331,7 @@ void ClosureConversion::LiftType()
         return builder.GetType<RefType>(InstantiateAutoEnvBaseType(*autoEnvBaseDef, *convertedFuncType, builder));
     };
     TypeConverterForCC converter(convertTypeToClosure, convertTypeToInstBase, builder);
-    auto postVisit = [&converter](Expression& e) {
+    auto preVisit = [&converter](Expression& e) {
         converter.VisitExpr(e);
         return VisitResult::CONTINUE;
     };
@@ -1583,8 +1339,7 @@ void ClosureConversion::LiftType()
         if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }
-        Visitor::Visit(
-            *func, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+        Visitor::Visit(*func, preVisit);
         converter.VisitValue(*func);
     }
 
@@ -2103,12 +1858,11 @@ Func* ClosureConversion::LiftLambdaToGlobalFunc(
         return gConvertor.ConvertToInstantiatedType(type);
     };
     PrivateTypeConverterNoInvokeOriginal converter(convertFunc, builder);
-    auto postVisit = [&converter](Expression& e) {
+    auto preVisit = [&converter](Expression& e) {
         converter.VisitExpr(e);
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(
-        *globalFunc, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+    Visitor::Visit(*globalFunc, preVisit);
     for (auto& param : globalFunc->GetParams()) {
         converter.VisitValue(*param);
     }
@@ -2329,99 +2083,100 @@ void ClosureConversion::ConvertImportedFunctions()
     }
 }
 
-void ClosureConversion::ConvertApplyToInvoke(const std::vector<Apply*>& applyExprs)
+void ClosureConversion::ConvertApplyToInvoke(Apply& apply)
 {
-    for (auto e : applyExprs) {
-        auto callee = e->GetCallee();
-        ClassDef* autoEnvBaseDef = nullptr;
-        ClassType* instParentType = nullptr;
-        if (auto funcType = DynamicCast<FuncType*>(callee->GetType())) {
-            // callee is still func type
-            autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(*funcType);
-            instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, *funcType, builder);
-        } else {
-            // callee has been replaced in closure conversion, then apply must be converted to invoke
-            instParentType = StaticCast<ClassType*>(StaticCast<RefType*>(callee->GetType())->GetBaseType());
-            autoEnvBaseDef = instParentType->GetClassDef();
-        }
-        auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
-
-        auto invokeInfo = InvokeCallContext {
-            .caller = callee,
-            .funcCallCtx = FuncCallContext {
-                .args = e->GetArgs(),
-                .thisType = instParentType
-            },
-            .virMethodCtx = VirMethodContext {
-                .srcCodeIdentifier = methodName,
-                .originalFuncType = originalFuncType
-            }
-        };
-        auto invoke = builder.CreateExpression<Invoke>(
-            e->GetDebugLocation(), e->GetResult()->GetType(), invokeInfo, e->GetParentBlock());
-        invoke->Set<VirMethodOffset>(0);
-        e->ReplaceWith(*invoke);
+    auto callee = apply.GetCallee();
+    ClassDef* autoEnvBaseDef = nullptr;
+    ClassType* instParentType = nullptr;
+    if (auto funcType = DynamicCast<FuncType*>(callee->GetType())) {
+        // callee is still func type
+        autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(*funcType);
+        instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, *funcType, builder);
+    } else {
+        // callee has been replaced in closure conversion, then apply must be converted to invoke
+        instParentType = StaticCast<ClassType*>(StaticCast<RefType*>(callee->GetType())->GetBaseType());
+        autoEnvBaseDef = instParentType->GetClassDef();
     }
+    auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
+
+    auto invokeInfo = InvokeCallContext {
+        .caller = callee,
+        .funcCallCtx = FuncCallContext {
+            .args = apply.GetArgs(),
+            .thisType = instParentType
+        },
+        .virMethodCtx = VirMethodContext {
+            .srcCodeIdentifier = methodName,
+            .originalFuncType = originalFuncType
+        }
+    };
+    auto invoke = builder.CreateExpression<Invoke>(
+        apply.GetDebugLocation(), apply.GetResult()->GetType(), invokeInfo, apply.GetParentBlock());
+    invoke->Set<VirMethodOffset>(0);
+    apply.ReplaceWith(*invoke);
 }
 
-void ClosureConversion::ConvertApplyWithExceptionToInvokeWithException(
-    const std::vector<ApplyWithException*>& applyExprs)
+void ClosureConversion::ConvertApplyWithExceptionToInvokeWithException(ApplyWithException& apply)
 {
-    for (auto e : applyExprs) {
-        auto callee = e->GetCallee();
-        ClassDef* autoEnvBaseDef = nullptr;
-        ClassType* instParentType = nullptr;
-        if (auto funcType = DynamicCast<FuncType*>(callee->GetType())) {
-            // callee is still func type
-            autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(*funcType);
-            instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, *funcType, builder);
-        } else {
-            // callee has been replaced in closure conversion, then apply must be converted to invoke
-            instParentType = StaticCast<ClassType*>(StaticCast<RefType*>(callee->GetType())->GetBaseType());
-            autoEnvBaseDef = instParentType->GetClassDef();
-        }
-        auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
-
-        auto invokeInfo = InvokeCallContext {
-            .caller = callee,
-            .funcCallCtx = FuncCallContext {
-                .args = e->GetArgs(),
-                .thisType = instParentType
-            },
-            .virMethodCtx = VirMethodContext {
-                .srcCodeIdentifier = methodName,
-                .originalFuncType = originalFuncType
-            }
-        };
-        auto invoke = builder.CreateExpression<InvokeWithException>(e->GetDebugLocation(),
-            e->GetResult()->GetType(), invokeInfo, e->GetSuccessBlock(), e->GetErrorBlock(), e->GetParentBlock());
-        invoke->Set<VirMethodOffset>(0);
-        e->ReplaceWith(*invoke);
+    auto callee = apply.GetCallee();
+    ClassDef* autoEnvBaseDef = nullptr;
+    ClassType* instParentType = nullptr;
+    if (auto funcType = DynamicCast<FuncType*>(callee->GetType())) {
+        // callee is still func type
+        autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(*funcType);
+        instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, *funcType, builder);
+    } else {
+        // callee has been replaced in closure conversion, then apply must be converted to invoke
+        instParentType = StaticCast<ClassType*>(StaticCast<RefType*>(callee->GetType())->GetBaseType());
+        autoEnvBaseDef = instParentType->GetClassDef();
     }
+    auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
+
+    auto invokeInfo = InvokeCallContext {
+        .caller = callee,
+        .funcCallCtx = FuncCallContext {
+            .args = apply.GetArgs(),
+            .thisType = instParentType
+        },
+        .virMethodCtx = VirMethodContext {
+            .srcCodeIdentifier = methodName,
+            .originalFuncType = originalFuncType
+        }
+    };
+    auto invoke = builder.CreateExpression<InvokeWithException>(
+        apply.GetDebugLocation(), apply.GetResult()->GetType(), invokeInfo,
+        apply.GetSuccessBlock(), apply.GetErrorBlock(), apply.GetParentBlock());
+    invoke->Set<VirMethodOffset>(0);
+    apply.ReplaceWith(*invoke);
 }
 
 void ClosureConversion::ConvertExpressions()
 {
-    std::vector<Apply*> applyExprs;
-    std::vector<ApplyWithException*> applyWithExceptionExprs;
-    std::vector<TypeCast*> typecastToBoxExprs;
-    std::vector<TypeCast*> typecastToUnBoxExprs;
-    std::vector<Box*> boxToTypecastExprs;
-    std::vector<UnBox*> unboxToTypecastExprs;
-    auto postVisit = [&applyExprs, &applyWithExceptionExprs, &typecastToBoxExprs, &typecastToUnBoxExprs,
-        &boxToTypecastExprs, &unboxToTypecastExprs](Expression& e) {
+    auto preVisit = [this](Expression& e) {
         if (ApplyNeedConvertToInvoke(e)) {
-            applyExprs.emplace_back(StaticCast<Apply*>(&e));
+            ConvertApplyToInvoke(StaticCast<Apply&>(e));
         } else if (ApplyWithExceptionNeedConvertToInvokeWithException(e)) {
-            applyWithExceptionExprs.emplace_back(StaticCast<ApplyWithException*>(&e));
+            ConvertApplyWithExceptionToInvokeWithException(StaticCast<ApplyWithException&>(e));
         } else if (TypeCastNeedConvertToBox(e)) {
-            typecastToBoxExprs.emplace_back(StaticCast<TypeCast*>(&e));
+            auto& cast = StaticCast<TypeCast&>(e);
+            auto box = builder.CreateExpression<Box>(
+                cast.GetResult()->GetType(), cast.GetSourceValue(), cast.GetParentBlock());
+            cast.ReplaceWith(*box);
         } else if (TypeCastNeedConvertToUnBox(e)) {
-            typecastToUnBoxExprs.emplace_back(StaticCast<TypeCast*>(&e));
+            auto& cast = StaticCast<TypeCast&>(e);
+            auto unbox = builder.CreateExpression<UnBox>(
+                cast.GetResult()->GetType(), cast.GetSourceValue(), cast.GetParentBlock());
+            cast.ReplaceWith(*unbox);
         } else if (BoxNeedConvertToTypeCast(e)) {
-            boxToTypecastExprs.emplace_back(StaticCast<Box*>(&e));
+            auto& box = StaticCast<Box&>(e);
+            auto typecast = builder.CreateExpression<TypeCast>(
+                box.GetResult()->GetType(), box.GetSourceValue(), box.GetParentBlock());
+            box.ReplaceWith(*typecast);
         } else if (UnBoxNeedConvertToTypeCast(e)) {
-            unboxToTypecastExprs.emplace_back(StaticCast<UnBox*>(&e));
+            auto& unbox = StaticCast<UnBox&>(e);
+            auto typecast = builder.CreateExpression<TypeCast>(
+                unbox.GetResult()->GetType(), unbox.GetSourceValue(), unbox.GetParentBlock());
+            unbox.ReplaceWith(*typecast);
         }
         return VisitResult::CONTINUE;
     };
@@ -2429,15 +2184,8 @@ void ClosureConversion::ConvertExpressions()
         if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }
-        Visitor::Visit(
-            *func, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+        Visitor::Visit(*func, preVisit);
     }
-    ConvertApplyToInvoke(applyExprs);
-    ConvertApplyWithExceptionToInvokeWithException(applyWithExceptionExprs);
-    ConvertTypeCastToBox(typecastToBoxExprs, builder);
-    ConvertTypeCastToUnBox(typecastToUnBoxExprs, builder);
-    ConvertBoxToTypeCast(boxToTypecastExprs, builder);
-    ConvertUnBoxToTypeCast(unboxToTypecastExprs, builder);
 }
 
 void ClosureConversion::CreateVTableForAutoEnvDef()
@@ -2620,12 +2368,7 @@ void ClosureConversion::CreateInstMethodInAutoEnvWrapper(ClassDef& autoEnvWrappe
     CreateAndAppendTerminator<Exit>(builder, entry);
 
     // 7. create wrapper class if type is mismatched
-    if (auto res = ApplyArgNeedTypeCast(*apply); res.first) {
-        AddTypeCastForOperand({apply, res.second}, builder);
-    }
-    if (ApplyRetValNeedWrapper(*apply)) {
-        WrapApplyRetVal(*apply);
-    }
+    CastApplyArgAndRetIfNeed(*apply);
 }
 
 ClassDef* ClosureConversion::GetOrCreateAutoEnvWrapper(ClassType& instAutoEnvBaseType)
@@ -2644,6 +2387,50 @@ ClassDef* ClosureConversion::GetOrCreateAutoEnvWrapper(ClassType& instAutoEnvBas
 
     instAutoEnvWrapperDefs.emplace(wrapperName, wrapperClassDef);
     return wrapperClassDef;
+}
+
+void ClosureConversion::CastApplyArgAndRetIfNeed(Apply& e)
+{
+    auto calleeType = StaticCast<FuncType*>(e.GetCallee()->GetType());
+    if (!calleeType->IsCJFunc()) {
+        return;
+    }
+    // 1. cast args
+    /** func foo<T>(a: ()->T): Int32 {
+     *      return true
+     *  }
+     *  func goo(): Bool {
+     *      return true
+     *  }
+     *  var x: Int32 = foo<Bool>(goo)
+     *  closure type of `()->T` is Class-$AutoEnvGenericBase, closure type of `()->Bool` is Class-$AutoEnvInstBase
+     *  Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
+     *  we can cast type from sub type to parent type
+     */
+    auto args = e.GetArgs();
+    auto paramTypes = calleeType->GetParamTypes();
+    auto index = OperandNeedTypeCast(args, paramTypes, 1);
+    if (!index.empty()) {
+        AddTypeCastForOperand({&e, index}, builder);
+    }
+     // 2. cast ret
+     /** func foo<T>(a: ()->T): ()->T {
+     *      return a
+     *  }
+     *  func goo(): Bool {
+     *      return true
+     *  }
+     *  var x: ()->Bool = foo<Bool>(goo)
+     *  return type of func foo is `()->T`, but x's type is ()->Bool
+     *  closure type of `()->T` is Class-$AutoEnvGenericBase, closure type of `()->Bool` is Class-$AutoEnvInstBase
+     *  Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
+     *  we can't cast type from parent type to sub type, a wrapper class is needed
+     */
+    auto declaredRetType = calleeType->GetReturnType()->StripAllRefs();
+    auto applyRetType = e.GetResult()->GetType()->StripAllRefs();
+    if (!declaredRetType->IsAutoEnvInstBase() && applyRetType->IsAutoEnvInstBase()) {
+        WrapApplyRetVal(e);
+    }
 }
 
 void ClosureConversion::WrapApplyRetVal(Apply& apply)
@@ -2692,6 +2479,27 @@ void ClosureConversion::WrapApplyRetVal(Apply& apply)
 
     // 4. replace user
     ReplaceOperandWithAutoEnvWrapperClass(*apply.GetResult(), *typecast->GetResult(), {storeMemberVar});
+}
+
+void ClosureConversion::CastApplyWithExceptionArgAndRetIfNeed(ApplyWithException& e)
+{
+    auto calleeType = StaticCast<FuncType*>(e.GetCallee()->GetType());
+    if (!calleeType->IsCJFunc()) {
+        return;
+    }
+    // 1. cast args, the same with Apply
+    auto args = e.GetArgs();
+    auto paramTypes = calleeType->GetParamTypes();
+    auto index = OperandNeedTypeCast(args, paramTypes, 1);
+    if (!index.empty()) {
+        AddTypeCastForOperand({&e, index}, builder);
+    }
+     // 2. cast ret, the same with Apply
+    auto declaredRetType = calleeType->GetReturnType()->StripAllRefs();
+    auto applyRetType = e.GetResult()->GetType()->StripAllRefs();
+    if (!declaredRetType->IsAutoEnvInstBase() && applyRetType->IsAutoEnvInstBase()) {
+        WrapApplyWithExceptionRetVal(e);
+    }
 }
 
 void ClosureConversion::WrapApplyWithExceptionRetVal(ApplyWithException& apply)
@@ -2758,7 +2566,17 @@ void ClosureConversion::WrapApplyWithExceptionRetVal(ApplyWithException& apply)
     }
 }
 
-void ClosureConversion::WrapInvokeRetVal(Expression& e)
+void ClosureConversion::CastInvokeRetIfNeed(DynamicDispatch& e)
+{
+    // same reason with Apply
+    auto declaredRetType = e.GetMethodType()->GetReturnType()->StripAllRefs();
+    auto invokeRetType = e.GetResult()->GetType()->StripAllRefs();
+    if (!declaredRetType->IsAutoEnvInstBase() && invokeRetType->IsAutoEnvInstBase()) {
+        WrapInvokeRetVal(e);
+    }
+}
+
+void ClosureConversion::WrapInvokeRetVal(DynamicDispatch& e)
 {
     /** convert from:
      *  %0: $AutoEnvInstBase& = Invoke(xxx)
@@ -2807,7 +2625,17 @@ void ClosureConversion::WrapInvokeRetVal(Expression& e)
     ReplaceOperandWithAutoEnvWrapperClass(*e.GetResult(), *typecast->GetResult(), {storeMemberVar});
 }
 
-void ClosureConversion::WrapInvokeWithExceptionRetVal(Expression& e)
+void ClosureConversion::CastInvokeWithExceptionRetIfNeed(DynamicDispatchWithException& e)
+{
+    // same reason with Invoke
+    auto declaredRetType = e.GetMethodType()->GetReturnType()->StripAllRefs();
+    auto invokeRetType = e.GetResult()->GetType()->StripAllRefs();
+    if (!declaredRetType->IsAutoEnvInstBase() && invokeRetType->IsAutoEnvInstBase()) {
+        WrapInvokeWithExceptionRetVal(e);
+    }
+}
+
+void ClosureConversion::WrapInvokeWithExceptionRetVal(DynamicDispatchWithException& e)
 {
     /** convert from:
      *  Block #0:
@@ -2868,6 +2696,33 @@ void ClosureConversion::WrapInvokeWithExceptionRetVal(Expression& e)
 
         // 4. replace user
         user->ReplaceOperand(invokeRetVal, typecast->GetResult());
+    }
+}
+
+void ClosureConversion::CastGetElementRefRetIfNeed(GetElementRef& e)
+{
+    auto getEleRefRetType = e.GetResult()->GetType()->StripAllRefs();
+    // only Auto_Env_InstBase need wrapper
+    if (!getEleRefRetType->IsAutoEnvInstBase()) {
+        return;
+    }
+    /** class A<T> {
+     *      var a: ()->T
+     *  }
+     *  var b: ()->Bool = A<Bool>().a
+     *
+     *  a's type is `()->T`, but b's type is ()->Bool
+     *  closure type of `()->T` is Class-$AutoEnvGenericBase, closure type of `()->Bool` is Class-$AutoEnvInstBase
+     *  Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
+     *  we can't cast type from parent type to sub type, a wrapper class is needed
+     */
+    auto locationType = e.GetLocation()->GetType();
+    for (auto& idx : e.GetPath()) {
+        locationType = GetFieldOfType(*locationType, idx, builder);
+        CJC_NULLPTR_CHECK(locationType);
+    }
+    if (!locationType->StripAllRefs()->IsAutoEnvInstBase()) {
+        WrapGetElementRefRetVal(e);
     }
 }
 
@@ -2990,6 +2845,38 @@ void ClosureConversion::WrapFieldRetVal(Field& field)
     ReplaceOperandWithAutoEnvWrapperClass(*fieldRetVal, *typecast->GetResult(), {storeMemberVar});
 }
 
+void ClosureConversion::CastRawArrayInitByValueArgIfNeed(RawArrayInitByValue& e)
+{
+    /** %0: Int64 = Constant(1)
+     *  %1: RawArray<$AutoEnvGenericBase<Bool>>& = RawArrayAllocate(RawArray<$AutoEnvGenericBase<Unit>>, %0)
+     *  %2: $AutoEnvInstBase_Bool = xxx
+     *  %3: Unit = RawArrayInitByValue(%1, %0, %2)
+     *
+     *  in `RawArrayInitByValue`, type between %1 and %2 is mismatched,
+     *  $AutoEnvInstBase_Bool is sub type of $AutoEnvGenericBase<Bool>, we can cast type from sub type to parent type
+     */
+    auto rawArrayType = StaticCast<RawArrayType*>(e.GetRawArray()->GetType()->StripAllRefs());
+    auto expectedType = std::vector<Type*>{rawArrayType->GetElementType()};
+    auto initValue = std::vector<Value*>{e.GetInitValue()};
+    const size_t opOffset = 2;
+    auto index = OperandNeedTypeCast(initValue, expectedType, opOffset);
+    if (!index.empty()) {
+        AddTypeCastForOperand({&e, index}, builder);
+    }
+}
+
+void ClosureConversion::CastTypeCastArgIfNeed(TypeCast& e)
+{
+    /** Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
+     *  we can't cast type from parent type to sub type, a wrapper class is needed
+     */
+    auto srcType = e.GetSourceTy()->StripAllRefs();
+    auto targetType = e.GetTargetTy()->StripAllRefs();
+    if (IsAutoEnvGenericType(*srcType) && targetType->IsAutoEnvInstBase()) {
+        WrapTypeCastSrcVal(e);
+    }
+}
+
 void ClosureConversion::WrapTypeCastSrcVal(TypeCast& typecast)
 {
     /** convert from:
@@ -3023,51 +2910,56 @@ void ClosureConversion::WrapTypeCastSrcVal(TypeCast& typecast)
     typecast.ReplaceOperand(srcVal, allocate->GetResult());
 }
 
+void ClosureConversion::CastSpawnArgIfNeed(Spawn& e)
+{
+    if (!e.IsExecuteClosure()) {
+        // only check executeClosure, skip future Execute
+        return;
+    }
+    /** cj code `spawn { 0 }` is translated to
+     *  %0: ()->Int64 = lambda { reteurn 0 }
+     *  %1: Future<Int64> = Spawn(%0)
+     *
+     *  after redundant future removing, codegen is expected to use Future.executeClosure which declared in std.core
+     *  however, param type of `executeClosure` is `()->T`, it has gap to %0 which type is `()->Int64`
+     *  closure type of `()->T` is Class-$AutoEnvGenericBase, closure type of `()->Int64` is Class-$AutoEnvInstBase
+     *  Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
+     *  we can cast type from sub type to parent type
+     */
+    auto funcType = e.GetExecuteClosure()->GetFuncType();
+    auto index = OperandNeedTypeCast(e.GetOperands(), funcType->GetParamTypes(), 0);
+    if (!index.empty()) {
+        AddTypeCastForOperand({&e, index}, builder);
+    }
+}
+
 void ClosureConversion::ModifyTypeMismatchInExpr()
 {
-    std::vector<Apply*> applyWrapRetVal;
-    std::vector<ApplyWithException*> applyWithExceptionWrapRetVal;
-    std::vector<Expression*> invokeWrapRetVal;
-    std::vector<Expression*> invokeWithExceptionWrapRetVal;
-    std::vector<GetElementRef*> getElementRefWrapRetVal;
-    std::vector<Field*> fieldWrapRetVal;
-    std::vector<TypeCast*> typecastWrapSrcVal;
-    std::vector<std::pair<Expression*, std::vector<size_t>>> needTypeCastExprs;
-    auto postVisit = [this, &applyWrapRetVal, &applyWithExceptionWrapRetVal, &invokeWrapRetVal,
-        &invokeWithExceptionWrapRetVal, &getElementRefWrapRetVal, &fieldWrapRetVal, &typecastWrapSrcVal,
-        &needTypeCastExprs](Expression& e) {
-        if (e.GetExprKind() == ExprKind::APPLY) {
-            if (ApplyRetValNeedWrapper(e)) {
-                applyWrapRetVal.emplace_back(StaticCast<Apply*>(&e));
-            }
-            if (auto res = ApplyArgNeedTypeCast(StaticCast<Apply>(e)); res.first) {
-                needTypeCastExprs.emplace_back(&e, res.second);
-            }
-        } else if (e.GetExprKind() == ExprKind::APPLY_WITH_EXCEPTION) {
-            if (ApplyWithExceptionRetValNeedWrapper(StaticCast<ApplyWithException>(e))) {
-                applyWithExceptionWrapRetVal.emplace_back(StaticCast<ApplyWithException>(&e));
-            }
-            if (auto res = ApplyWithExceptionArgNeedTypeCast(StaticCast<ApplyWithException>(e)); res.first) {
-                needTypeCastExprs.emplace_back(&e, res.second);
-            }
-        } else if (InvokeRetValNeedWrapper(e)) {
-            invokeWrapRetVal.emplace_back(&e);
-        } else if (InvokeWithExceptionRetValNeedWrapper(e)) {
-            invokeWithExceptionWrapRetVal.emplace_back(&e);
+    auto preVisit = [this](Expression& e) {
+        if (Is<Apply>(e)) {
+            CastApplyArgAndRetIfNeed(StaticCast<Apply&>(e));
+        } else if (Is<ApplyWithException>(e)) {
+            CastApplyWithExceptionArgAndRetIfNeed(StaticCast<ApplyWithException&>(e));
+        } else if (Is<DynamicDispatch>(e)) {
+            CastInvokeRetIfNeed(StaticCast<DynamicDispatch&>(e));
+        } else if (Is<DynamicDispatchWithException>(e)) {
+            CastInvokeWithExceptionRetIfNeed(StaticCast<DynamicDispatchWithException&>(e));
         } else if (auto enumRes = EnumConstructorNeedTypeCast(e); enumRes.first) {
-            needTypeCastExprs.emplace_back(&e, enumRes.second);
+            AddTypeCastForOperand({&e, enumRes.second}, builder);
         } else if (auto tupleRes = TupleNeedTypeCast(e); tupleRes.first) {
-            needTypeCastExprs.emplace_back(&e, tupleRes.second);
-        } else if (GetElementRefRetValNeedWrapper(e, builder)) {
-            getElementRefWrapRetVal.emplace_back(StaticCast<GetElementRef*>(&e));
-        } else if (FieldRetValNeedWrapper(e, builder)) {
-            fieldWrapRetVal.emplace_back(StaticCast<Field*>(&e));
-        } else if (auto arrRes = RawArrayInitByValueNeedTypeCast(e); arrRes.first) {
-            needTypeCastExprs.emplace_back(&e, arrRes.second);
-        } else if (TypeCastSrcValNeedWrapper(e)) {
-            typecastWrapSrcVal.emplace_back(StaticCast<TypeCast*>(&e));
-        } else if (auto spawnRes = SpawnNeedTypeCast(e); spawnRes.first) {
-            needTypeCastExprs.emplace_back(&e, spawnRes.second);
+            AddTypeCastForOperand({&e, tupleRes.second}, builder);
+        } else if (Is<GetElementRef>(e)) {
+            CastGetElementRefRetIfNeed(StaticCast<GetElementRef&>(e));
+        } else if (Is<Field>(e)) {
+            if (FieldRetValNeedWrapper(StaticCast<Field&>(e), builder)) {
+                WrapFieldRetVal(StaticCast<Field&>(e));
+            }
+        } else if (Is<RawArrayInitByValue>(e)) {
+            CastRawArrayInitByValueArgIfNeed(StaticCast<RawArrayInitByValue&>(e));
+        } else if (Is<TypeCast>(e)) {
+            CastTypeCastArgIfNeed(StaticCast<TypeCast&>(e));
+        } else if (Is<Spawn>(e)) {
+            CastSpawnArgIfNeed(StaticCast<Spawn&>(e));
         }
         return VisitResult::CONTINUE;
     };
@@ -3075,32 +2967,7 @@ void ClosureConversion::ModifyTypeMismatchInExpr()
         if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }
-        Visitor::Visit(
-            *func, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
-    }
-    for (auto e : applyWrapRetVal) {
-        WrapApplyRetVal(*e);
-    }
-    for (auto e : applyWithExceptionWrapRetVal) {
-        WrapApplyWithExceptionRetVal(*e);
-    }
-    for (auto e : invokeWrapRetVal) {
-        WrapInvokeRetVal(*e);
-    }
-    for (auto e : invokeWithExceptionWrapRetVal) {
-        WrapInvokeWithExceptionRetVal(*e);
-    }
-    for (auto e : getElementRefWrapRetVal) {
-        WrapGetElementRefRetVal(*e);
-    }
-    for (auto e : fieldWrapRetVal) {
-        WrapFieldRetVal(*e);
-    }
-    for (auto e : typecastWrapSrcVal) {
-        WrapTypeCastSrcVal(*e);
-    }
-    for (auto& e : needTypeCastExprs) {
-        AddTypeCastForOperand(e, builder);
+        Visitor::Visit(*func, preVisit);
     }
 }
 
