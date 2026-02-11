@@ -204,20 +204,7 @@ inline bool HasAddrSpace(const CGValue* cgVal, unsigned int addrSpace)
     auto llvmType = llvmVal->getType();
     return llvmType->isPointerTy() && llvmType->getPointerAddressSpace() == addrSpace;
 }
-#ifdef __APPLE__
-inline void AddAttrForIntTypeArgOnMacMx(llvm::CallBase& callRet, llvm::Function& callee, unsigned argIdx)
-{
-    CJC_ASSERT(callRet.arg_size() == callee.arg_size());
-    if (argIdx >= callRet.arg_size()) {
-        return;
-    }
-    for (auto attr : {llvm::Attribute::NoUndef, llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
-        if (callee.hasParamAttribute(argIdx, attr)) {
-            callRet.addParamAttr(argIdx, attr);
-        }
-    }
-}
-#endif
+
 llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& callee,
     const std::vector<CGValue*>& argsVal, const CHIR::Type& chirRetTy, bool isSRet)
 {
@@ -261,8 +248,14 @@ llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& call
                 callRet->addRetAttr(ext);
             }
         }
+        // '<' means variable-length parameters exist in the function.
+        CJC_ASSERT(callee.arg_size() <= callRet->arg_size());
         for (unsigned i = 0; i < callee.arg_size(); ++i) {
-            AddAttrForIntTypeArgOnMacMx(*callRet, callee, i);
+            for (auto attr : {llvm::Attribute::NoUndef, llvm::Attribute::SExt, llvm::Attribute::ZExt}) {
+                if (callee.hasParamAttribute(i, attr)) {
+                    callRet->addParamAttr(i, attr);
+                }
+            }
         }
     }
 #endif
