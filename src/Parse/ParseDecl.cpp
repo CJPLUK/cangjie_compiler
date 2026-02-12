@@ -492,37 +492,9 @@ void ParserImpl::CheckOverflowAnno(PtrVector<Annotation>& annos, ScopeKind scope
 void ParserImpl::CheckPropDeclJavaMirror(PropDecl& decl)
 {
     if (decl.outerDecl && decl.outerDecl->TestAttr(Attribute::JAVA_MIRROR)) {
-        decl.EnableAttr(Attribute::JAVA_MIRROR);
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_prop_is_deprecated, decl);
-        if (decl.outerDecl && !decl.outerDecl->TestAttr(Attribute::ABSTRACT)) {
-            decl.DisableAttr(Attribute::ABSTRACT);
-        }
-
-        if (decl.TestAttr(Attribute::PRIVATE)) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_cannot_have_private_member, decl);
-            decl.EnableAttr(Attribute::IS_BROKEN);
-            decl.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
-        }
-
-        if (decl.TestAttr(Attribute::OPEN)) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_cannot_have_open_prop, decl);
-            decl.EnableAttr(Attribute::IS_BROKEN);
-            decl.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
-        }
-
-        if (!decl.getters.empty()) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_prop_cannot_have_getter, decl);
-            decl.EnableAttr(Attribute::IS_BROKEN);
-        } else {
-            InsertPropGetterSignature(decl, Attribute::JAVA_MIRROR);
-        }
-
-        if (!decl.setters.empty()) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_prop_cannot_have_setter, decl);
-            decl.EnableAttr(Attribute::IS_BROKEN);
-        } else if (decl.isVar) {
-            InsertPropSetterSignature(decl, Attribute::JAVA_MIRROR);
-        }
+        ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_prop_is_forbidden, decl);
+        decl.EnableAttr(Attribute::IS_BROKEN);
+        decl.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
     }
 }
 
