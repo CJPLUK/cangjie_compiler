@@ -46,8 +46,8 @@ public:
     void Init(GenericInstantiationManager* instantiationManager);
     ~TestManager();
 
-    void BeforeInstantiation(AST::Package& pkg);
-    void AfterInstantiation(AST::Package& pkg);
+    void PrepareToMock(AST::Package& pkg);
+    void HandleCreateMock(AST::Package& pkg);
 
 private:
     OwnedPtr<MockContext> ctx;
@@ -70,7 +70,6 @@ private:
     void ReplaceCallsWithAccessors(AST::Package& pkg);
     void ReplaceCallsToForeignFunctions(AST::Package& pkg);
     void HandleEnsurePreparedToMock(AST::Package& pkg);
-    void HandleCreateMock(AST::Package& pkg);
     Ptr<AST::ClassLikeDecl> GetInstantiatedDeclInCurrentPackage(const Ptr<const AST::ClassLikeTy> classLikeToMockTy);
     void CheckIfNoMockSupportDependencies(const AST::Package& curPkg);
     bool IsThereMockUsage(AST::Package& pkg) const;

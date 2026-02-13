@@ -291,8 +291,7 @@ OwnedPtr<AST::CallExpr> CreateInitCall(
     std::vector<OwnedPtr<AST::Expr>>& valueArgs,
     AST::File& curFile, const std::vector<Ptr<AST::Ty>> instTys = {});
 
-Ptr<AST::FuncDecl> GenerateGetTypeForTypeParamIntrinsic(
-    AST::Package& pkg, TypeManager& typeManager, Ptr<AST::Ty> strTy);
+Ptr<AST::FuncDecl> GenerateGetTypeForTypeParamIntrinsic(AST::Package& pkg, TypeManager& typeManager);
 
 // Generates declaration of intrinsic that is roughly eqivalent to expression `TypeLeft is TypeRight`,
 // where `TypeLeft` and `TypeRight` are types and the result is true iff TypeLeft is subtype of TypeRight:
@@ -304,8 +303,6 @@ Ptr<AST::FuncDecl> GenerateIsSubtypeTypesIntrinsic(AST::Package& pkg, TypeManage
 OwnedPtr<AST::GenericParamDecl> CreateGenericParamDecl(
     AST::Decl& decl, const std::string& name, TypeManager& typeManager);
 OwnedPtr<AST::GenericParamDecl> CreateGenericParamDecl(AST::Decl& decl, TypeManager& typeManager);
-
-static bool const IS_GENERIC_INSTANTIATION_ENABLED = false;
 
 template <typename T> T* GetMemberDecl(
     const AST::Decl& decl, const std::string& identifier, std::vector<Ptr<AST::Ty>> paramTys, TypeManager& typeManager)

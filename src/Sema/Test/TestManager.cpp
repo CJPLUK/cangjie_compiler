@@ -295,7 +295,6 @@ void TestManager::HandleCreateMock(Package& pkg)
             return HandleCreateMockCall(*callExpr, pkg);
         }
 
-        // TODO: Move to check stage?
         if (auto funcDecl = As<ASTKind::FUNC_DECL>(node); funcDecl &&
             funcDecl->TestAttr(Attribute::CONTAINS_MOCK_CREATION_CALL) && funcDecl->funcBody &&
             funcDecl->funcBody->generic && !funcDecl->HasAnno(AnnotationKind::FROZEN)) {
@@ -337,8 +336,8 @@ Ptr<ClassDecl> TestManager::GenerateMockClassIfNeededAndGet(const CallExpr& call
         return nullptr;
     }
 
-    auto declToMock = mockUtils->GetInstantiatedDeclInCurrentPackage(
-        DynamicCast<const ClassLikeTy*>(typeArgument.get()));
+    auto declToMock =
+        RawStaticCast<ClassLikeDecl*>(Ty::GetDeclOfTy(DynamicCast<const ClassLikeTy*>(typeArgument.get())));
     if (MockSupportManager::DoesClassLikeSupportMocking(*declToMock)) {
         auto [classDecl, generated] = mockManager->GenerateMockClassIfNeededAndGet(
             *declToMock, pkg, MockManager::GetMockKind(callExpr));
@@ -441,11 +440,6 @@ void TestManager::GenerateAccessors(Package& pkg)
             return VisitAction::SKIP_CHILDREN;
         }
 
-        // Don't generate accessors for generics themthelves, do it for instantiated versions
-        if (IS_GENERIC_INSTANTIATION_ENABLED && decl->TestAttr(Attribute::GENERIC)) {
-            return VisitAction::SKIP_CHILDREN;
-        }
-
         // common/specific declarations are not supported
         if (decl->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC, Attribute::FROM_COMMON_PART)) {
             return VisitAction::SKIP_CHILDREN;
@@ -477,10 +471,6 @@ void TestManager::PrepareToSpy(Package& pkg)
         }
 
         if (decl->genericDecl && !decl->genericDecl->TestAttr(Attribute::MOCK_SUPPORTED)) {
-            return VisitAction::SKIP_CHILDREN;
-        }
-
-        if (IS_GENERIC_INSTANTIATION_ENABLED && decl->TestAttr(Attribute::GENERIC)) {
             return VisitAction::SKIP_CHILDREN;
         }
 
@@ -573,11 +563,6 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
         }
 
         if ((node->curFile && !node->IsSamePackage(pkg))) {
-            return VisitAction::SKIP_CHILDREN;
-        }
-
-        if (IS_GENERIC_INSTANTIATION_ENABLED &&
-            (node->TestAttr(Attribute::GENERIC) || (node->ty && node->ty->HasGeneric()))) {
             return VisitAction::SKIP_CHILDREN;
         }
 
@@ -787,14 +772,10 @@ bool TestManager::IsThereMockUsage(Package& pkg) const
     bool mockUsageFound = false;
 
     Walker(&pkg, Walker::GetNextWalkerID(), [&pkg, &mockUsageFound](auto node) {
-        if (auto callExpr = As<ASTKind::CALL_EXPR>(node); callExpr &&
-            (!IS_GENERIC_INSTANTIATION_ENABLED || !callExpr->ty->HasGeneric()) &&
-            callExpr->IsSamePackage(pkg)
-        ) {
+        if (auto callExpr = As<ASTKind::CALL_EXPR>(node); callExpr && callExpr->IsSamePackage(pkg)) {
             auto resolvedFunc = callExpr->resolvedFunction;
             if (MockManager::IsMockCall(*callExpr) ||
-                (!IS_GENERIC_INSTANTIATION_ENABLED && resolvedFunc &&
-                    resolvedFunc->TestAttr(Attribute::CONTAINS_MOCK_CREATION_CALL))
+                (resolvedFunc && resolvedFunc->TestAttr(Attribute::CONTAINS_MOCK_CREATION_CALL))
             ) {
                 mockUsageFound = true;
                 return VisitAction::STOP_NOW;
@@ -822,7 +803,7 @@ bool TestManager::IsThereMockUsage(Package& pkg) const
     return false;
 }
 
-void TestManager::BeforeInstantiation(AST::Package& pkg)
+void TestManager::PrepareToMock(AST::Package& pkg)
 {
     if (pkg.files.empty()) {
         return;
@@ -834,7 +815,7 @@ void TestManager::BeforeInstantiation(AST::Package& pkg)
         mockUtils->SetGetTypeForTypeParamDecl(pkg);
         mockUtils->SetIsSubtypeTypes(pkg);
 
-        // TODO: In almost every stage there is a AST walk.
+        // NOTE: In almost every stage there is a AST walk.
         // Do it once, collecting all nodes, that needs to be handled in some way
         CollectInternalDeclUsages(pkg);
         GenerateAccessors(pkg);
@@ -848,18 +829,13 @@ void TestManager::BeforeInstantiation(AST::Package& pkg)
     HandleEnsurePreparedToMock(pkg);
 }
 
-void TestManager::AfterInstantiation(AST::Package& pkg)
-{
-    HandleCreateMock(pkg);
-}
-
 void TestManager::Init(GenericInstantiationManager* instantiationManager)
 {
     if (!mockCompatible) {
         return;
     }
 
-    mockUtils = new MockUtils(importManager, typeManager, ctx->GetMangler(), instantiationManager);
+    mockUtils = new MockUtils(importManager, typeManager, ctx->mangler, instantiationManager);
     mockSupportManager = MakeOwned<MockSupportManager>(typeManager, mockUtils);
 
     if (mockCompatible && testEnabled) {

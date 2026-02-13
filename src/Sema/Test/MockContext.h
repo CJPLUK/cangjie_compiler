@@ -17,19 +17,25 @@
 
 namespace Cangjie {
 
+/*
+ * Class to store dependencies needed for mocking transformations
+ */
 class MockContext final {
 public:
     MockContext();
 
+    /*
+     * Creates MangerContext and manages its lifetime.
+     * Needed for mangling declarations inside of extends
+     */
     void PrepareManglerContext(Ptr<AST::Package> pkg);
-
-    // FIXME: Remove after moving mangler from MockUtils
-    BaseMangler& GetMangler();
 
     ~MockContext();
 
-private:
+public:
     BaseMangler mangler;
+
+private:
     std::unordered_map<std::string, std::unique_ptr<ManglerContext>> manglerCtxs;
 };
 
