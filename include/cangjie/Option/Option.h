@@ -468,7 +468,7 @@ public:
 
     std::optional<std::string> outputJavaGenDir = std::nullopt;
 
-    std::string outputObjCGenDir = "objc-gen";
+    std::string outputObjCGenDir = "";
 
     std::vector<std::string> importPaths; /**< .cjo search paths */
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
