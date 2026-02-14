@@ -1228,6 +1228,7 @@ private:
     bool CheckRefTypeCheckAccessLegality(const ASTContext& ctx, AST::RefType& rt, const AST::Decl& target);
     void CheckRefTypeWithRealTarget(AST::RefType& rt);
     void HandleAliasForRefType(AST::RefType& rt, Ptr<AST::Decl>& target);
+    bool CheckTypeParametersForAliasRef(AST::RefType& rt, const AST::TypeAliasDecl& aliasDecl);
 
     void GetRevTypeMapping(
         std::vector<Ptr<AST::Ty>>& params, std::vector<Ptr<AST::Ty>>& args, MultiTypeSubst& revTyMap);
@@ -1513,6 +1514,11 @@ private:
         }
         typeMapping = GenerateTypeMappingForTypeAliasDecl(tad);
         SubstituteTypeForTypeAliasTypeMapping(tad, typeArgs, typeMapping);
+        // Also generate direct mapping from type alias decl's type parameters to the provided type arguments
+        auto directMapping = TypeCheckUtil::GenerateTypeMapping(tad, typeArgs);
+        for (auto& [key, value] : directMapping) {
+            typeMapping[key] = value;
+        }
         return typeMapping;
     }
 
