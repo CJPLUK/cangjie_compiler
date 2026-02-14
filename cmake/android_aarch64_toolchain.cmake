@@ -9,6 +9,7 @@ include("${CMAKE_DIR}/linux_toolchain.cmake")
 
 set(CMAKE_SYSTEM_NAME "Android")
 set(CMAKE_SYSTEM_PROCESSOR "aarch64")
+#TODO: change  default to 26
 if(NOT CMAKE_ANDROID_API)
     set(CMAKE_ANDROID_API 31)
     message(STATUS "Android API level is not set, use default setting: ${CMAKE_ANDROID_API}")

@@ -186,6 +186,17 @@ std::string Triple::Info::GetEffectiveTripleString() const
     if (tripleString == "aarch64-ios-simulator") {
         return "arm64-apple-ios17.5-simulator";
     }
+    constexpr std::string_view androidPrefix = "arm-linux-android";
+    if (tripleString.size() >= androidPrefix.size() &&
+        tripleString.compare(0, androidPrefix.size(), androidPrefix.data()) == 0) {
+        std::string result;
+        result.reserve(tripleString.size() + 4); // fixme: eliminate 4 
+        result = "armv7a-linux-androideabi";
+        // add api level
+        result.append(tripleString, androidPrefix.size(), std::string::npos);
+        return result;
+    }
+
     return tripleString;
 }
 
@@ -294,6 +305,9 @@ void GlobalOptions::SetupCompileTargetOptions()
 bool GlobalOptions::ReprocessReflectionOption()
 {
     if (target.IsMacOS()) {
+        disableReflection = true;
+    }
+    if (target.IsArm32()) {
         disableReflection = true;
     }
     return true;
@@ -1213,7 +1227,9 @@ std::string GlobalOptions::GetCangjieLibTargetPathName() const
         std::string envName = target.EnvironmentToString();
         if (target.env == Triple::Environment::ANDROID) {
             auto envNameLen = envName.size();
-            envName.erase(envNameLen - target.apiLevel.size());
+            if(target.ArchToString() !="arm"){
+                envName.erase(envNameLen - target.apiLevel.size());
+            }
         }
         name += "_" + envName;
     }

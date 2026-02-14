@@ -258,7 +258,7 @@ endif()
 if(CMAKE_BUILD_TYPE MATCHES Release)
     add_definitions(-DRELEASE)
 endif()
-if(ANDROID)
+if(ANDROID AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     add_link_options("-Wl,-z,max-page-size=16384")
 endif()
 

@@ -65,6 +65,7 @@ TARGET_DICTIONARY = {
     "android-aarch64": "aarch64-linux-android31",
     "android31-aarch64": "aarch64-linux-android31",
     "android26-aarch64": "aarch64-linux-android26",
+    "android23-arm": "arm-linux-android23",
     "android-x86_64": "x86_64-linux-android",
     "android31-x86_64": "x86_64-linux-android31",
     "android26-x86_64": "x86_64-linux-android26"
@@ -130,6 +131,8 @@ def generate_cmake_defs(args):
  	        toolchain_file = "ios_simulator_x86_64_toolchain.cmake"
         elif args.target == "arm64-apple-ios11":
             toolchain_file = "ios_arm64_toolchain.cmake"
+        elif args.target == "arm-linux-android23":
+            toolchain_file = "android_arm32_toolchain.cmake"
         elif "aarch64-linux-android" in args.target:
             toolchain_file = "android_aarch64_toolchain.cmake"
         elif "x86_64-linux-android" in args.target:
