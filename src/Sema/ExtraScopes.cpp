@@ -13,6 +13,7 @@
 #include "ExtraScopes.h"
 #include "TypeCheckUtil.h"
 #include "Promotion.h"
+#include <algorithm>
 
 namespace Cangjie {
 using namespace AST;
@@ -38,6 +39,23 @@ bool IsBaseTypeOmittedTypeArgs(const MemberAccess& ma)
     }
     auto nre = DynamicCast<NameReferenceExpr*>(ma.baseExpr.get());
     return nre && nre->instTys.empty() && NeedFurtherInstantiation(ma.baseExpr->GetTypeArgs());
+}
+
+// Type args from type-alias expansion (compiler-added) are not user-provided when they contain
+// type variables (need inference). When all are concrete (e.g. TypeC = TypeClass<Int64>), keep them.
+std::vector<Ptr<Type>> GetEffectiveTypeArgsForCall(Expr& baseFunc, std::vector<Ptr<Type>> typeArgs)
+{
+    if (baseFunc.astKind != ASTKind::REF_EXPR) {
+        return typeArgs;
+    }
+    auto* ref = StaticCast<RefExpr*>(&baseFunc);
+    if (!ref->compilerAddedTyArgs) {
+        return typeArgs;
+    }
+    bool hasTyVar = std::any_of(typeArgs.begin(), typeArgs.end(), [](const Ptr<Type>& ta) {
+        return ta && ta->ty && ta->ty->kind == TypeKind::TYPE_GENERICS;
+    });
+    return hasTyVar ? std::vector<Ptr<Type>>{} : typeArgs;
 }
 }
 
@@ -286,7 +304,7 @@ void InstCtxScope::SetRefDeclSimple(const AST::FuncDecl& fd, const AST::CallExpr
 bool InstCtxScope::SetRefDecl(ASTContext& ctx, AST::FuncDecl& fd, CallExpr& ce)
 {
     refMaps = {};
-    std::vector<Ptr<Type>> typeArgs = ce.baseFunc->GetTypeArgs();
+    std::vector<Ptr<Type>> typeArgs = GetEffectiveTypeArgsForCall(*ce.baseFunc, ce.baseFunc->GetTypeArgs());
     bool isInStructDecl = fd.outerDecl && fd.outerDecl->IsNominalDecl() && !IsTypeObjectCreation(fd, ce);
     if (IsGenericUpperBoundCall(*ce.baseFunc, fd)) { // Handle upperbound function.
         tyMgr.GenerateTypeMappingForUpperBounds(
