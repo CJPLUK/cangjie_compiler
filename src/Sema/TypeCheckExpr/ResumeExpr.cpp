@@ -15,7 +15,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynResumeExpr(ASTContext& ctx, ResumeExpr&
     if (re.expr) {
         // Resuming a deferred resumption - get result and return type from Resumption<Res, Ret>
         CJC_NULLPTR_CHECK(re.expr);
-        auto exprTy = Synthesize(ctx, re.expr.get());
+        auto exprTy = Synthesize({ctx, SynPos::NONE}, re.expr.get());
         if (!Ty::IsTyCorrect(exprTy)) {
             return TypeManager::GetInvalidTy();
         }

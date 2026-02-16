@@ -63,7 +63,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTryExpr(ASTContext& ctx, TryExpr& te)
 
     bool isWellTyped;
     CJC_NULLPTR_CHECK(te.tryBlock);
-    isWellTyped = SynthesizeAndReplaceIdealTy(ctx, *te.tryBlock);
+    isWellTyped = SynthesizeAndReplaceIdealTy({ctx, SynPos::NONE}, *te.tryBlock);
     if (!te.handlers.empty() && te.tryLambda) {
         // For a try-handle expression, the try block has been replaced by a lambda,
         // but only if there were no syntax errors.
