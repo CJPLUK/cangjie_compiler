@@ -782,7 +782,7 @@ void ASTLoader::ASTLoaderImpl::LoadPatternRefs(const PackageFormat::Pattern& pOb
             CJC_ASSERT(pObj.types()->size() >= 1);
             rtp.types.resize(pObj.types()->size() - 1);
             for (uoffset_t i = 1; i < pObj.types()->size(); i++) {
-                rtp.types[i - 1] = WrapTypeInNode(LoadType(pObj.types()->Get(i)));
+                rtp.types[i - 1] = WrapType(LoadType(pObj.types()->Get(i)));
             }
             break;
         }
