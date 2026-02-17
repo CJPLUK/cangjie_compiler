@@ -566,8 +566,7 @@ void JavaDesugarManager::DesugarJavaMirror(InterfaceDecl& mirror)
                 DesugarJavaMirrorMethod(*fd, mirror);
             }
         } else if (auto prop = As<ASTKind::PROP_DECL>(decl.get())) {
-            // not supported yet
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *prop, "property in interface");
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_property_is_forbidden, *prop);
         }
     }
 }
