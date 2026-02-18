@@ -257,7 +257,7 @@ bool Cangjie::NeedCreateIncrementalCompilerInstance(const GlobalOptions& opts)
             logger.LogLn("enable coverage, roll back to full compilation");
         } else if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
             logger.LogLn("enable compile common part mode, roll back to full compilation");
-        } else if (opts.commonPartCjos.size() > 0) {
+        } else if (!opts.commonPartCjos.empty()) {
             logger.LogLn("enable compile platform part mode, roll back to full compilation");
         }
     }

@@ -117,7 +117,7 @@ GlobalVar* CHIRBuilder::CreateGlobalVar(const DebugLocation& loc, RefType* ty, c
     GlobalVar* globalVar = nullptr;
     if (context.GetCurPackage() != nullptr) {
         if (auto exist = context.GetCurPackage()->TryGetGlobalVar(identifier)) {
-            globalVar = *exist;
+            globalVar = exist;
             // Update features set
             auto newFuncFeatures = features;
             auto oldFuncFeatures = globalVar->GetFeatures();
@@ -158,7 +158,7 @@ Func* CHIRBuilder::CreateFunc(const DebugLocation& loc, FuncType* funcTy, const 
     Func* func = nullptr;
     if (context.GetCurPackage() != nullptr) {
         if (auto exist = context.GetCurPackage()->TryGetGlobalFunc(identifier)) {
-            func = *exist;
+            func = exist;
             // Update features set
             auto newFuncFeatures = features;
             auto oldFuncFeatures = func->GetFeatures();

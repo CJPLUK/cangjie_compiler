@@ -12,7 +12,6 @@
 #include "cangjie/CHIR/IR/Type/ExtendDef.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
-#include <optional>
 #include <string>
 
 using namespace Cangjie::CHIR;
@@ -26,7 +25,7 @@ std::string Package::GetName() const
     return name;
 }
 
-std::optional<GlobalVar*> Package::TryGetGlobalVar(const std::string identifier)
+GlobalVar* Package::TryGetGlobalVar(const std::string identifier)
 {
     for (auto var : globalVars) {
         if (var->GetIdentifier() == identifier) {
@@ -34,7 +33,7 @@ std::optional<GlobalVar*> Package::TryGetGlobalVar(const std::string identifier)
         }
     }
 
-    return std::nullopt;
+    return nullptr;
 }
 
 void Package::AddGlobalVar(GlobalVar* item)
@@ -42,7 +41,7 @@ void Package::AddGlobalVar(GlobalVar* item)
     globalVars.emplace_back(item);
 }
 
-std::optional<Func*> Package::TryGetGlobalFunc(const std::string identifier)
+Func* Package::TryGetGlobalFunc(const std::string identifier)
 {
     for (auto func : globalFuncs) {
         if (func->GetIdentifier() == identifier) {
@@ -50,7 +49,7 @@ std::optional<Func*> Package::TryGetGlobalFunc(const std::string identifier)
         }
     }
 
-    return std::nullopt;
+    return nullptr;
 }
 
 void Package::AddGlobalFunc(Func* item)

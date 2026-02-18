@@ -30,7 +30,7 @@ bool AST2CHIR::HasFailed() const
 void AST2CHIR::RegisterAllSources()
 {
     auto& sources = sourceManager.GetSources();
-    for (auto idToSource : sources) {
+    for (auto& idToSource : sources) {
         auto& source = idToSource.second;
         auto filePath = source.path;
         auto absPath = FileUtil::GetAbsPath(source.path);
