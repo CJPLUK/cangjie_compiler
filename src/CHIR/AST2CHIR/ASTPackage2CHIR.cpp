@@ -1331,10 +1331,10 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "TranslateDecls");
     // Update some info for common specific
     Utils::ProfileRecorder::Start("TranslateNominalDecls", "ProcessCommonAndSpecific");
-    ProcessClassStructVarInits(trans);
     ProcessCommonAndSpecificExtends();
     SetExtendInfo();
     UpdateExtendParent();
+    ProcessClassStructVarInits(trans);
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "ProcessCommonAndSpecific");
 }
 
