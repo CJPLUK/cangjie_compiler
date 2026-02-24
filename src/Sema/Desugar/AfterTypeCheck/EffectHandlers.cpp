@@ -1105,14 +1105,20 @@ void TypeChecker::TypeCheckerImpl::DesugarDeferredResume([[maybe_unused]] ASTCon
     }
     OwnedPtr<Expr> resumeFn = GetHelperFrameMethod(re, resumeFnName, {argTy});
 
+    // Unique name per resume to avoid duplicate declaration when a handler has multiple resumes
+    // the resumption expr (string repr) are kept in the variable name for friendlier debugging.
+    auto timestamp = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+    std::string resumptionSuffix = re.expr->ToString() + "_" + std::to_string(timestamp);
+    std::string resumptionVarName = "$resumption_" + resumptionSuffix;
+
     auto outerBlock = MakeOwnedNode<Block>();
     AST::CopyNodeScopeInfo(outerBlock, &re);
     outerBlock->ty = re.ty;
 
-    // Create `let $tmp = resumption`
+    // Create `let $resumption_<resumptionSuffix>_<timestamp> = resumption`
     {
-        auto resVarDecl = CreateVarDecl("$resumption", std::move(re.expr));
-        ctx.AddDeclName(std::make_pair("$resumption", resVarDecl->scopeName), *resVarDecl);
+        auto resVarDecl = CreateVarDecl(resumptionVarName, std::move(re.expr));
+        ctx.AddDeclName(std::make_pair(resumptionVarName, resVarDecl->scopeName), *resVarDecl);
         resVarDecl->ty = ResumptionToInternalResumptionTy(resVarDecl->initializer->ty);
         outerBlock->body.emplace_back(std::move(resVarDecl));
     }
