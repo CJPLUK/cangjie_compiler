@@ -430,9 +430,10 @@ void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package
 std::vector<OwnedPtr<ASTLoader>>& CjoManagerImpl::GetCommonPartCjos(
     std::string packageName, const CjoManager& cjoManager)
 {
-    CJC_ASSERT(globalOptions.commonPartCjos.size() > 0);
-
-    if (commonPartLoaders.size() == 0) {
+    if (commonPartLoaders.empty()) {
+        if (globalOptions.commonPartCjos.empty()) {
+            diag.DiagnoseRefactor(DiagKindRefactor::module_common_part_path_is_required, DEFAULT_POSITION);
+        }
         for (auto commonPartCjo : globalOptions.commonPartCjos) {
             commonPartLoaders.emplace_back(ReadCjo(packageName, commonPartCjo, cjoManager));
         }

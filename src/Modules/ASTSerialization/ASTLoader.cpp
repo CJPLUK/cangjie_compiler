@@ -319,7 +319,75 @@ void ReportPackageMismatch(
     diag.DiagnoseRefactor(
         DiagKindRefactor::module_common_cjo_wrong_package, range, actualPackageName, expectedPackageName);
 }
+
+std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg)
+{
+    // All features should be same across parsed at the moment files, so use any file feature set
+    return (*pkg.files.begin())->GetFeatures();
+}
+
+void ValidateCommonSpecificFeatureSetsRelations(
+    const AST::File& commonFile,
+    const std::set<std::string>& specificFeatures,
+    DiagnosticEngine& diag,
+    const AST::Package& pkg)
+{
+    auto parentFeatures = commonFile.GetFeatures();
+    bool isParentSubsetOfChild = std::includes(
+        specificFeatures.begin(), specificFeatures.end(),
+        parentFeatures.begin(), parentFeatures.end());
+    if (!isParentSubsetOfChild) {
+        std::vector<std::string> difference;
+        std::set_difference(
+            parentFeatures.begin(), parentFeatures.end(),
+            specificFeatures.begin(), specificFeatures.end(),
+            std::back_inserter(difference)
+        );
+        std::stringstream ss;
+        ss << "Extra feature from common part file: ";
+        for (const auto& feature : difference) {
+            ss << "'" << feature << "' ";
+        }
+        auto diagBuilder = diag.DiagnoseRefactor(
+            DiagKindRefactor::feature_is_not_subset_of_child_set,
+            commonFile.GetBegin(), commonFile.GetFullPackageName(), commonFile.filePath
+        );
+        diagBuilder.AddNote(ss.str());
+        Ptr<AST::File> childFile = *pkg.files.begin();
+        if (childFile->feature) {
+            diagBuilder.AddNote(*childFile->feature, "Conflicting specific feature set:");
+        }
+    }
+}
 } // namespace
+
+OwnedPtr<AST::File> ASTLoader::ASTLoaderImpl::PreloadCommonFile(uoffset_t indexOfFile)
+{
+    CJC_NULLPTR_CHECK(package->allFileImports());
+    uoffset_t i = indexOfFile;
+    auto&& importInfos = LoadImportSpecs(package->allFileImports()->Get(i));
+    CJC_NULLPTR_CHECK(package->allFileInfo());
+
+    // Load file info for CJMP
+    auto fileInfo = package->allFileInfo()->Get(i);
+    auto tmpFilePath = package->allFiles()->Get(i)->str();
+    const bool isCJMPFile = true;
+    auto tmpFileId = sourceManager.AddSource(tmpFilePath, "", package->fullPkgName()->str(), isCJMPFile);
+    CJC_ASSERT(tmpFileId == fileInfo->fileID()); // make sure it get same file id as in first compilation stage
+    allFileIds[i] = tmpFileId;
+
+    auto file = CreateFileNode(*curPackage, fileInfo->fileID(), std::move(importInfos));
+    if (fileInfo->feature()) {
+        file->feature = LoadFeaturesDirective(fileInfo->feature());
+    }
+
+    file->EnableAttr(Attribute::FROM_COMMON_PART);
+    file->EnableAttr(Attribute::COMMON);
+    file->isCommon = true;
+    file->begin = LoadPos(fileInfo->begin());
+    file->end = LoadPos(fileInfo->end());
+    return file;
+}
 
 bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 {
@@ -338,32 +406,20 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         ReportPackageMismatch(diag, pkg, pkg.fullPackageName, deserializedPackageName);
         return false;
     }
+    auto specificFeatures = CollectFeaturesFromPackage(pkg);
 
     allTypes.resize(package->allTypes()->size(), nullptr);
     auto fileSize = package->allFiles()->size();
     allFileIds.resize(fileSize);
+
     for (uoffset_t i = 0; i < fileSize; i++) {
-        CJC_NULLPTR_CHECK(package->allFileImports());
-        auto&& importInfos = LoadImportSpecs(package->allFileImports()->Get(i));
-        CJC_NULLPTR_CHECK(package->allFileInfo());
-        // Load file info for CJMP
-        auto fileInfo = package->allFileInfo()->Get(i);
-        auto tmpFilePath = package->allFiles()->Get(i)->str();
-        const bool isCJMPFile = true;
-        auto tmpFileId = sourceManager.AddSource(tmpFilePath, "", package->fullPkgName()->str(), isCJMPFile);
-        CJC_ASSERT(tmpFileId == fileInfo->fileID()); // make sure it get same file id as in first compilation stage
-        allFileIds[i] = tmpFileId;
-        auto file = CreateFileNode(*curPackage, fileInfo->fileID(), std::move(importInfos));
-        if (fileInfo->feature()) {
-            file->feature = LoadFeaturesDirective(fileInfo->feature());
-        }
-        file->EnableAttr(Attribute::FROM_COMMON_PART);
-        file->EnableAttr(Attribute::COMMON);
-        file->isCommon = true;
-        file->begin = LoadPos(fileInfo->begin());
-        file->end = LoadPos(fileInfo->end());
+        auto file = PreloadCommonFile(i);
+
+        ValidateCommonSpecificFeatureSetsRelations(*file, specificFeatures, diag, pkg);
+
         pkg.files.emplace_back(std::move(file));
     }
+
     AddCurFile(pkg);
     auto imports = package->imports();
     CJC_NULLPTR_CHECK(imports);

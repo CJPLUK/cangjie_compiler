@@ -231,6 +231,8 @@ private:
     OwnedPtr<AST::Package> PreLoadImportedPackageNode();
     OwnedPtr<AST::File> CreateFileNode(
         AST::Package& pkg, unsigned int fileID, std::vector<OwnedPtr<AST::ImportSpec>>&& imports);
+    // Add for CJMP
+    OwnedPtr<AST::File> PreloadCommonFile(uoffset_t indexOfFile);
     void LoadCachedTypeForDecl(const PackageFormat::Decl& decl, AST::Decl& astDecl);
     using DeclLoaderT =
         std::function<OwnedPtr<AST::Decl>(ASTLoaderImpl*, const PackageFormat::Decl&, int64_t exprIndex)>;
