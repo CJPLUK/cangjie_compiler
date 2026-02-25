@@ -67,7 +67,8 @@ void CreateFunctionWrapperForNormalCases(
         auto paramDerefType = CGType::GetOrCreate(cgMod, DeRef(cgType.GetParamType(0)->GetOriginal()))->GetLLVMType();
         CJC_ASSERT(paramDerefType->isIntegerTy(8U) && "Should not reach here.");
         auto tmp = builder.LLVMIRBuilder2::CreateAlloca(paramDerefType, size);
-        builder.CallGCReadAgg({tmp, thisVal, dataPtr, builder.CreateSExt(size, builder.getInt64Ty())});
+        builder.CallGCReadAgg(llvm::cast<llvm::StructType>(paramDerefType),
+            {tmp, thisVal, dataPtr, builder.CreateSExt(size, builder.getInt64Ty())});
         dataPtr = tmp;
     }
     args[thisValOffset] = dataPtr;

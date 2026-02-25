@@ -563,10 +563,10 @@ void ReplaceFunction(CGModule& cgMod)
             if (isCalleeMutOrCtor) {
                 auto load = irBuilder.CreateEntryAlloca(thisType);
                 (void)irBuilder.CreateCJMemSetStructWith0(load);
-                irBuilder.CallGCReadAgg({load, basePtr, thisParamWithoutTI, size64});
-                irBuilder.CallGCWriteAgg({thisParamWithTI, payloadPtr, load, size64});
+                irBuilder.CallGCReadAgg(thisType, {load, basePtr, thisParamWithoutTI, size64});
+                irBuilder.CallGCWriteAgg(thisType, {thisParamWithTI, payloadPtr, load, size64});
             } else {
-                irBuilder.CallGCWriteAgg({thisParamWithTI, payloadPtr, thisParamWithoutTI, size64});
+                irBuilder.CallGCWriteAgg(thisType, {thisParamWithTI, payloadPtr, thisParamWithoutTI, size64});
             }
         } else {
             irBuilder.CreateMemCpy(payloadPtr, llvm::MaybeAlign(), thisParamWithoutTI, llvm::MaybeAlign(), size32);
@@ -600,8 +600,8 @@ void ReplaceFunction(CGModule& cgMod)
         if (auto thisType = CGType::GetOrCreate(cgMod, thisCHIRType)->GetLLVMType(); IsTypeContainsRef(thisType)) {
             auto load = irBuilder.CreateEntryAlloca(thisType);
             (void)irBuilder.CreateCJMemSetStructWith0(load);
-            irBuilder.CallGCReadAgg({load, thisParamWithTI, payloadPtr, size64});
-            irBuilder.CallGCWriteAgg({basePtr, thisParamWithoutTI, load, size64});
+            irBuilder.CallGCReadAgg(thisType, {load, thisParamWithTI, payloadPtr, size64});
+            irBuilder.CallGCWriteAgg(thisType, {basePtr, thisParamWithoutTI, load, size64});
         } else {
             irBuilder.CreateMemCpy(thisParamWithoutTI, llvm::MaybeAlign(), payloadPtr, llvm::MaybeAlign(), size32);
         }

@@ -443,7 +443,7 @@ void IRBuilder2::CreateLoadInstForParameter(const CHIR::Expression& chirExpressi
                     auto structType = llvm::cast<llvm::StructType>(elemType);
                     auto layOut = GetLLVMModule()->getDataLayout().getStructLayout(structType);
                     auto size = getInt64(layOut->getSizeInBytes());
-                    CallGCReadAgg({temp, it->second, castedPtr, size});
+                    CallGCReadAgg(structType, {temp, it->second, castedPtr, size});
                 } else {
                     auto layOut = GetCGModule().GetLLVMModule()->getDataLayout().getStructLayout(
                         llvm::cast<llvm::StructType>(elemType));
