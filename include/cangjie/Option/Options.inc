@@ -299,7 +299,7 @@ OPTION("--output-javagen-dir", OUTPUT_JAVA_GEN_DIR, SEPARATED, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
     "Specify output directory for javagen")
 OPTION("--objc-output-dir", OUTPUT_OBJC_GEN_DIR, SEPARATED, { BACKEND(ALL) },
-    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
+    { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
     "Specify output directory for ObjC generated sources")
 OPTION("--no-prelude", NO_PRELUDE, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
