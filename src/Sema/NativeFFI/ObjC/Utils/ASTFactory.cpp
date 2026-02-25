@@ -118,9 +118,7 @@ OwnedPtr<Expr> ASTFactory::CreateNativeHandleExpr(ClassLikeDecl& decl, bool isSt
         return CreateNativeHandleExpr(ty, curFile);
     }
 
-    // Static case
-    auto& ty = *StaticCast<ClassTy>(decl.ty);
-    return CreateGetClassCall(ty, curFile);
+    return CreateGetClassCall(decl, curFile);
 }
 
 OwnedPtr<Expr> ASTFactory::UnwrapEntity(OwnedPtr<Expr> expr)
@@ -540,6 +538,40 @@ OwnedPtr<VarDecl> ASTFactory::CreateNativeHandleField(ClassDecl& target)
     PutDeclToClassLikeBody(*nativeHandleField, target);
 
     return nativeHandleField;
+}
+
+OwnedPtr<FuncDecl> ASTFactory::CreateGetObjCClassDecl(ClassLikeDecl& target)
+{
+    auto nativeObjCClassTy = bridge.GetNativeObjCClassTy();
+
+    auto curFile = target.curFile;
+    auto paramList = MakeOwned<FuncParamList>();
+    std::vector<OwnedPtr<FuncParamList>> wrapperParamLists;
+    wrapperParamLists.push_back(std::move(paramList));
+    auto getClassCall = CreateGetClassCall(*StaticCast<ClassLikeTy>(target.ty), curFile);
+    auto wrapperBody = CreateFuncBody(std::move(wrapperParamLists), CreateType(nativeObjCClassTy),
+        CreateBlock({}, nativeObjCClassTy), nativeObjCClassTy);
+
+    auto classDecl = CreateFuncDecl(GET_OBJ_C_CLASS_IDENT, std::move(wrapperBody),
+        typeManager.GetFunctionTy({}, nativeObjCClassTy));
+    classDecl->moduleName = target.moduleName;
+    classDecl->fullPackageName = target.fullPackageName;
+    classDecl->EnableAttr(Attribute::PUBLIC, Attribute::STATIC, Attribute::IS_CHECK_VISITED);
+    classDecl->funcBody->funcDecl = classDecl.get();
+    classDecl->linkage = Linkage::INTERNAL;
+    classDecl->funcBody->parentClassLike = &target;
+    PutDeclToClassLikeBody(*classDecl, target);
+
+    return classDecl;
+}
+
+OwnedPtr<FuncDecl> ASTFactory::CreateGetObjCClass(ClassLikeDecl& target)
+{
+    auto curFile = target.curFile;
+    auto getClassCall = CreateGetClassCall(*StaticCast<ClassTy>(target.ty), curFile);
+    auto classDecl = CreateGetObjCClassDecl(target);
+    classDecl->funcBody->body = CreateBlock(Nodes<Node>(std::move(getClassCall)));
+    return classDecl;
 }
 
 OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObject(Decl& target, FuncDecl& ctor, bool generateForOneWayMapping,
@@ -1254,6 +1286,13 @@ OwnedPtr<ThrowExpr> ASTFactory::CreateThrowUnreachableCodeExpr(File& file)
     return CreateThrowException(*exceptionDecl, {}, file, typeManager);
 }
 
+OwnedPtr<ThrowExpr> ASTFactory::CreateThrowStaticMethodCallOnInterfaceExpr(File& file)
+{
+    auto exceptionDecl = bridge.GetObjCStaticMethodCallOnIntefaceExceptionDecl();
+    CJC_NULLPTR_CHECK(exceptionDecl);
+    return CreateThrowException(*exceptionDecl, {}, file, typeManager);
+}
+
 std::set<Ptr<FuncDecl>> ASTFactory::GetAllParentCtors(ClassDecl& target) const
 {
     std::set<Ptr<FuncDecl>> result = {};
@@ -1340,13 +1379,18 @@ OwnedPtr<FuncDecl> ASTFactory::CreateImplCtor(FuncDecl& from)
 
 bool ASTFactory::IsGeneratedMember(const Decl& decl) const
 {
-    return IsGeneratedNativeHandleField(decl) || IsGeneratedHasInitedField(decl) || IsGeneratedCtor(decl) ||
-        IsGeneratedNativeHandleGetter(decl);
+    return IsGeneratedNativeHandleField(decl) || IsGeneratedGetObjCClassFunction(decl) ||
+        IsGeneratedHasInitedField(decl) || IsGeneratedCtor(decl) || IsGeneratedNativeHandleGetter(decl);
 }
 
 bool ASTFactory::IsGeneratedNativeHandleField(const Decl& decl) const
 {
     return decl.identifier.Val() == NATIVE_HANDLE_IDENT;
+}
+
+bool ASTFactory::IsGeneratedGetObjCClassFunction(const Decl& decl) const
+{
+    return decl.identifier.Val() == GET_OBJ_C_CLASS_IDENT;
 }
 
 bool ASTFactory::IsGeneratedHasInitedField(const Decl& decl) const
@@ -1837,7 +1881,15 @@ OwnedPtr<CallExpr> ASTFactory::CreateObjCMsgSendCall(
     return CreateObjCMsgSendCall(fty, std::move(ft), std::move(args));
 }
 
-OwnedPtr<Expr> ASTFactory::CreateGetClassCall(ClassTy& ty, Ptr<File> curFile)
+OwnedPtr<Expr> ASTFactory::CreateGetClassCall(const ClassLikeDecl& cls, Ptr<File> curFile)
+{
+    auto cnameFunc = As<ASTKind::FUNC_DECL>(FindMirrorMember(GET_OBJ_C_CLASS_IDENT, cls));
+    auto cnameRefExpr = CreateRefExpr(*cnameFunc);
+    auto cnameCall = CreateCall(cnameFunc, curFile);
+    return cnameCall;
+}
+
+OwnedPtr<Expr> ASTFactory::CreateGetClassCall(ClassLikeTy& ty, Ptr<File> curFile)
 {
     auto getClassFuncDecl = bridge.GetGetClassDecl();
     auto getClassExpr = CreateRefExpr(*getClassFuncDecl);

@@ -164,6 +164,7 @@ inline const std::string OBJ_C_FUNC_IDENT = "ObjCFunc";
 inline const std::string OBJ_C_BLOCK_IDENT = "ObjCBlock";
 inline const std::string OBJ_C_LANG_PACKAGE_IDENT = "objc.lang";
 inline const std::string NATIVE_HANDLE_IDENT = "$obj";
+inline const std::string GET_OBJ_C_CLASS_IDENT = "$getObjCClass";
 inline const std::string REGISTRY_ID_IDENT = "$registryId";
 inline const std::string REGISTRY_ID_SETTER_SELECTOR = "set$registryId:";
 inline const std::string SYNTHETIC_CLASS_SUFFIX = "$impl";
