@@ -552,7 +552,8 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx,
     jim.DesugarPackage(pkg, structMemberMap);
     Interop::ObjC::Desugar(Interop::ObjC::InteropContext(
         pkg, typeManager, importManager, diag, *ci->mangler,
-        ci->invocation.globalOptions.output, ci->invocation.globalOptions.outputObjCGenDir, structMemberMap));
+        ci->invocation.globalOptions.output, ci->invocation.globalOptions.outputObjCGenDir,
+        structMemberMap, ci->invocation.globalOptions.target.os));
 
     DesugarDeclsForPackage(pkg, ci->invocation.globalOptions.enableCoverage);
     std::function<VisitAction(Ptr<Node>)> preVisit = [this, &ctx](Ptr<Node> node) -> VisitAction {

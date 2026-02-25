@@ -891,8 +891,9 @@ void ObjCGenerator::GenerateInitializer(const string& objCDeclName)
         cjLibName = "lib" + cjLibName;
     }
     size_t extIdx = cjLibName.find_last_of(".");
-    if (extIdx == std::string::npos || cjLibName.substr(extIdx) != ".dylib") {
-        cjLibName += ".dylib"; // what if we compile on linux target?
+    const auto& sharedLibraryExtension = ctx.sharedLibraryExtension;
+    if (extIdx == std::string::npos || cjLibName.substr(extIdx) != sharedLibraryExtension) {
+        cjLibName += sharedLibraryExtension;
     }
 
     cjLibName = "\"" + cjLibName + "\"";
