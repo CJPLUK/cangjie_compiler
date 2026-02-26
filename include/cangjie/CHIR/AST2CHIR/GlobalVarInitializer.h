@@ -74,7 +74,7 @@ private:
     T* TryGetDeserialized(const std::string& mangledName)
     {
         // merging specific
-        if (opts.IsCompilingCJMP()) {
+        if (opts.IsCompilingCJMPSpecific()) {
             return TryGetFromCache<Value, T>(GLOBAL_VALUE_PREFIX + mangledName, trans.deserializedVals);
         }
         return nullptr;

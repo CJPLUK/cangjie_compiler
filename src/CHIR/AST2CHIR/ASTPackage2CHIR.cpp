@@ -1628,7 +1628,7 @@ void AST2CHIR::ResetSpecificFunc(const AST::FuncDecl& funcDecl, Func& func)
 
 void AST2CHIR::ProcessCommonAndSpecificExtends()
 {
-    bool compileSpecific = opts.IsCompilingCJMP();
+    bool compileSpecific = opts.IsCompilingCJMPSpecific();
     if (!compileSpecific) {
         return;
     }

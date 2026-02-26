@@ -49,7 +49,7 @@ public:
           opts(opts),
           gim(gim),
           increKind(kind),
-          mergingSpecific(opts.IsCompilingCJMP()),
+          mergingSpecific(opts.IsCompilingCJMPSpecific()),
           deserializedVals(deserializedVals),
           annoFactoryFuncs(annoFactories),
           maybeUnreachable(maybeUnreachable),
