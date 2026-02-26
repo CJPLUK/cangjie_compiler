@@ -49,7 +49,7 @@ public:
           opts(opts),
           gim(gim),
           increKind(kind),
-          mergingSpecific(opts.IsCompilingCJMP()),
+          mergingSpecific(opts.IsCompilingCJMPSpecific()),
           deserializedVals(deserializedVals),
           annoFactoryFuncs(annoFactories),
           maybeUnreachable(maybeUnreachable),
@@ -518,6 +518,20 @@ public:
 
     void CollectValueAnnotation(const AST::Decl& decl);
     void CollectTypeAnnotation(const AST::InheritableDecl& decl, const CustomTypeDef& cl);
+
+    /**
+     * @brief Creates var init func for class/struct decls, because of cjmp.
+     *
+     * @param decl The AST class/struct which need to add varInit func.
+     */
+    void CreateClassStructDeclVarInit(const AST::Decl& decl)
+    {
+        CJC_ASSERT(decl.astKind == AST::ASTKind::CLASS_DECL ||
+            decl.astKind == AST::ASTKind::STRUCT_DECL);
+        auto def = StaticCast<CustomTypeDef*>(GetNominalSymbolTable(decl));
+        CJC_NULLPTR_CHECK(def);
+        def->SetVarInitializationFunc(TranslateVarsInit(decl));
+    };
 
 private:
     friend class GlobalVarInitializer;

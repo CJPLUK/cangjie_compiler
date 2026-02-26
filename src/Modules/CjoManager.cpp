@@ -309,7 +309,7 @@ bool CjoManager::NeedCollectDependency(const std::string& curName, bool isCurMac
 
 void CjoManager::LoadFilesOfCommonPart(Ptr<Package> pkg)
 {
-    if (!impl->GetGlobalOptions().IsCompilingCJMP()) {
+    if (!impl->GetGlobalOptions().IsCompilingCJMPSpecific()) {
         return;
     }
     CJC_NULLPTR_CHECK(pkg);
@@ -344,7 +344,7 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
     loaders.reserve(q.size());
     // Load common part cjo
     for (auto pkg : packages) {
-        if (impl->GetGlobalOptions().IsCompilingCJMP()) {
+        if (impl->GetGlobalOptions().IsCompilingCJMPSpecific()) {
             std::string expectedPackageName = pkg->fullPackageName;
             auto commonLoader = GetCommonPartCjo(expectedPackageName);
             if (!commonLoader) {

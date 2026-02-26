@@ -47,11 +47,6 @@ Ptr<Value> Translator::Visit(const AST::StructDecl& decl)
             CJC_ABORT();
         }
     }
-
-    // translate var init
-    Translator trans = Copy();
-    structDef->SetVarInitializationFunc(trans.TranslateVarsInit(decl));
-
     // set implemented interface
     for (auto& superInterfaceTy : decl.GetStableSuperInterfaceTys()) {
         auto astType = TranslateType(*superInterfaceTy);

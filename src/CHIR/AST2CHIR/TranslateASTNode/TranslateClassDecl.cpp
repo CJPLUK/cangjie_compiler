@@ -90,10 +90,6 @@ void Translator::TranslateClassLikeDecl(ClassDef& classDef, const AST::ClassLike
 
     // collect annotation info of the type and members for annotation target check
     CollectTypeAnnotation(decl, classDef);
-
-    // translate vars init for CJMP.
-    Translator trans = Copy();
-    classDef.SetVarInitializationFunc(trans.TranslateVarsInit(decl));
 }
 
 void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)
