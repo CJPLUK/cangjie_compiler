@@ -19,11 +19,7 @@ using namespace Cangjie::CHIR;
 
 std::vector<BlockGroup*> SimpleIterator::Iterate(const Expression& expr)
 {
-    auto kind{expr.GetExprKind()};
-    if (kind == ExprKind::IF || kind == ExprKind::LOOP || Is<ForIn>(expr)) {
-        return expr.GetBlockGroups();
-    }
-    return {};
+    return expr.GetBlockGroups();
 }
 
 std::vector<Block*> SimpleIterator::Iterate(const BlockGroup& blockGroup)

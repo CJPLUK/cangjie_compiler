@@ -143,41 +143,29 @@ FuncBase* GenerateVTable::GetMutFuncWrapper(const Type& thisType, const std::vec
 void GenerateVTable::UpdateFuncCall()
 {
     Utils::ProfileRecorder recorder("GenerateVTable", "UpdateFuncCall");
-    std::vector<Apply*> applys;
-    std::vector<ApplyWithException*> applyEs;
-    std::function<VisitResult(Expression&)> preVisit = [this, &preVisit, &applys, &applyEs](Expression& e) {
-        if (auto lambda = DynamicCast<Lambda*>(&e)) {
-            Visitor::Visit(*lambda->GetBody(), preVisit);
-        } else if (auto dyExpr = DynamicCast<DynamicDispatch*>(&e)) {
+    auto preVisit = [this](Expression& e) {
+        if (auto dyExpr = DynamicCast<DynamicDispatch*>(&e)) {
             e.Set<VirMethodOffset>(dyExpr->GetVirtualMethodOffset(&builder));
         } else if (auto dyExprE = DynamicCast<DynamicDispatchWithException*>(&e)) {
             e.Set<VirMethodOffset>(dyExprE->GetVirtualMethodOffset(&builder));
         } else if (auto apply = DynamicCast<Apply*>(&e)) {
             auto callee = DynamicCast<FuncBase*>(apply->GetCallee());
             if (CalleeIsMutFuncFromParent(apply->GetThisType(), callee, *e.GetTopLevelFunc())) {
-                applys.emplace_back(apply);
+                auto wrapperFunc = GetMutFuncWrapper(*apply->GetThisType(), apply->GetArgs(),
+                    apply->GetInstantiatedTypeArgs(), *apply->GetResult()->GetType(), *callee);
+                apply->ReplaceOperand(callee, wrapperFunc);
             }
         } else if (auto applyE = DynamicCast<ApplyWithException*>(&e)) {
             auto callee = DynamicCast<FuncBase*>(applyE->GetCallee());
             if (CalleeIsMutFuncFromParent(applyE->GetThisType(), callee, *e.GetTopLevelFunc())) {
-                applyEs.emplace_back(applyE);
+                auto wrapperFunc = GetMutFuncWrapper(*applyE->GetThisType(), applyE->GetArgs(),
+                    applyE->GetInstantiatedTypeArgs(), *applyE->GetResult()->GetType(), *callee);
+                applyE->ReplaceOperand(callee, wrapperFunc);
             }
         }
         return VisitResult::CONTINUE;
     };
     for (auto func : package.GetGlobalFuncs()) {
         Visitor::Visit(*func, preVisit);
-    }
-    for (auto apply : applys) {
-        auto callee = VirtualCast<FuncBase*>(apply->GetCallee());
-        auto wrapperFunc = GetMutFuncWrapper(*apply->GetThisType(), apply->GetArgs(),
-            apply->GetInstantiatedTypeArgs(), *apply->GetResult()->GetType(), *callee);
-        apply->ReplaceOperand(callee, wrapperFunc);
-    }
-    for (auto apply : applyEs) {
-        auto callee = VirtualCast<FuncBase*>(apply->GetCallee());
-        auto wrapperFunc = GetMutFuncWrapper(*apply->GetThisType(), apply->GetArgs(),
-            apply->GetInstantiatedTypeArgs(), *apply->GetResult()->GetType(), *callee);
-        apply->ReplaceOperand(callee, wrapperFunc);
     }
 }

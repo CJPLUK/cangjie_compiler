@@ -107,42 +107,56 @@ bool LeftIsBoxTypeOfRight(const Type& left, const Type& right)
     return leftIsGenericOrEqualToRight(*StaticCast<BoxType*>(leftType)->GetBaseType(), right);
 }
 
-bool StoreElementRefNeedBox(const StoreElementRef& ser, CHIRBuilder& builder)
+void BoxStoreElementRefSrcValueIfNeed(StoreElementRef& ser, CHIRBuilder& builder)
 {
     auto targetType = GetTargetType(*ser.GetLocation()->GetType(), ser.GetPath(), builder);
-    auto srcType = ser.GetValue()->GetType();
+    auto srcValue = ser.GetValue();
+    auto srcType = srcValue->GetType();
     if (LeftIsBoxTypeOfRight(*targetType, *srcType)) {
-        return true;
-    } else {
-        return false;
+        auto parent = ser.GetParentBlock();
+        auto boxType = builder.GetType<RefType>(builder.GetType<BoxType>(srcType));
+        auto boxExpr = builder.CreateExpression<Box>(boxType, srcValue, parent);
+        boxExpr->MoveBefore(&ser);
+        ser.ReplaceOperand(srcValue, boxExpr->GetResult());
     }
 }
 
-bool GetElementRefNeedUnBox(const GetElementRef& ger, CHIRBuilder& builder)
+void UnBoxGetElementRefResIfNeed(GetElementRef& ger, CHIRBuilder& builder)
 {
     // If the base of the GetElementRef expression is enum, it must be the index on which we want to get enum.
     // Therefore, we do not need to box the targetType.
     auto baseType = ger.GetLocation()->GetType()->StripAllRefs();
     if (baseType->IsEnum()) {
-        return false;
+        return;
     }
     auto srcType = GetTargetType(*baseType, ger.GetPath(), builder);
     auto targetType = ger.GetResult()->GetType()->StripAllRefs();
     if (LeftIsBoxTypeOfRight(*srcType, *targetType)) {
         auto users = ger.GetResult()->GetUsers();
         CJC_ASSERT(users.size() == 1 && users[0]->GetExprKind() == CHIR::ExprKind::LOAD);
-        return true;
-    } else {
-        return false;
+        auto boxRefType = builder.GetType<RefType>(builder.GetType<BoxType>(targetType));
+        auto gerResType = builder.GetType<RefType>(boxRefType);
+        ger.GetResult()->SetType(*gerResType);
+
+        auto load = ger.GetResult()->GetUsers()[0];
+        CJC_ASSERT(load->GetExprKind() == CHIR::ExprKind::LOAD);
+        auto loadRes = load->GetResult();
+        loadRes->SetType(*boxRefType);
+
+        auto loadResUsers = loadRes->GetUsers();
+        auto unbox = builder.CreateExpression<UnBox>(targetType, loadRes, ger.GetParentBlock());
+        unbox->MoveAfter(load);
+        for (auto user : loadResUsers) {
+            user->ReplaceOperand(loadRes, unbox->GetResult());
+        }
     }
 }
 
-std::pair<bool, std::vector<size_t>> TupleNeedBox(const Tuple& tuple)
+void BoxTupleOpIfNeed(Tuple& tuple, CHIRBuilder& builder)
 {
-    std::pair<bool, std::vector<size_t>> retVal = {false, {}};
     auto tupleRes = tuple.GetResult();
     if (!tupleRes->GetType()->IsEnum()) {
-        return retVal;
+        return;
     }
     auto operands = tuple.GetOperands();
     auto indexExpr = StaticCast<Constant*>(StaticCast<LocalVar*>(operands[0])->GetExpr());
@@ -161,15 +175,46 @@ std::pair<bool, std::vector<size_t>> TupleNeedBox(const Tuple& tuple)
         auto paramType = paramTypes[i];
         auto targetType = operands[i]->GetType();
         if (LeftIsBoxTypeOfRight(*paramType, *targetType)) {
-            retVal.first = true;
-            retVal.second.emplace_back(i + 1);
+            auto srcValue = tuple.GetOperand(i + 1);
+            auto boxRefType = builder.GetType<RefType>(builder.GetType<BoxType>(srcValue->GetType()));
+            auto boxExpr = builder.CreateExpression<Box>(boxRefType, srcValue, tuple.GetParentBlock());
+            boxExpr->MoveBefore(&tuple);
+            tuple.ReplaceOperand(i + 1, boxExpr->GetResult());
         }
     }
-    return retVal;
 }
 
-std::pair<std::pair<TypeCast*, std::vector<size_t>>, Field*> FieldAndTypeCastNeedUnBox(
-    Field& field, const std::vector<std::pair<TypeCast*, std::vector<size_t>>>& collected, CHIRBuilder& builder)
+void InsertUnBoxAfterField(Field& field, CHIRBuilder& builder)
+{
+    auto fieldRes = field.GetResult();
+    auto resType = fieldRes->GetType();
+    auto boxRefType = builder.GetType<RefType>(builder.GetType<BoxType>(resType));
+    fieldRes->SetType(*boxRefType);
+    auto parent = field.GetParentBlock();
+    auto oldUsers = fieldRes->GetUsers();
+    auto unbox = builder.CreateExpression<UnBox>(resType, fieldRes, parent);
+    unbox->MoveAfter(&field);
+    for (auto user : oldUsers) {
+        user->ReplaceOperand(fieldRes, unbox->GetResult());
+    }
+}
+
+void CastEnumTypeToTupleWithBoxArg(TypeCast& typecast, const std::vector<size_t>& path, CHIRBuilder& builder)
+{
+    auto typecastRes = typecast.GetResult();
+    auto targetType = StaticCast<TupleType*>(typecastRes->GetType());
+    auto eleTypes = targetType->GetElementTypes();
+    for (auto i : path) {
+        auto boxType = builder.GetType<RefType>(builder.GetType<BoxType>(eleTypes[i]));
+        CJC_ASSERT(i < eleTypes.size());
+        eleTypes[i] = boxType;
+    }
+    auto newTargetType = builder.GetType<TupleType>(eleTypes);
+    typecastRes->SetType(*newTargetType);
+}
+
+bool FieldAndTypeCastNeedUnBox(
+    Field& field, std::unordered_map<TypeCast*, std::vector<size_t>>& collected, CHIRBuilder& builder)
 {
     /** enum E {
      *      A | Box<Struct-S>&
@@ -186,38 +231,36 @@ std::pair<std::pair<TypeCast*, std::vector<size_t>>, Field*> FieldAndTypeCastNee
      */
     auto index = field.GetPath();
     if (index.size() != 1) {
-        return {{nullptr, {}}, nullptr};
+        return false;
     }
     if (index[0] == 0) {
-        return {{nullptr, {}}, nullptr};
+        return false;
     }
     auto base = field.GetBase();
     if (!base->IsLocalVar()) {
-        return {{nullptr, {}}, nullptr};
+        return false;
     }
     auto baseExpr = StaticCast<LocalVar*>(base)->GetExpr();
     if (baseExpr->GetExprKind() != CHIR::ExprKind::TYPECAST) {
-        return {{nullptr, {}}, nullptr};
+        return false;
     }
     auto typecast = StaticCast<TypeCast*>(baseExpr);
     auto srcType = typecast->GetSourceTy();
     if (!srcType->IsEnum()) {
-        return {{nullptr, {}}, nullptr};
+        return false;
     }
     auto targetType = typecast->GetTargetTy();
     if (!targetType->IsTuple()) {
-        return {{nullptr, {}}, nullptr};
+        return false;
     }
-    for (auto& cast : collected) {
-        if (cast.first != typecast) {
-            continue;
-        }
-        for (auto i : cast.second) {
+    if (auto it = collected.find(typecast); it != collected.end()) {
+        for (auto i : it->second) {
             if (i == index[0]) {
-                return {{nullptr, {}}, &field};
+                InsertUnBoxAfterField(field, builder);
+                break;
             }
         }
-        return {{nullptr, {}}, nullptr};
+        return true;
     }
     auto enumDef = StaticCast<EnumType*>(srcType)->GetEnumDef();
     auto tupleArgs = StaticCast<TupleType*>(targetType)->GetElementTypes();
@@ -249,100 +292,27 @@ std::pair<std::pair<TypeCast*, std::vector<size_t>>, Field*> FieldAndTypeCastNee
         }
     }
     if (path.empty()) {
-        return {{nullptr, {}}, nullptr};
-    } else {
-        return {{typecast, path}, fieldRes};
+        return false;
     }
+    collected.emplace(typecast, path);
+    CastEnumTypeToTupleWithBoxArg(*typecast, path, builder);
+    if (fieldRes != nullptr) {
+        InsertUnBoxAfterField(*fieldRes, builder);
+    }
+    return true;
 }
 
-bool FieldNeedUnBox(Field& field, CHIRBuilder& builder)
+void UnBoxFieldResIfNeed(Field& field, CHIRBuilder& builder)
 {
     auto baseType = field.GetBase()->GetType();
     if (baseType->IsEnum()) {
-        return false;
+        return;
     }
     auto targetType = GetTargetType(*baseType, field.GetPath(), builder);
     auto srcType = field.GetResult()->GetType();
     if (LeftIsBoxTypeOfRight(*targetType, *srcType)) {
-        return true;
-    } else {
-        return false;
+        InsertUnBoxAfterField(field, builder);
     }
-}
-
-void InsertBoxBeforeStoreElementRef(StoreElementRef& ser, CHIRBuilder& builder)
-{
-    auto parent = ser.GetParentBlock();
-    auto srcValue = ser.GetValue();
-    auto boxType = builder.GetType<RefType>(builder.GetType<BoxType>(srcValue->GetType()));
-    auto boxExpr = builder.CreateExpression<Box>(boxType, srcValue, parent);
-    boxExpr->MoveBefore(&ser);
-    ser.ReplaceOperand(srcValue, boxExpr->GetResult());
-}
-
-void InsertUnBoxAfterGetElementRef(GetElementRef& ger, CHIRBuilder& builder)
-{
-    auto parent = ger.GetParentBlock();
-    auto location = ger.GetLocation();
-    auto gerLoc = ger.GetDebugLocation();
-    auto& path = ger.GetPath();
-    auto targetType = ger.GetResult()->GetType()->StripAllRefs();
-    auto boxType = builder.GetType<RefType>(builder.GetType<BoxType>(targetType));
-    auto gerResType = builder.GetType<RefType>(boxType);
-    auto newGer = builder.CreateExpression<GetElementRef>(gerLoc, gerResType, location, path, parent);
-    newGer->MoveBefore(&ger);
-
-    auto load = ger.GetResult()->GetUsers()[0];
-    auto loadLoc = load->GetDebugLocation();
-    auto newLoad = builder.CreateExpression<Load>(loadLoc, boxType, newGer->GetResult(), parent);
-    newLoad->MoveBefore(&ger);
-
-    auto unbox = builder.CreateExpression<UnBox>(targetType, newLoad->GetResult(), parent);
-    load->ReplaceWith(*unbox);
-    ger.RemoveSelfFromBlock();
-}
-
-void InsertBoxBeforeTuple(Tuple& tuple, const std::vector<size_t>& path, CHIRBuilder& builder)
-{
-    auto parent = tuple.GetParentBlock();
-    for (auto i : path) {
-        auto srcValue = tuple.GetOperand(i);
-        auto boxType = builder.GetType<RefType>(builder.GetType<BoxType>(srcValue->GetType()));
-        auto boxExpr = builder.CreateExpression<Box>(boxType, srcValue, parent);
-        boxExpr->MoveBefore(&tuple);
-        tuple.ReplaceOperand(srcValue, boxExpr->GetResult());
-    }
-}
-
-void TypeCastToBoxType(TypeCast& typecast, const std::vector<size_t>& path, CHIRBuilder& builder)
-{
-    auto targetType = StaticCast<TupleType*>(typecast.GetTargetTy());
-    auto eleTypes = targetType->GetElementTypes();
-    for (auto i : path) {
-        auto boxType = builder.GetType<RefType>(builder.GetType<BoxType>(eleTypes[i]));
-        CJC_ASSERT(i < eleTypes.size());
-        eleTypes[i] = boxType;
-    }
-    auto newTargetType = builder.GetType<TupleType>(eleTypes);
-    auto parent = typecast.GetParentBlock();
-    auto loc = typecast.GetDebugLocation();
-    auto newTypeCast = builder.CreateExpression<TypeCast>(loc, newTargetType, typecast.GetSourceValue(), parent);
-    newTypeCast->MoveBefore(&typecast);
-    auto newResult = newTypeCast->GetResult();
-    newResult->Set<EnumCaseIndex>(typecast.GetResult()->Get<EnumCaseIndex>());
-    typecast.ReplaceWith(*newTypeCast);
-}
-
-void InsertUnBoxAfterField(Field& field, CHIRBuilder& builder)
-{
-    auto resType = field.GetResult()->GetType();
-    auto boxType = builder.GetType<RefType>(builder.GetType<BoxType>(resType));
-    auto parent = field.GetParentBlock();
-    auto loc = field.GetDebugLocation();
-    auto newField = builder.CreateExpression<Field>(loc, boxType, field.GetBase(), field.GetPath(), parent);
-    newField->MoveBefore(&field);
-    auto unbox = builder.CreateExpression<UnBox>(resType, newField->GetResult(), parent);
-    field.ReplaceWith(*unbox);
 }
 }
 
@@ -398,61 +368,27 @@ void BoxRecursionValueType::Run()
 
 void BoxRecursionValueType::InsertBoxAndUnboxExprForRecursionValueType()
 {
-    std::vector<StoreElementRef*> storeElementRefs;
-    std::vector<GetElementRef*> getElementRefs;
-    std::vector<std::pair<Tuple*, std::vector<size_t>>> tuples;
-    std::vector<std::pair<TypeCast*, std::vector<size_t>>> typecasts;
-    std::vector<Field*> fields;
-    std::function<VisitResult(Expression&)> visitor = [&, this](Expression& e) {
-        if (e.GetExprKind() == CHIR::ExprKind::LAMBDA) {
-            auto& lambda = StaticCast<Lambda&>(e);
-            Visitor::Visit(*lambda.GetBody(), visitor);
-        } else if (e.GetExprKind() == CHIR::ExprKind::STORE_ELEMENT_REF) {
+    std::unordered_map<TypeCast*, std::vector<size_t>> typecasts;
+    auto visitor = [this, &typecasts](Expression& e) {
+        if (e.GetExprKind() == CHIR::ExprKind::STORE_ELEMENT_REF) {
             auto& ser = StaticCast<StoreElementRef&>(e);
-            if (StoreElementRefNeedBox(ser, builder)) {
-                storeElementRefs.emplace_back(&ser);
-            }
+            BoxStoreElementRefSrcValueIfNeed(ser, builder);
         } else if (e.GetExprKind() == CHIR::ExprKind::GET_ELEMENT_REF) {
             auto& ger = StaticCast<GetElementRef&>(e);
-            if (GetElementRefNeedUnBox(ger, builder)) {
-                getElementRefs.emplace_back(&ger);
-            }
+            UnBoxGetElementRefResIfNeed(ger, builder);
         } else if (e.GetExprKind() == CHIR::ExprKind::TUPLE) {
             auto& tuple = StaticCast<Tuple&>(e);
-            if (auto res = TupleNeedBox(tuple); res.first) {
-                tuples.emplace_back(&tuple, res.second);
-            }
+            BoxTupleOpIfNeed(tuple, builder);
         } else if (e.GetExprKind() == CHIR::ExprKind::FIELD) {
             auto& field = StaticCast<Field&>(e);
             auto res = FieldAndTypeCastNeedUnBox(field, typecasts, builder);
-            if (res.first.first != nullptr) {
-                typecasts.emplace_back(res.first);
-            }
-            if (res.second != nullptr) {
-                fields.emplace_back(res.second);
-            }
-            if (FieldNeedUnBox(field, builder)) {
-                fields.emplace_back(&field);
+            if (!res) {
+                UnBoxFieldResIfNeed(field, builder);
             }
         }
         return VisitResult::CONTINUE;
     };
     for (auto func : pkg.GetGlobalFuncs()) {
         Visitor::Visit(*func, visitor);
-    }
-    for (auto e : storeElementRefs) {
-        InsertBoxBeforeStoreElementRef(*e, builder);
-    }
-    for (auto e : getElementRefs) {
-        InsertUnBoxAfterGetElementRef(*e, builder);
-    }
-    for (auto& e : tuples) {
-        InsertBoxBeforeTuple(*e.first, e.second, builder);
-    }
-    for (auto& e : typecasts) {
-        TypeCastToBoxType(*e.first, e.second, builder);
-    }
-    for (auto e : fields) {
-        InsertUnBoxAfterField(*e, builder);
     }
 }

@@ -204,8 +204,6 @@ std::unordered_set<Value*> GetLambdaCapturedVarsRecursively(const Lambda& lambda
                         collectRecursively(*child, visited);
                     }
                 }
-            } else if (expr.IsLambda()) {
-                collectRecursively(StaticCast<const Lambda&>(expr), visited);
             }
             return VisitResult::CONTINUE;
         };

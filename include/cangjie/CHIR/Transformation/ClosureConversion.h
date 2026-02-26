@@ -120,8 +120,8 @@ private:
     void ReplaceUserPoint(
         Lambda& srcFunc, Expression& user, const std::vector<Value*>& envs, ClassDef& autoEnvImplDef);
     void ConvertExpressions();
-    void ConvertApplyWithExceptionToInvokeWithException(const std::vector<ApplyWithException*>& applyExprs);
-    void ConvertApplyToInvoke(const std::vector<Apply*>& applyExprs);
+    void ConvertApplyWithExceptionToInvokeWithException(ApplyWithException& apply);
+    void ConvertApplyToInvoke(Apply& apply);
     void CreateVTableForAutoEnvDef();
     bool LambdaCanBeInlined(const Expression& user, const FuncBase& lambda);
     void DoFunctionInlineForLambda();
@@ -131,13 +131,21 @@ private:
         ClassDef& autoEnvImplDef, Lambda& nestedFunc, const std::vector<GenericType*>& genericTypeParams,
         const std::unordered_map<const GenericType*, Type*>& instMap, const std::vector<Value*>& capturedValues);
     void ModifyTypeMismatchInExpr();
+    void CastApplyArgAndRetIfNeed(Apply& e);
     void WrapApplyRetVal(Apply& apply);
+    void CastApplyWithExceptionArgAndRetIfNeed(ApplyWithException& e);
     void WrapApplyWithExceptionRetVal(ApplyWithException& apply);
-    void WrapInvokeRetVal(Expression& e);
-    void WrapInvokeWithExceptionRetVal(Expression& e);
+    void CastInvokeRetIfNeed(DynamicDispatch& e);
+    void WrapInvokeRetVal(DynamicDispatch& e);
+    void CastInvokeWithExceptionRetIfNeed(DynamicDispatchWithException& e);
+    void WrapInvokeWithExceptionRetVal(DynamicDispatchWithException& e);
+    void CastGetElementRefRetIfNeed(GetElementRef& e);
     void WrapGetElementRefRetVal(GetElementRef& getEleRef);
     void WrapFieldRetVal(Field& field);
+    void CastRawArrayInitByValueArgIfNeed(RawArrayInitByValue& e);
+    void CastTypeCastArgIfNeed(TypeCast& e);
     void WrapTypeCastSrcVal(TypeCast& typecast);
+    void CastSpawnArgIfNeed(Spawn& e);
     ClassDef* GetOrCreateAutoEnvWrapper(ClassType& instAutoEnvBaseType);
     ClassDef* CreateAutoEnvWrapper(const std::string& className, ClassType& superClassType);
     void CreateMemberVarInAutoEnvWrapper(ClassDef& autoEnvWrapperDef);

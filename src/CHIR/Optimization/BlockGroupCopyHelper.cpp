@@ -195,20 +195,17 @@ void BlockGroupCopyHelper::InstBlockGroup(Ptr<BlockGroup> group)
         }
     };
     PrivateTypeConverterNoInvokeOriginal converter(convertFunc, builder);
-    auto postVisit = [&converter](Expression& e) {
+    auto preVisit = [&converter](Expression& e) {
         converter.VisitExpr(e);
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(*group, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+    Visitor::Visit(*group, preVisit);
 }
 
 void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
 {
-    auto postVisit = [&builder](Expression& e) {
-        if (e.GetExprKind() == ExprKind::LAMBDA) {
-            auto lambda = StaticCast<Lambda*>(&e);
-            FixCastProblemAfterInst(lambda->GetBody(), builder);
-        } else if (e.GetExprKind() == ExprKind::INSTANCEOF) {
+    auto preVisit = [&builder](Expression& e) {
+        if (e.GetExprKind() == ExprKind::INSTANCEOF) {
             // fix instanceOf problem
             auto instance = StaticCast<InstanceOf*>(&e);
             auto objType = instance->GetObject()->GetType();
@@ -297,6 +294,6 @@ void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
         }
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(*group, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+    Visitor::Visit(*group, preVisit);
 }
 }  // namespace Cangjie::CHIR

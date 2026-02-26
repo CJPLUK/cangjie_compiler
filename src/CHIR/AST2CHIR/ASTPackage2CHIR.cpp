@@ -1453,7 +1453,7 @@ void ConvertSpecificMemberMethods(
     Package* package, CHIRBuilder& builder, const std::function<Type*(Type&)>& replaceGenericFunc)
 {
     PrivateTypeConverter converter(replaceGenericFunc, builder);
-    auto postVisit = [&converter](Expression& e) {
+    auto preVisit = [&converter](Expression& e) {
         converter.VisitExpr(e);
         return VisitResult::CONTINUE;
     };
@@ -1477,7 +1477,7 @@ void ConvertSpecificMemberMethods(
 
             bool hasBodyFromCommonPart = f->GetBody();
             if (hasBodyFromCommonPart) {
-                Visitor::Visit(*f, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+                Visitor::Visit(*f, preVisit);
             }
             converter.VisitValue(*f);
         }

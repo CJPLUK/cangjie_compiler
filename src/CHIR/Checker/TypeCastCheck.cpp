@@ -80,12 +80,7 @@ std::optional<std::tuple<Type*, Type*>> TryExtractTypeCast(Expression& expr)
 
 void TypeCastCheck::RunOnFunc(const Func& func)
 {
-    std::function<VisitResult(Expression&)> visitor = [this, &func, &visitor](Expression& expr) {
-        if (expr.IsLambda()) {
-            Visitor::Visit(*StaticCast<Lambda>(expr).GetBody(), visitor);
-            return VisitResult::CONTINUE;
-        }
-
+    auto visitor = [this, &func](Expression& expr) {
         auto typeCast = TryExtractTypeCast(expr);
         if (!typeCast) {
             return VisitResult::CONTINUE;
