@@ -70,6 +70,7 @@ struct MemberJNISignature {
             if (jobject->inheritedTypes.size() > 1) {
                 ty = jobject->inheritedTypes[1]->ty; // take interface ty
             } else {
+                CJC_ASSERT_WITH_MSG(!jobject->inheritedTypes.empty(), "JObject must inherit Cangjie Object");
                 ty = jobject->inheritedTypes[0]->ty; // take superclass ty
             }
         }

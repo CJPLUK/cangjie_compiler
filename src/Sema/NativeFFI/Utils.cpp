@@ -133,6 +133,7 @@ StructDecl& GetStringDecl(const ImportManager& importManager)
 
 OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes)
 {
+    CJC_ASSERT_WITH_MSG(!nodes.empty(), "cannot create lambda with empty body");
     auto retTy = nodes.back()->ty;
     auto lambda = WrapReturningLambdaExpr(typeManager, std::move(nodes));
     return CreateCallExpr(std::move(lambda), {}, nullptr, retTy);
@@ -141,8 +142,8 @@ OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, std::vector
 OwnedPtr<LambdaExpr> WrapReturningLambdaExpr(
     TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes, std::vector<OwnedPtr<FuncParam>> lambdaParams)
 {
-    auto curFile = nodes[0]->curFile;
     CJC_ASSERT(!nodes.empty());
+    auto curFile = nodes[0]->curFile;
     std::vector<Ptr<Ty>> lambdaParamTys;
     std::transform(
         lambdaParams.begin(), lambdaParams.end(), std::back_inserter(lambdaParamTys), [](auto& p) { return p->ty; });
@@ -599,7 +600,7 @@ bool IsGenericParam(const Ptr<Ty> ty, const AST::Decl& decl, Native::FFI::Generi
             }
         }
         CJC_NULLPTR_CHECK(funTy->retTy);
-        if(funTy->retTy->IsGeneric()) {
+        if (funTy->retTy->IsGeneric()) {
             result &= IsGenericParam(funTy->retTy, decl, genericConfig);
         }
         return result;

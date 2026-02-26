@@ -4,13 +4,13 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include <algorithm>
 #include "TypeMapper.h"
 #include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Walker.h"
+#include <algorithm>
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -49,11 +49,11 @@ void MangleTypedefName(std::string& name)
 
     std::replace(name.begin(), name.end(), '.', '_');
 }
-}
+} // namespace
 
 template <class TypeRep, class ToString>
-MappedCType TypeMapper::BuildFunctionalCType(
-    const FuncTy& funcType, const std::vector<TypeRep>& argTypes, const TypeRep& resultType, bool isBlock, ToString toString) const
+MappedCType TypeMapper::BuildFunctionalCType(const FuncTy& funcType, const std::vector<TypeRep>& argTypes,
+    const TypeRep& resultType, bool isBlock, ToString toString) const
 {
     auto typedefNamePrefix = isBlock ? "Block" : "Func";
     auto designator = isBlock ? '^' : '*';
@@ -197,8 +197,8 @@ MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from) const
         case TypeKind::TYPE_FUNC: {
             auto actualFuncType = DynamicCast<FuncTy>(&from);
             CJC_NULLPTR_CHECK(actualFuncType);
-            return BuildFunctionalCType(
-                *actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, false, [this](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
+            return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, false,
+                [this](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
         }
         case TypeKind::TYPE_ENUM:
             if (IsObjCCJMapping(from)) {
@@ -272,6 +272,7 @@ bool TypeMapper::IsObjCCompatible(const Ty& ty)
                 return std::all_of(std::begin(tyArg->typeArgs), std::end(tyArg->typeArgs),
                     [](auto ty) { return IsObjCCompatible(*ty); });
             }
+            return false;
         case TypeKind::TYPE_ENUM:
             if (!ty.IsCoreOptionType()) {
                 return false;
@@ -565,7 +566,8 @@ bool TypeMapper::IsOneWayMapping(const Decl& decl)
 }
 
 namespace {
-bool SupportMembers(const Decl& decl, const std::vector<ASTKind>& kinds) {
+bool SupportMembers(const Decl& decl, const std::vector<ASTKind>& kinds)
+{
     for (const auto& kind : kinds) {
         if (decl.astKind == kind) {
             return true;
@@ -590,7 +592,7 @@ inline bool SupportMemberFunc(const AST::Decl& decl, std::function<bool(Ptr<Ty>)
     bool isValid = decl.TestAttr(Attribute::CONSTRUCTOR) ? true : validTy(fnTy->retTy);
     return isValid && std::all_of(std::begin(fnTy->paramTys), std::end(fnTy->paramTys), validTy);
 }
-}
+} // namespace
 
 bool TypeMapper::IsObjCCJMappingMember(const AST::Decl& decl)
 {
@@ -630,7 +632,7 @@ bool TypeMapper::IsObjCCJMappingMember(const AST::Decl& decl)
 
 bool TypeMapper::IsOneWayMapping(const Ty& ty)
 {
-    if (!ty.IsStruct() && !ty.IsEnum() &&!ty.IsClass()) {
+    if (!ty.IsStruct() && !ty.IsEnum() && !ty.IsClass()) {
         return false;
     }
     auto decl = Ty::GetDeclOfTy(&ty);

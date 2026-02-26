@@ -486,6 +486,7 @@ OwnedPtr<AssignExpr> MockManager::CreateMemberAssignment(
 {
     static const auto UNIT_TY = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     auto decl = RawStaticCast<ClassDecl*>(member.outerDecl);
+    CJC_NULLPTR_CHECK(decl);
     auto thisExpr = CreateRefExpr(
         {"this", DEFAULT_POSITION, DEFAULT_POSITION, false},
         typeManager.GetClassThisTy(*decl, decl->ty->typeArgs));

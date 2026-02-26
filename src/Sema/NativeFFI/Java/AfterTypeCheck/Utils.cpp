@@ -613,6 +613,7 @@ std::string Utils::GetJavaObjectTypeName(const Ty& ty)
     if (ty.kind == TypeKind::TYPE_CLASS || ty.kind == TypeKind::TYPE_INTERFACE) {
         auto& cldecl = *StaticCast<ClassLikeTy&>(ty).commonDecl;
         if (IsJArray(cldecl)) {
+            CJC_ASSERT_WITH_MSG(!ty.typeArgs.empty(), "JArray type must be generic");
             return GetJavaObjectTypeName(*ty.typeArgs[0]) + "[]";
         }
         return GetJavaFQName(cldecl);
@@ -688,6 +689,7 @@ std::string Utils::GetJavaTypeSignature(const Ty& cjtype, std::string fullPackag
             if (!cjtype.IsCoreOptionType()) {
                 break;
             };
+            CJC_ASSERT_WITH_MSG(!cjtype.typeArgs.empty(), "Option type must be generic");
             auto& argTy = *cjtype.typeArgs[0];
             if (IsJArray(argTy)) {
                 jsig = GetJavaTypeSignature(argTy);
@@ -921,6 +923,7 @@ OwnedPtr<Expr> Utils::CreateOptionMatch(
 
     auto& optTy = *selector->ty;
     CJC_ASSERT(optTy.IsCoreOptionType());
+    CJC_ASSERT_WITH_MSG(!optTy.typeArgs.empty(), "Option type must be generic");
     auto optArgTy = optTy.typeArgs[0];
 
     auto vp = CreateVarPattern(V_COMPILER, optArgTy);
