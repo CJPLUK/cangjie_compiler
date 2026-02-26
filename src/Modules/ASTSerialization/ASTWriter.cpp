@@ -13,6 +13,7 @@
 
 #include <queue>
 
+#include "cangjie/AST/AttributePack.h"
 #include "flatbuffers/ModuleFormat_generated.h"
 
 #include "cangjie/AST/Create.h"
@@ -198,7 +199,14 @@ void CollectBodyToQueue(const Decl& decl, std::queue<Ptr<Decl>>& queue)
 
 bool IsGenericInCommonSerialization(bool serializingCommon, const Decl& decl)
 {
-    return serializingCommon && decl.outerDecl && decl.outerDecl->TestAttr(Attribute::GENERIC);
+    bool shouldSerialize = serializingCommon && decl.outerDecl && decl.outerDecl->TestAttr(Attribute::GENERIC);
+    if (auto fd = DynamicCast<const AST::FuncDecl*>(&decl); shouldSerialize && fd) {
+        // `static init` never gets deserialized (LoadDecl) when compiling platform part
+        // so, this declaration is skipped to avoid other decls becoming dependent to never loaded declaration.
+        shouldSerialize = !(fd->TestAttr(AST::Attribute::STATIC, AST::Attribute::CONSTRUCTOR) &&
+            fd->identifier == STATIC_INIT_FUNC);
+    }
+    return shouldSerialize;
 }
 
 void CollectFullExportParamDecl(
@@ -442,6 +450,9 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
             return false;
         }
         if (decl.astKind == AST::ASTKind::EXTEND_DECL && serializingCommon) {
+            return true;
+        }
+        if (IsGenericInCommonSerialization(this->serializingCommon, *d)) {
             return true;
         }
         // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls
@@ -1244,8 +1255,12 @@ TFuncBodyOffset ASTWriter::ASTWriterImpl::SaveFuncBody(const FuncBody& funcBody)
     // 5. funcBody of default implementation which is defined in interface.
     // 6. funcBody of generic-related functions from common side
     // NOTE: desugared param function has same 'outerDecl' and 'GLOBAL' attribute will its owner function.
+    // also note that generic decls are handled in the beginning already but non-generic static members
+    // inside of generis don't need to be stored
+    bool isNonStaticGenericCJMP = fd && IsGenericInCommonSerialization(serializingCommon, *fd) &&
+        !fd->TestAttr(Attribute::STATIC);
     bool shouldExportBody = config.exportContent && exportFuncBody &&
-        (!fd || CanBeSrcExported(*fd) || IsGenericInCommonSerialization(serializingCommon, *fd));
+        (!fd || CanBeSrcExported(*fd) || isNonStaticGenericCJMP);
     bool validBody = shouldExportBody && Ty::IsTyCorrect(funcBody.ty) && funcBody.body;
     auto bodyIdx = validBody ? SaveExpr(*funcBody.body) : INVALID_FORMAT_INDEX;
     // CaptureKind is need if the 'funcBody' is exported.

@@ -369,7 +369,7 @@ private:
     {
         return deserializedDecls.find(&decl) == deserializedDecls.end();
     }
-    void ProcessCommonAndSpecificNominals();
+    void ProcessCommonAndSpecificExtends();
     const GlobalOptions& opts;
     const GenericInstantiationManager* gim;
     ImportManager& importManager;

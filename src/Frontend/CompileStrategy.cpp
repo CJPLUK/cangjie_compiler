@@ -90,51 +90,6 @@ public:
     {
     }
 
-    void MergePackage(const Ptr<Package> target, const Ptr<Package> source)
-    {
-        if (target->accessible != source->accessible) {
-            s.ci->diag.DiagnoseRefactor(DiagKindRefactor::packages_visibility_inconsistent, DEFAULT_POSITION,
-                AST::GetAccessLevelStr(*target), AST::GetAccessLevelStr(*source));
-        }
-        if (target->isMacroPackage != source->isMacroPackage) {
-            s.ci->diag.DiagnoseRefactor(DiagKindRefactor::packages_macro_inconsistent, DEFAULT_POSITION);
-        }
-
-        for (auto& file : source->files) {
-            file->curPackage = target;
-            if (target->files.size() > 0) {
-                file->indexOfPackage = target->files.at(0)->indexOfPackage;
-            }
-            target->files.push_back(std::move(file));
-        }
-    }
-
-    bool NeedToAddPackage(const Ptr<Package> package)
-    {
-        bool packageAlreadyExist = false;
-        for (auto& srcPackage : s.ci->srcPkgs) {
-            if (package->fullPackageName == srcPackage->fullPackageName) {
-                MergePackage(srcPackage, package);
-                packageAlreadyExist = true;
-            }
-        }
-        if (!packageAlreadyExist) {
-            bool isCJLint = s.ci->isCJLint;
-
-            if (s.ci->srcPkgs.size() > 0 && !isCJLint) {
-                // We can't validate it before because we can have multi-folder packages.
-                s.ci->diag.DiagnoseRefactor(DiagKindRefactor::driver_require_one_package_directory, DEFAULT_POSITION);
-                return false;
-            }
-
-            if (package->fullPackageName != "default" || package->files.size() != 0 || isCJLint) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     void ParseModule(bool& success)
     {
         std::string moduleSrcPath = s.ci->invocation.globalOptions.moduleSrcPath;
@@ -166,9 +121,7 @@ public:
             if (srcDir == moduleSrcPath) {
                 package->needExported = false;
             }
-            if (NeedToAddPackage(package)) {
-                s.ci->srcPkgs.emplace_back(std::move(package));
-            }
+            s.ci->srcPkgs.emplace_back(std::move(package));
         }
 
         for (auto& package : s.ci->srcPkgs) {
@@ -176,16 +129,6 @@ public:
                 [](const OwnedPtr<File>& fileOne, const OwnedPtr<File>& fileTwo) {
                     return fileOne->fileName < fileTwo->fileName;
                 });
-        }
-
-        if (s.ci->srcPkgs.empty()) {
-            s.ci->srcPkgs.emplace_back(MakeOwned<Package>());
-        }
-
-        bool compilePackage = s.ci->invocation.globalOptions.compilePackage;
-        // cjlint support multipackage compile
-        if (compilePackage && s.ci->srcPkgs.size() > 1 && !s.ci->isCJLint) {
-            s.ci->diag.DiagnoseRefactor(DiagKindRefactor::driver_require_one_package_directory, DEFAULT_POSITION);
         }
     }
 

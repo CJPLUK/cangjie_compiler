@@ -1327,7 +1327,7 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     TranslateVecDecl(genericNominalDecls, trans);
     // Update some info for nominal decls.
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "TranslateDecls");
-    ProcessCommonAndSpecificNominals();
+    ProcessCommonAndSpecificExtends();
     SetExtendInfo();
     UpdateExtendParent();
 }
@@ -1408,7 +1408,7 @@ std::vector<Ptr<const AST::Decl>> CollectCommonMatchedDecls(
     std::vector<Ptr<const AST::Decl>> commonDecls;
     for (const auto& container : declContainers) {
         for (const auto& decl : container) {
-            if (decl->IsCommonMatchedWithSpecific()) {
+            if (decl->IsCommonMatchedWithSpecific() && decl->astKind == AST::ASTKind::EXTEND_DECL) {
                 commonDecls.push_back(decl);
             }
         }
@@ -1452,8 +1452,8 @@ void ConvertSpecificMemberMethods(
         return VisitResult::CONTINUE;
     };
 
-    for (auto decl : package->GetAllCustomTypeDef()) {
-        // Skip non-specific extends
+    for (auto decl : package->GetExtends()) {
+        // Skip non-platform extends
         if (!decl->TestAttr(CHIR::Attribute::SPECIFIC)) {
             continue;
         }
@@ -1621,7 +1621,7 @@ void AST2CHIR::ResetSpecificFunc(const AST::FuncDecl& funcDecl, Func& func)
     }
 }
 
-void AST2CHIR::ProcessCommonAndSpecificNominals()
+void AST2CHIR::ProcessCommonAndSpecificExtends()
 {
     bool compileSpecific = opts.IsCompilingCJMP();
     if (!compileSpecific) {

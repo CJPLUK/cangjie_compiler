@@ -728,9 +728,68 @@ void TypeChecker::TypeCheckerImpl::CheckInstanceMemberAccessLegality(
     }
 }
 
+bool TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceIsSkip(Ptr<Node> node)
+{
+    switch (node->astKind) {
+        case ASTKind::PRIMARY_CTOR_DECL:
+        case ASTKind::ANNOTATION:
+            return true;
+        case ASTKind::FUNC_DECL:
+        case ASTKind::PROP_DECL:
+            // the declaration is deserialized from common part
+            // no need to perform the check as it's already checked during common compilation
+            return node->TestAttr(Attribute::FROM_COMMON_PART);
+        case ASTKind::FUNC_ARG:
+            // If current node is desugared func argument, ignore the checking.
+            return node->TestAttr(Attribute::HAS_INITIAL);
+        default:
+            return false;
+    }
+}
+
+AST::VisitAction TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceForNameReferenceExpr(
+    ASTContext& ctx, Ptr<AST::NameReferenceExpr> nameRef)
+{
+    if (!nameRef->instTys.empty()) {
+        CheckInstTypeCompleteness(ctx, *nameRef);
+    }
+    if (auto re = DynamicCast<RefExpr*>(nameRef)) {
+        if (re->isThis) {
+            CheckUsageOfThis(ctx, *re);
+        } else if (re->isSuper) {
+            CheckUsageOfSuper(ctx, *re);
+        } else {
+            CheckAccessLegalityOfRefExpr(ctx, *re);
+        }
+    }
+    return VisitAction::WALK_CHILDREN;
+}
+
+VisitAction TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceForExpr(
+    unsigned id, ASTContext& ctx, Ptr<AST::Expr> node)
+{
+    if (node->desugarExpr) {
+        // Only check desugared nodes.
+        CheckLegalityOfReference(id, ctx, *node->desugarExpr);
+        return VisitAction::SKIP_CHILDREN;
+    } else if (auto ref = DynamicCast<NameReferenceExpr*>(node)) {
+        return CheckLegalityOfReferenceForNameReferenceExpr(ctx, ref);
+    } else if (auto ae = DynamicCast<AssignExpr>(node)) {
+        CheckMutationInStruct(ctx, *ae->leftValue);
+    } else if (auto ide = DynamicCast<IncOrDecExpr>(node)) {
+        CheckMutationInStruct(ctx, *ide->expr);
+    }
+    return VisitAction::WALK_CHILDREN;
+}
+
 void TypeChecker::TypeCheckerImpl::CheckLegalityOfReference(ASTContext& ctx, Node& node)
 {
     unsigned id = Walker::GetNextWalkerID();
+    CheckLegalityOfReference(id, ctx, node);
+}
+
+void TypeChecker::TypeCheckerImpl::CheckLegalityOfReference(unsigned id, ASTContext& ctx, Node& node)
+{
     std::function<VisitAction(Ptr<Node>)> postVisit = [this, &ctx](Ptr<Node> node) -> VisitAction {
         if (node->astKind == ASTKind::VAR_DECL) {
             ctx.currentCheckingNodes.pop();
@@ -741,42 +800,17 @@ void TypeChecker::TypeCheckerImpl::CheckLegalityOfReference(ASTContext& ctx, Nod
         }
         return VisitAction::WALK_CHILDREN;
     };
-    std::function<VisitAction(Ptr<Node>)> preVisit = [this, &ctx, &preVisit, &postVisit, id](
-                                                         Ptr<Node> node) -> VisitAction {
-        if (node->astKind == ASTKind::PRIMARY_CTOR_DECL) {
+    std::function<VisitAction(Ptr<Node>)> preVisit = [this, &ctx, id](Ptr<Node> node) -> VisitAction {
+        if (CheckLegalityOfReferenceIsSkip(node)) {
             return VisitAction::SKIP_CHILDREN;
-        } else if (node->astKind == ASTKind::ANNOTATION) {
-            return VisitAction::SKIP_CHILDREN;
-        } else if (node->astKind == ASTKind::VAR_DECL) {
+        }
+        if (node->astKind == ASTKind::VAR_DECL) {
             ctx.currentCheckingNodes.push(node);
         }
-        // If current node is desugared func argument, ignore the checking.
-        if (node->astKind == ASTKind::FUNC_ARG && node->TestAttr(Attribute::HAS_INITIAL)) {
-            return VisitAction::SKIP_CHILDREN;
-        }
         if (auto expr = DynamicCast<Expr*>(node); expr) {
-            if (expr->desugarExpr) {
-                // Only check desugared nodes.
-                Walker(expr->desugarExpr.get(), id, preVisit, postVisit).Walk();
-                return VisitAction::SKIP_CHILDREN;
-            } else if (auto ref = DynamicCast<NameReferenceExpr*>(expr); ref && !ref->instTys.empty()) {
-                CheckInstTypeCompleteness(ctx, *ref);
-            }
-        }
-        if (auto re = DynamicCast<RefExpr*>(node)) {
-            if (re->isThis) {
-                CheckUsageOfThis(ctx, *re);
-            } else if (re->isSuper) {
-                CheckUsageOfSuper(ctx, *re);
-            } else {
-                CheckAccessLegalityOfRefExpr(ctx, *re);
-            }
+            return CheckLegalityOfReferenceForExpr(id, ctx, expr);
         } else if (auto fa = DynamicCast<FuncArg>(node); fa && fa->withInout) {
             CheckMutationInStruct(ctx, *fa->expr);
-        } else if (auto ae = DynamicCast<AssignExpr>(node)) {
-            CheckMutationInStruct(ctx, *ae->leftValue);
-        } else if (auto ide = DynamicCast<IncOrDecExpr>(node)) {
-            CheckMutationInStruct(ctx, *ide->expr);
         } else if (auto fd = DynamicCast<FuncDecl>(node); fd && IsInstanceConstructor(*fd)) {
             CheckMemberAccessInCtorParamOrCtorArg(ctx, *fd);
         }
