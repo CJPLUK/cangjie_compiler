@@ -306,9 +306,6 @@ void ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 
     curPackage = &pkg; // Deserialize common part AST into current specific package AST
 
-    // Remove existing isCommon files from pkg before loading new common part for lsp incremental compilation.
-    Utils::EraseIf(pkg.files, [](const auto& file) { return file->isCommon; });
-
     allTypes.resize(package->allTypes()->size(), nullptr);
     auto fileSize = package->allFiles()->size();
     allFileIds.resize(fileSize);

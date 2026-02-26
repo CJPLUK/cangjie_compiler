@@ -312,6 +312,9 @@ void CjoManager::LoadFilesOfCommonPart(Ptr<Package> pkg)
     if (!impl->GetGlobalOptions().IsCompilingCJMP()) {
         return;
     }
+    CJC_NULLPTR_CHECK(pkg);
+    // Remove existing isCommon files from pkg before loading new common part for lsp incremental compilation.
+    Utils::EraseIf(pkg->files, [](const auto& file) { return file->TestAttr(Attribute::FROM_COMMON_PART); });
     auto commonLoader = GetCommonPartCjo(pkg->fullPackageName);
     if (!commonLoader) {
         return;
