@@ -309,7 +309,7 @@ bool CjoManager::NeedCollectDependency(const std::string& curName, bool isCurMac
 
 void CjoManager::LoadFilesOfCommonPart(Ptr<Package> pkg)
 {
-    if (!impl->GetGlobalOptions().IsCompilingCJMPSpecific()) {
+    if (!impl->GetGlobalOptions().IsCompilingCJMPSpecific() && !impl->GetGlobalOptions().commonPartCjo.has_value()) {
         return;
     }
     CJC_NULLPTR_CHECK(pkg);
@@ -344,7 +344,7 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
     loaders.reserve(q.size());
     // Load common part cjo
     for (auto pkg : packages) {
-        if (impl->GetGlobalOptions().IsCompilingCJMPSpecific()) {
+        if (impl->GetGlobalOptions().IsCompilingCJMPSpecific() || impl->GetGlobalOptions().commonPartCjo.has_value()) {
             std::string expectedPackageName = pkg->fullPackageName;
             auto commonLoader = GetCommonPartCjo(expectedPackageName);
             if (!commonLoader) {
@@ -438,9 +438,6 @@ void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package
 std::optional<std::vector<std::string>> CjoManagerImpl::PreReadCommonPartCjoFiles(CjoManager& cjoManager)
 {
     // use `cjoFileCacheMap`
-    std::vector<uint8_t> buffer;
-    std::string failedReason;
-
     if (!globalOptions.commonPartCjo) {
         diag.DiagnoseRefactor(DiagKindRefactor::module_common_part_path_is_required, DEFAULT_POSITION);
         return std::nullopt;
@@ -448,19 +445,11 @@ std::optional<std::vector<std::string>> CjoManagerImpl::PreReadCommonPartCjoFile
 
     CJC_ASSERT(globalOptions.commonPartCjo);
     std::string commonPartCjoPath = *globalOptions.commonPartCjo;
-    FileUtil::ReadBinaryFileToBuffer(commonPartCjoPath, buffer, failedReason);
-    if (!failedReason.empty()) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, commonPartCjoPath, failedReason);
+    commonPartLoader = ReadCjo(commonPartCjoPath, commonPartCjoPath, cjoManager, false);
+    if (commonPartLoader == nullptr) {
         return {};
     }
-
-    // name of package is unknown before parsing and reading .cjo, so fake is used.
-    std::string fakeName = "";
-    commonPartLoader = MakeOwned<ASTLoader>(std::move(buffer), fakeName, typeManager, cjoManager, globalOptions);
-    commonPartLoader->SetImportSourceCode(importSrcCode);
     commonPartLoader->PreReadAndSetPackageName();
-
     return commonPartLoader->ReadFileNames();
 }
 
