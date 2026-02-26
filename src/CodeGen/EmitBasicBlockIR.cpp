@@ -65,35 +65,52 @@ void BasicBlockGeneratorImpl::EmitIR()
 
 void BasicBlockGeneratorImpl::CreateBasicBlocks(const CHIR::Block& chirBB)
 {
-    if (auxSet.find(&chirBB) != auxSet.end()) {
-        return;
-    }
-
-    if (!cgMod.GetMappedBB(&chirBB)) {
-        auto bbName = PREFIX_FOR_BB_NAME + chirBB.GetIdentifierWithoutPrefix();
-        auto bb = llvm::BasicBlock::Create(cgMod.GetLLVMContext(), bbName, functionToEmitIR);
-        cgMod.SetOrUpdateMappedBB(&chirBB, bb);
-    }
-    CreateLandingPad(chirBB);
-    auxSet.emplace(&chirBB);
-
-    for (auto succChirBB : chirBB.GetSuccessors()) {
-        CreateBasicBlocks(*succChirBB);
+    std::stack<const CHIR::Block*> blockStack;
+    blockStack.emplace(&chirBB);
+    while (!blockStack.empty()) {
+        auto* currBB = blockStack.top();
+        blockStack.pop();
+        if (auxSet.find(currBB) != auxSet.end()) {
+            continue;
+        }
+        auxSet.emplace(currBB);
+        if (!cgMod.GetMappedBB(currBB)) {
+            auto bbName = PREFIX_FOR_BB_NAME + currBB->GetIdentifierWithoutPrefix();
+            auto bb = llvm::BasicBlock::Create(cgMod.GetLLVMContext(), bbName, functionToEmitIR);
+            cgMod.SetOrUpdateMappedBB(currBB, bb);
+        }
+        CreateLandingPad(*currBB);
+        auto successors = currBB->GetSuccessors();
+        for (auto it = successors.rbegin(); it != successors.rend(); ++it) {
+            auto* succ = *it;
+            if (auxSet.find(succ) == auxSet.end()) {
+                blockStack.emplace(succ);
+            }
+        }
     }
 }
 
 void BasicBlockGeneratorImpl::CreateBasicBlocksIRs(const CHIR::Block& chirBB)
 {
-    if (auxSet.find(&chirBB) != auxSet.end()) {
-        return;
-    }
-
-    CJC_ASSERT(cgMod.GetMappedBB(&chirBB));
-    EmitExpressionIR(cgMod, chirBB.GetExpressions());
-    auxSet.emplace(&chirBB);
-
-    for (auto succChirBB : chirBB.GetSuccessors()) {
-        CreateBasicBlocksIRs(*succChirBB);
+    std::stack<const CHIR::Block*> blockStack;
+    blockStack.emplace(&chirBB);
+    while (!blockStack.empty()) {
+        auto currBB = blockStack.top();
+        blockStack.pop();
+        if (auxSet.find(currBB) != auxSet.end()) {
+            continue;
+        }
+        auxSet.emplace(currBB);
+        CJC_ASSERT(cgMod.GetMappedBB(currBB));
+        EmitExpressionIR(cgMod, currBB->GetExpressions());
+        auxSet.emplace(currBB);
+        auto successors = currBB->GetSuccessors();
+        for (auto it = successors.rbegin(); it != successors.rend(); ++it) {
+            auto* succ = *it;
+            if (auxSet.find(succ) == auxSet.end()) {
+                blockStack.emplace(succ);
+            }
+        }
     }
 }
 

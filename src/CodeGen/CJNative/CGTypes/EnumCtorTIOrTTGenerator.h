@@ -22,6 +22,13 @@
 
 namespace Cangjie {
 namespace CodeGen {
+struct EnumCtorLayout {
+    std::vector<CHIR::Type*> fieldTypes;
+    uint32_t size = 0;
+    uint32_t align = 1;
+    llvm::Constant* offsets = nullptr;
+};
+class CGEnumType;
 class EnumCtorTIOrTTGenerator {
 public:
     explicit EnumCtorTIOrTTGenerator(CGModule& cgMod, const CHIR::EnumType& chirEnumType, std::size_t ctorIndex);
@@ -43,11 +50,20 @@ private:
     llvm::Constant* GenSuperFnOfTypeTemplate(const std::string& funcName);
 
 private:
+    EnumCtorLayout ComputeLLVMLayout(
+        const std::vector<CHIR::Type*>& fields, const std::string& tiName, const std::string& className);
+    EnumCtorLayout GenLayoutForReferenceType(const std::string& tiName, const std::string& className);
+    EnumCtorLayout GenLayoutForZeroSize();
+    EnumCtorLayout GenLayoutForTrivial(const std::string& tiName);
+    EnumCtorLayout GenLayoutForStructure(const CGEnumType* cgEnumType, const std::vector<CHIR::Type*>& paramTypes,
+        const std::string& tiName, const std::string& className);
     CGModule& cgMod;
     CGContext& cgCtx;
     const CHIR::EnumType& chirEnumType;
     std::size_t ctorIndex;
 };
+
+
 } // namespace CodeGen
 } // namespace Cangjie
 

@@ -17,6 +17,7 @@ class CGBoxType : public CGType {
 protected:
     llvm::Type* GenLLVMType() override;
     void GenContainedCGTypes() override;
+    llvm::Constant* GenTypeArgsOfTypeInfo() override;
 
 private:
     CGBoxType() = delete;

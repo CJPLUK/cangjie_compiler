@@ -13,9 +13,9 @@
 #include "CGModule.h"
 #include "CJNative/CGTypes/CGExtensionDef.h"
 #include "CJNative/CGTypes/EnumCtorTIOrTTGenerator.h"
+#include "CJNative/CJNativeMetadata.h"
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 #include "CJNative/CHIRSplitter.h"
-#include "CJNative/CJNativeReflectionInfo.h"
 #endif
 #include "DIBuilder.h"
 #include "EmitFunctionIR.h"
@@ -311,12 +311,9 @@ void EmitTIOrTTForCustomDefs(CGModule& cgMod)
         switch (customDef->GetCustomKind()) {
             case CHIR::CustomDefKind::TYPE_ENUM: {
                 auto chirEnumType = StaticCast<CHIR::EnumDef*>(customDef)->GetType();
-                auto cgEnumType = StaticCast<CGEnumType*>(CGType::GetOrCreate(cgMod, chirEnumType));
-                if (!cgEnumType->IsTrivial() && !cgEnumType->IsZeroSizeEnum()) {
-                    const auto& ctors = chirEnumType->GetConstructorInfos(cgMod.GetCGContext().GetCHIRBuilder());
-                    for (auto ctorIndex = 0U; ctorIndex < ctors.size(); ++ctorIndex) {
-                        EnumCtorTIOrTTGenerator(cgMod, *chirEnumType, ctorIndex).Emit();
-                    }
+                const auto& ctors = chirEnumType->GetConstructorInfos(cgMod.GetCGContext().GetCHIRBuilder());
+                for (auto ctorIndex = 0U; ctorIndex < ctors.size(); ++ctorIndex) {
+                    EnumCtorTIOrTTGenerator(cgMod, *chirEnumType, ctorIndex).Emit();
                 }
                 break;
             }
@@ -342,6 +339,50 @@ void EmitCJSDKVersion(const CGModule& cgMod)
     cjSdkVersion->setAlignment(llvm::Align(1));
     cjSdkVersion->setLinkage(linkageType);
     cgMod.GetCGContext().AddLLVMUsedVars(cjSdkVersion->getName().str());
+}
+
+void GenerateReflectionMetadata(CGModule& module, const SubCHIRPackage& subCHIRPkg)
+{
+    auto& globalOptions = module.GetCGContext().GetCGPkgContext().GetGlobalOptions();
+    uint8_t reflectionMode = globalOptions.disableReflection
+        ? GenReflectMode::NO_REFLECT
+        : GenReflectMode::FULL_REFLECT;
+
+    const std::array<MetadataKind, 6> allKinds = {
+        CodeGen::MetadataKind::PKG_METADATA,
+        CodeGen::MetadataKind::CLASS_METADATA,
+        CodeGen::MetadataKind::STRUCT_METADATA,
+        CodeGen::MetadataKind::ENUM_METADATA,
+        CodeGen::MetadataKind::GF_METADATA,
+        CodeGen::MetadataKind::GV_METADATA
+    };
+
+    auto runTask = [&](CodeGen::MetadataKind kind) {
+        std::unique_ptr<MetadataInfo> info = nullptr;
+        switch (kind) {
+            case CodeGen::MetadataKind::PKG_METADATA:
+                info = std::make_unique<PkgMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::CLASS_METADATA:
+                info = std::make_unique<ClassMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::STRUCT_METADATA:
+                info = std::make_unique<StructMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::ENUM_METADATA:
+                info = std::make_unique<EnumMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::GF_METADATA:
+                info = std::make_unique<GFMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::GV_METADATA:
+                info = std::make_unique<GVMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            default: break;
+        }
+
+        if (info) {
+            info->Gen();
+        }
+    };
+
+    for (auto kind : allKinds) {
+        runTask(kind);
+    }
 }
 
 void GenSubCHIRPackage(CGModule& cgMod)
@@ -371,7 +412,7 @@ void GenSubCHIRPackage(CGModule& cgMod)
     cgMod.Opt();
     InlineFunction(cgMod);
     DumpIRIfNeeded(cgMod, "ReplaceAndInlineFunc", subDirNum);
-    CJNativeReflectionInfo(cgMod, subCHIRPkg).Gen();
+    GenerateReflectionMetadata(cgMod, subCHIRPkg);
     cgMod.GenTypeInfo(); // for reflect generated typeinfo
     DumpIRIfNeeded(cgMod, "GenReflectionInfo", subDirNum);
     cgMod.diBuilder->Finalize();

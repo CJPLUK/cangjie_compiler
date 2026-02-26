@@ -127,7 +127,8 @@ llvm::MDTuple* MetadataInfo::GenerateParametersMetadata(const std::vector<CHIR::
 }
 
 llvm::MDTuple* MetadataInfo::GenerateAttrsMetadata(const CHIR::AttributeInfo& attrs, ExtraAttribute extraAttr,
-    const std::string& gettingAnnotationMethod, uint8_t hasSRetMode, const std::string& enumKind) const
+    const std::string& gettingAnnotationMethod, uint8_t hasSRetMode, const std::string& enumKind,
+    bool isUnknownSize) const
 {
     static const std::map<CHIR::Attribute, std::string> TEST_ATTRS{
         {CHIR::Attribute::PUBLIC, "public"},
@@ -155,6 +156,16 @@ llvm::MDTuple* MetadataInfo::GenerateAttrsMetadata(const CHIR::AttributeInfo& at
             break;
         case ExtraAttribute::ENUM:
             attrsStr.emplace(enumKind);
+            // ---------------------------------------------------------
+            // METADATA VERSIONING NOTE:
+            // We inject the "reflect_version_1" flag to indicate that this Enum
+            // metadata tuple consists of 6 valid memory blocks (operands).
+            // This distinguishes it from the legacy version which had only 5 blocks.
+            // The runtime checks for this flag to confirm that it is safe to access
+            // the extended metadata fields (such as generic type info), regardless
+            // of the specific field order which might be adjusted by the LLVM backend.
+            // ---------------------------------------------------------
+            attrsStr.emplace("reflectVersion1");
             break;
         case ExtraAttribute::BOX_CLASS:
             attrsStr.emplace("box");
@@ -165,6 +176,10 @@ llvm::MDTuple* MetadataInfo::GenerateAttrsMetadata(const CHIR::AttributeInfo& at
 
     if (hasSRetMode != SRetMode::NO_SRET) {
         attrsStr.emplace("hasSRet" + std::to_string(hasSRetMode));
+    }
+
+    if (isUnknownSize) {
+        attrsStr.emplace("unknownSize");
     }
 
     for (auto& attr : TEST_ATTRS) {
@@ -379,11 +394,13 @@ void StructMetadataInfo::GenerateStructMetadata(const CHIR::StructDef& sd, std::
     std::vector<llvm::Metadata*> methodsVec{};
     std::vector<llvm::Metadata*> staticMethodsVec{};
     GenerateStructMethodMetadata(sd, methodsVec, staticMethodsVec);
-
+    auto cgType = CGType::GetOrCreate(module, sd.GetType());
+    bool isUnknownSize = !cgType->GetSize().has_value();
     MetadataTypeItem item(llvm::MDString::get(llvmCtx, tiOrTTName), llvm::MDString::get(llvmCtx, declaredGenericTi),
         GenerateStructFieldMetadata(sd), GenerateStructStaticFieldMetadata(sd), llvm::MDTuple::get(llvmCtx, methodsVec),
         llvm::MDTuple::get(llvmCtx, staticMethodsVec),
-        GenerateAttrsMetadata(sd.GetAttributeInfo(), ExtraAttribute::STRUCT, sd.GetAnnoInfo().mangledName));
+        GenerateAttrsMetadata(sd.GetAttributeInfo(), ExtraAttribute::STRUCT, sd.GetAnnoInfo().mangledName,
+            SRetMode::NO_SRET, "", isUnknownSize));
 
     auto mdTuple = item.CreateMDTuple(llvmCtx);
     typesMD->addOperand(mdTuple);
@@ -623,12 +640,13 @@ void EnumMetadataInfo::GenerateEnumMetadata(const CHIR::EnumDef& ed)
         reflectTIOrTT->addMetadata("Reflection", *mdTuple);
         return;
     }
+    auto declaredGenericTi = ed.TestAttr(CHIR::Attribute::GENERIC) ? GetTiName(*ed.GetType()) : "";
 
     std::vector<llvm::Metadata*> methodsVec{};
     std::vector<llvm::Metadata*> staticMethodsVec{};
     GenerateEnumMethodMetadata(ed, methodsVec, staticMethodsVec);
 
-    MetadataTypeItem item(llvm::MDString::get(llvmCtx, tiOrTTName), llvm::MDString::get(llvmCtx, ""),
+    MetadataTypeItem item(llvm::MDString::get(llvmCtx, tiOrTTName), llvm::MDString::get(llvmCtx, declaredGenericTi),
         GenerateEnumConstructorMetadata(ed), llvm::MDTuple::get(llvmCtx, {}), llvm::MDTuple::get(llvmCtx, methodsVec),
         llvm::MDTuple::get(llvmCtx, staticMethodsVec),
         GenerateAttrsMetadata(ed.GetAttributeInfo(), ExtraAttribute::ENUM, ed.GetAnnoInfo().mangledName,
@@ -650,12 +668,8 @@ llvm::MDTuple* EnumMetadataInfo::GenerateEnumConstructorMetadata(const CHIR::Enu
             size_t nonArgIndex = currentCgType->IsAntiOptionLike() ? 0 : 1;
             ctorName = nonArgIndex == index && !IsCoreOption(ed) ? "N$_" + ctor.name : ctor.name;
         }
-        if (currentCgType->IsTrivial() || currentCgType->IsZeroSizeEnum()) {
-            fieldsVec.AddSubItem(MetadataVector(llvmCtx).Concat(ctorName).Concat(""));
-        } else {
-            std::string ti = GenerateCtorFn(ed, index++, GetTypeQualifiedName(*ed.GetType()));
-            fieldsVec.AddSubItem(MetadataVector(llvmCtx).Concat(ctorName).Concat(ti));
-        }
+        std::string ti = GenerateCtorFn(ed, index++, GetTypeQualifiedName(*ed.GetType()));
+        fieldsVec.AddSubItem(MetadataVector(llvmCtx).Concat(ctorName).Concat(ti));
     }
     return fieldsVec.CreateMDTuple();
 }
@@ -677,6 +691,8 @@ std::string EnumMetadataInfo::GenerateCtorFn(
         auto entryBB = irBuilder.CreateEntryBasicBlock(getTiFn, "entry");
         irBuilder.SetInsertPoint(entryBB);
         llvm::Value* ti{nullptr};
+        auto ctorInfo = enumDef.GetCtor(index);
+        std::string mangledName = ctorInfo.annoInfo.mangledName;
         auto chirEnumType = StaticCast<CHIR::EnumType*>(enumDef.GetType());
         if (CGType::GetOrCreate(module, chirEnumType)->IsDynamicGI()) {
             auto tt = module.GetOrCreateEnumCtorTIOrTT(*chirEnumType, index);

@@ -1000,6 +1000,21 @@ IntrinsicKind DeSerialize(const PackageFormat::IntrinsicKind& kind)
         case IntrinsicKind_IS_GENERIC:
             ret = IS_GENERIC;
             break;
+        case IntrinsicKind_IS_TUPLE:
+            ret = IS_TUPLE;
+            break;
+        case IntrinsicKind_IS_FUNCTION:
+            ret = IS_FUNCTION;
+            break;
+        case IntrinsicKind_IS_ENUM:
+            ret = IS_ENUM;
+            break;
+        case IntrinsicKind_IS_BOX:
+            ret = IS_BOX;
+            break;
+        case IntrinsicKind_GET_TYPE_ARGS:
+            ret = GET_TYPE_ARGS;
+            break;
         case IntrinsicKind_GET_OR_CREATE_TYPEINFO_FOR_REFLECT:
             ret = GET_OR_CREATE_TYPEINFO_FOR_REFLECT;
             break;
@@ -1124,17 +1139,17 @@ IntrinsicKind DeSerialize(const PackageFormat::IntrinsicKind& kind)
         case IntrinsicKind_GET_STATIC_FIELD_ANNOTATIONS:
             ret = GET_STATIC_FIELD_ANNOTATIONS;
             break;
-        case IntrinsicKind_GET_FIELD_NAME:
-            ret = GET_FIELD_NAME;
+        case IntrinsicKind_GET_INSTANCE_FIELD_NAME:
+            ret = GET_INSTANCE_FIELD_NAME;
             break;
-        case IntrinsicKind_GET_FIELD_TYPE:
-            ret = GET_FIELD_TYPE;
+        case IntrinsicKind_GET_INSTANCE_FIELD_TYPE:
+            ret = GET_INSTANCE_FIELD_TYPE;
             break;
-        case IntrinsicKind_GET_FIELD_ANNOTATIONS:
-            ret = GET_FIELD_ANNOTATIONS;
+        case IntrinsicKind_GET_INSTANCE_FIELD_ANNOTATIONS:
+            ret = GET_INSTANCE_FIELD_ANNOTATIONS;
             break;
-        case IntrinsicKind_GET_FIELD_MODIFIER:
-            ret = GET_FIELD_MODIFIER;
+        case IntrinsicKind_GET_INSTANCE_FIELD_MODIFIER:
+            ret = GET_INSTANCE_FIELD_MODIFIER;
             break;
         case IntrinsicKind_GET_STATIC_FIELD_MODIFIER:
             ret = GET_STATIC_FIELD_MODIFIER;
@@ -1201,6 +1216,36 @@ IntrinsicKind DeSerialize(const PackageFormat::IntrinsicKind& kind)
             break;
         case IntrinsicKind_GET_SUB_PACKAGES:
             ret = GET_SUB_PACKAGES;
+            break;
+        case IntrinsicKind_GET_NUM_OF_FIELD_TYPES:
+            ret = GET_NUM_OF_FIELD_TYPES;
+            break;
+        case IntrinsicKind_GET_FIELD_TYPES:
+            ret = GET_FIELD_TYPES;
+            break;
+        case IntrinsicKind_NEW_AND_INIT_OBJECT:
+            ret = NEW_AND_INIT_OBJECT;
+            break;
+        case IntrinsicKind_GET_ASSOCIATED_VALUES:
+            ret = GET_ASSOCIATED_VALUES;
+            break;
+        case IntrinsicKind_GET_NUM_OF_FUNCTION_SIGNATURETYPES:
+            ret = GET_NUM_OF_FUNCTION_SIGNATURETYPES;
+            break;
+        case IntrinsicKind_GET_FUNCTION_SIGNATURE_TYPES:
+            ret = GET_FUNCTION_SIGNATURE_TYPES;
+            break;
+        case IntrinsicKind_GET_NUM_OF_ENUM_CONSTRUCTOR_INFOS:
+            ret = GET_NUM_OF_ENUM_CONSTRUCTOR_INFOS;
+            break;
+        case IntrinsicKind_GET_ENUM_CONSTRUCTOR_INFO:
+            ret = GET_ENUM_CONSTRUCTOR_INFO;
+            break;
+        case IntrinsicKind_GET_ENUM_CONSTRUCTOR_NAME:
+            ret = GET_ENUM_CONSTRUCTOR_NAME;
+            break;
+        case IntrinsicKind_GET_ENUM_CONSTRUCTOR_INFO_FROM_ANY:
+            ret = GET_ENUM_CONSTRUCTOR_INFO_FROM_ANY;
             break;
         case IntrinsicKind_REFLECTION_INTRINSIC_END_FLAG:
             ret = REFLECTION_INTRINSIC_END_FLAG;

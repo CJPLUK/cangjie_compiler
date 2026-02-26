@@ -148,7 +148,7 @@ const std::unordered_map<CHIR::Type::TypeKind, uint64_t> G_UNSIGNED_INT_MAP = {
 
 const std::set<std::string> REFLECT_INTRINSIC_FUNC = {"CJ_MCC_ApplyCJInstanceMethod", "CJ_MCC_ApplyCJStaticMethod",
     "CJ_MCC_ApplyCJGenericInstanceMethod", "CJ_MCC_ApplyCJGenericStaticMethod", "CJ_MCC_CheckMethodActualArgs",
-    "CJ_MCC_GetOrCreateTypeInfoForReflect"};
+    "CJ_MCC_GetOrCreateTypeInfoForReflect", "CJ_MCC_NewAndInitEnumTupleObject"};
 
 const std::unordered_map<CHIR::IntrinsicKind, IntrinsicFuncInfo> INTRINSIC_KIND_TO_FUNCNAME_MAP = {
     // future

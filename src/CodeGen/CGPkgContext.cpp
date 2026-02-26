@@ -114,6 +114,9 @@ bool CGPkgContext::NeedOuterTypeInfo(const CHIR::ClassType& classType)
         return true;
     }
 
+    if (subTypeMap.find(type) == subTypeMap.end()) {
+        return false;
+    }
     for (auto subTy : subTypeMap[type]) {
         if (!subTy->GetTypeArgs().empty()) {
             return true;

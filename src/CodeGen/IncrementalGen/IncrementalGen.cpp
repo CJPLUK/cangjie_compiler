@@ -484,13 +484,19 @@ void IncrementalGen::UpdateReflectionMetadata()
     auto namedMDForTI = injectedModule->getOrInsertNamedMetadata(METADATA_TYPES);
     namedMDForTI->clearOperands();
     for (auto meta : metaBoundByTI) {
-        namedMDForTI->addOperand(meta);
+        // exclude reflection metadata for enum ctor
+        if (meta->getNumOperands() != 1) {
+            namedMDForTI->addOperand(meta);
+        }
     }
 
     auto namedMDForTT = injectedModule->getOrInsertNamedMetadata(METADATA_TYPETEMPLATES);
     namedMDForTT->clearOperands();
     for (auto meta : metaBoundByTT) {
-        namedMDForTT->addOperand(meta);
+        // exclude reflection metadata for enum ctor
+        if (meta->getNumOperands() != 1) {
+            namedMDForTT->addOperand(meta);
+        }
     }
 
     if (auto namedMD = injectedModule->getNamedMetadata(METADATA_GLOBAL_VAR)) {

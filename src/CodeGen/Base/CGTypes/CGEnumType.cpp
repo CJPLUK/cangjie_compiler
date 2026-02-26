@@ -411,8 +411,8 @@ llvm::Constant* CGEnumType::GenFieldsOfTypeInfo()
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF: {
             CJC_NULLPTR_CHECK(optionLikeInfo);
-            fieldTypes.emplace_back(optionLikeInfo->associatedValueType);
             fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetZeroSizedCGType(cgMod)->GetOriginal()));
+            fieldTypes.emplace_back(optionLikeInfo->associatedValueType);
             break;
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_NONREF: {
@@ -467,7 +467,7 @@ llvm::Constant* CGEnumType::GenFieldsNumOfTypeTemplate()
     }
 }
 
-llvm::Constant* GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& cgMod, const std::string& funcPrefixName)
+llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& cgMod, const std::string& funcPrefixName)
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
     auto p0i8 = llvm::Type::getInt8PtrTy(llvmCtx);
@@ -492,7 +492,8 @@ llvm::Constant* GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& cgMod, const 
     auto [refBB, nonRefBB] = Vec2Tuple<2>(irBuilder.CreateAndInsertBasicBlocks({"ref", "nonRef"}));
     irBuilder.CreateCondBr(isRef, refBB, nonRefBB);
     irBuilder.SetInsertPoint(refBB);
-    irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
+    irBuilder.CreateRet(
+        irBuilder.CreateBitCast(CGType::GetZeroSizedCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
     irBuilder.SetInsertPoint(nonRefBB);
     irBuilder.CreateRet(irBuilder.CreateBitCast(CGType::GetBoolCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
 
@@ -507,8 +508,7 @@ llvm::Constant* GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& cgMod, const 
     auto [refBB2, nonRefBB2] = Vec2Tuple<2>(irBuilder.CreateAndInsertBasicBlocks({"ref", "nonRef"}));
     irBuilder.CreateCondBr(isRef, refBB2, nonRefBB2);
     irBuilder.SetInsertPoint(refBB2);
-    irBuilder.CreateRet(
-        irBuilder.CreateBitCast(CGType::GetZeroSizedCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
+    irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
     irBuilder.SetInsertPoint(nonRefBB2);
     irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
 
