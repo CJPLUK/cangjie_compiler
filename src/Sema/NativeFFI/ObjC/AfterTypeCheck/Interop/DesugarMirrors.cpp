@@ -126,12 +126,6 @@ void DesugarMirrors::DesugarMethod(InteropContext& ctx, ClassLikeDecl& mirror, F
 {
     auto methodTy = StaticCast<FuncTy>(method.ty);
     auto curFile = method.curFile;
-    if (mirror.astKind == ASTKind::INTERFACE_DECL && method.TestAttr(Attribute::STATIC)) {
-        // We are unable to provide a default implementation for the static method of an interface
-        method.funcBody->body =
-            CreateBlock(Nodes(ctx.factory.CreateThrowUnreachableCodeExpr(*curFile)), methodTy->retTy);
-        return;
-    }
 
     auto nativeHandle = ctx.factory.CreateNativeHandleExpr(mirror, method.TestAttr(Attribute::STATIC), curFile);
     std::vector<OwnedPtr<Expr>> msgSendArgs;

@@ -558,7 +558,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateGetObjCClassDecl(ClassLikeDecl& target)
     classDecl->fullPackageName = target.fullPackageName;
     classDecl->EnableAttr(Attribute::PUBLIC, Attribute::STATIC, Attribute::IS_CHECK_VISITED);
     classDecl->funcBody->funcDecl = classDecl.get();
-    classDecl->linkage = Linkage::INTERNAL;
+    classDecl->linkage = Linkage::EXTERNAL;
     classDecl->funcBody->parentClassLike = &target;
     PutDeclToClassLikeBody(*classDecl, target);
 
