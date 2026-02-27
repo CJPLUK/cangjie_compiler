@@ -661,7 +661,7 @@ void ToCHIR::RunOptimizationPass()
 
 bool ToCHIR::RunConstantEvaluation()
 {
-    if (!opts.IsConstEvalEnabled() || opts.enIncrementalCompilation || opts.commonPartCjos.size() > 0) {
+    if (!opts.IsConstEvalEnabled() || opts.enIncrementalCompilation || !opts.commonPartCjos.empty()) {
         return true;
     }
     Utils::ProfileRecorder recorder("CHIR", "Constant Evaluation");

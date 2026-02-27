@@ -1361,6 +1361,7 @@ void Func::RemoveParams()
 
 void Func::InitBody(BlockGroup& newBody)
 {
+    CJC_ASSERT(body.body == nullptr);
     body.body = &newBody;
     if (newBody.GetOwnerFunc() != this) {
         newBody.SetOwnerFunc(this);

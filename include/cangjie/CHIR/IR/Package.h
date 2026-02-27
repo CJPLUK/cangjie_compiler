@@ -42,7 +42,7 @@ public:
     // Global Var API
     // ===--------------------------------------------------------------------===//
     void AddGlobalVar(GlobalVar* item);
-    std::optional<GlobalVar*> TryGetGlobalVar(const std::string identifier);
+    GlobalVar* TryGetGlobalVar(const std::string identifier);
     std::vector<GlobalVar*> GetGlobalVars() const;
     void SetGlobalVars(std::vector<GlobalVar*>&& vars);
 
@@ -50,7 +50,7 @@ public:
     // Global Function API
     // ===--------------------------------------------------------------------===//
     void AddGlobalFunc(Func* item);
-    std::optional<Func*> TryGetGlobalFunc(const std::string identifier);
+    Func* TryGetGlobalFunc(const std::string identifier);
     std::vector<Func*> GetGlobalFuncs() const;
     void SetGlobalFuncs(const std::vector<Func*>& funcs);
 
