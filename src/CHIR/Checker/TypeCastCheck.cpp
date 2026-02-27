@@ -31,11 +31,13 @@ void TypeCastCheck::RunOnPackage(const Package& package, size_t threadNum)
     }
     if (threadNum == 1) {
         for (auto func : funcs) {
+            CJC_NULLPTR_CHECK(func);
             RunOnFunc(*func);
         }
     } else {
         Utils::TaskQueue taskQueue(threadNum);
         for (auto func : funcs) {
+            CJC_NULLPTR_CHECK(func);
             taskQueue.AddTask<void>([this, func]() { return RunOnFunc(*func); });
         }
         taskQueue.RunAndWaitForAllTasksCompleted();
@@ -51,13 +53,16 @@ bool IsNativeFIIType(Type& type)
     }
 
     auto classType = StaticCast<ClassType>(valueType);
+    CJC_NULLPTR_CHECK(classType);
     auto classDef = classType->GetClassDef();
+    CJC_NULLPTR_CHECK(classDef);
     return classDef->TestAttr(Attribute::JAVA_IMPL) || classDef->TestAttr(Attribute::JAVA_MIRROR);
 }
 
 std::string GetClassName(Type& type)
 {
     auto valueType = type.StripAllRefs();
+    CJC_NULLPTR_CHECK(valueType);
     CJC_ASSERT(valueType->IsClass());
     return StaticCast<ClassType>(valueType)->GetClassDef()->GetSrcCodeIdentifier();
 }

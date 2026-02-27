@@ -177,6 +177,8 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy)
     if (typeMapper.IsValidObjCMirror(wrapTy)) {
         CJC_ASSERT(expr->ty->IsPointer());
         auto classLikeTy = StaticCast<ClassLikeTy>(&wrapTy);
+        CJC_ASSERT_WITH_MSG(classLikeTy->commonDecl->astKind == ASTKind::CLASS_DECL,
+            "Mirror interface is not supported");
         auto mirror = As<ASTKind::CLASS_DECL>(classLikeTy->commonDecl);
         if (!mirror) {
             mirror = GetSyntheticWrapper(importManager, *classLikeTy->commonDecl);
@@ -623,6 +625,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObject(Decl& target, FuncDecl& ctor, 
     std::vector<OwnedPtr<FuncArg>> ctorCallArgs;
     size_t argIdx = 0;
     if (!generateForOneWayMapping) {
+        CJC_ASSERT_WITH_MSG(!wrapperParams.empty(), "wrapperParams should not be empty");
         auto objParamRef = CreateRefExpr(*wrapperParams[0]);
         ctorCallArgs.emplace_back(CreateFuncArg(std::move(objParamRef)));
         // skip first param, as it is needed only for restore @ObjCImpl instance.

@@ -76,6 +76,9 @@ void GenerateInitCJObjectMethods::HandleImpl(InteropContext& ctx)
                 continue;
             }
 
+            CJC_ASSERT_WITH_MSG(memberDecl->astKind == ASTKind::FUNC_DECL,
+                "Expected ASTKind::FUNC_DECL, found " + ASTKIND_TO_STR.at(memberDecl->astKind));
+
             auto& ctorDecl = *StaticAs<ASTKind::FUNC_DECL>(memberDecl);
 
             // skip original ctors
