@@ -93,7 +93,11 @@ std::string GetBlockStr(const Block& block, size_t indent)
                 ss << "[ret] ";
             }
             ss << res->GetAttributeInfo().ToString();
-            ss << res->GetIdentifier() << ": " << res->GetType()->ToString() << " = ";
+            ss << res->GetIdentifier();
+            if (!res->GetSrcCodeIdentifier().empty()) {
+                ss << "[" << res->GetSrcCodeIdentifier() << "]";
+            }
+            ss << ": " << res->GetType()->ToString() << " = ";
         }
         ss << expr->ToString(indent + 1);
         ss << "\n";
@@ -213,12 +217,20 @@ std::string FuncSymbolStr(const Func& func)
     auto& params = func.GetParams();
     if (!params.empty()) {
         ss << params[0]->GetAttributeInfo().ToString();
-        ss << params[0]->GetIdentifier() << ": " << params[0]->GetType()->ToString();
+        ss << params[0]->GetIdentifier();
+        if (!params[0]->GetSrcCodeIdentifier().empty()) {
+            ss << "[" << params[0]->GetSrcCodeIdentifier() << "]";
+        }
+        ss << ": " << params[0]->GetType()->ToString();
     }
     for (size_t i = 1; i < params.size(); i++) {
         ss << ", ";
         ss << params[i]->GetAttributeInfo().ToString();
-        ss << params[i]->GetIdentifier() << ": " << params[i]->GetType()->ToString();
+        ss << params[i]->GetIdentifier();
+        if (!params[i]->GetSrcCodeIdentifier().empty()) {
+            ss << "[" << params[i]->GetSrcCodeIdentifier() << "]";
+        }
+        ss << ": " << params[i]->GetType()->ToString();
     }
     ss << ") : " << func.GetReturnType()->ToString();
     std::stringstream attrss;

@@ -1341,18 +1341,23 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
 void AST2CHIR::TranslateFuncParams(const AST::FuncDecl& funcDecl, Func& func) const
 {
     std::vector<DebugLocation> paramLoc;
+    std::vector<std::string> paramSrcCodeIdentifiers;
     if (IsInstanceMember(funcDecl)) {
         paramLoc.emplace_back(INVALID_LOCATION);
+        paramSrcCodeIdentifiers.emplace_back("this");
     }
     for (auto& astParam : funcDecl.funcBody->paramLists[0]->params) {
         paramLoc.emplace_back(TranslateLocationWithoutScope(builder.GetChirContext(), astParam->begin, astParam->end));
+        paramSrcCodeIdentifiers.emplace_back(astParam->identifier.GetRawText());
     }
     auto fnTy = func.GetFuncType();
     CJC_NULLPTR_CHECK(fnTy);
     auto paramTypes = fnTy->GetParamTypes();
     CJC_ASSERT(paramTypes.size() == paramLoc.size());
+    CJC_ASSERT(paramTypes.size() == paramSrcCodeIdentifiers.size());
     for (size_t i = 0; i < paramTypes.size(); ++i) {
-        builder.CreateParameter(paramTypes[i], paramLoc[i], func);
+        auto param = builder.CreateParameter(paramTypes[i], paramLoc[i], func);
+        param->SetSrcCodeIdentifier(paramSrcCodeIdentifiers[i]);
     }
 }
 

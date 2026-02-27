@@ -389,12 +389,14 @@ table Parameter {
   base: Value;
   ownedFunc: uint32;  // use values id
   ownedLambda: uint32;  // use exprs id
+  srcCodeIdentifier: string(shared);
 }
 
 table LocalVar {
   base: Value;
   associatedExpr: uint32; // use exprs id
   isRetVal: bool = false;
+  srcCodeIdentifier: string(shared);
 }
 
 table GlobalVar {
