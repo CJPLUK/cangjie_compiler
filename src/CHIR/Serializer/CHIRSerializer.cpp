@@ -544,7 +544,8 @@ flatbuffers::Offset<PackageFormat::Parameter> CHIRSerializer::CHIRSerializerImpl
     auto base = Serialize<PackageFormat::Value>(static_cast<const Value&>(obj));
     auto ownedFunc = GetId<Value>(obj.GetOwnerFunc());
     auto ownedLambda = GetId<Expression>(obj.GetOwnerLambda());
-    return PackageFormat::CreateParameter(builder, base, ownedFunc, ownedLambda);
+    auto srcCodeIdentifier = obj.GetSrcCodeIdentifier();
+    return PackageFormat::CreateParameterDirect(builder, base, ownedFunc, ownedLambda, srcCodeIdentifier.data());
 }
 
 template <>
@@ -553,7 +554,8 @@ flatbuffers::Offset<PackageFormat::LocalVar> CHIRSerializer::CHIRSerializerImpl:
     auto base = Serialize<PackageFormat::Value>(static_cast<const Value&>(obj));
     auto associatedExpr = GetId<Expression>(obj.GetExpr());
     auto isRetVal = obj.IsRetValue();
-    return PackageFormat::CreateLocalVar(builder, base, associatedExpr, isRetVal);
+    auto srcCodeIdentifier = obj.GetSrcCodeIdentifier();
+    return PackageFormat::CreateLocalVarDirect(builder, base, associatedExpr, isRetVal, srcCodeIdentifier.data());
 }
 
 template <>

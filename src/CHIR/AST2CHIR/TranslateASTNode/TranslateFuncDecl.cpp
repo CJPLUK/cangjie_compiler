@@ -488,13 +488,17 @@ Ptr<Value> Translator::TranslateNestedFunc(const AST::FuncDecl& func)
     }
 
     std::vector<DebugLocation> paramLoc;
+    std::vector<std::string> paramSrcCodeIdentifiers;
     for (auto& astParam : func.funcBody->paramLists[0]->params) {
         paramLoc.emplace_back(TranslateLocationWithoutScope(builder.GetChirContext(), astParam->begin, astParam->end));
+        paramSrcCodeIdentifiers.emplace_back(astParam->identifier.GetRawText());
     }
     auto paramTypes = funcTy->GetParamTypes();
     CJC_ASSERT(paramTypes.size() == paramLoc.size());
+    CJC_ASSERT(paramTypes.size() == paramSrcCodeIdentifiers.size());
     for (size_t i = 0; i < paramTypes.size(); ++i) {
-        builder.CreateParameter(paramTypes[i], paramLoc[i], *lambda);
+        auto param = builder.CreateParameter(paramTypes[i], paramLoc[i], *lambda);
+        param->SetSrcCodeIdentifier(paramSrcCodeIdentifiers[i]);
     }
 
     SetSymbolTable(func, *lambda->GetResult());

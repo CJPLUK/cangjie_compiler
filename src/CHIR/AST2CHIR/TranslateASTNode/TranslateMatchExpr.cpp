@@ -484,6 +484,7 @@ void Translator::HandleVarPattern(
         // NOTE: scope info of debug location for var pattern in enum switch case should following match case body,
         // should not use current scope info.
         if (!varPattern.varDecl->TestAttr(AST::Attribute::COMPILER_ADD)) {
+            alloca->SetSrcCodeIdentifier(varPattern.varDecl->identifier);
             CreateAndAppendExpression<Debug>(
                 loc, builder.GetUnitTy(), alloca, varPattern.varDecl->identifier, trueBlock);
         }

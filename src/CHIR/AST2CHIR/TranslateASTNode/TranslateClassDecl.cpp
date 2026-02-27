@@ -181,7 +181,8 @@ Func* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
         func->EnableAttr(Attribute::COMPILER_ADD);
         func->EnableAttr(Attribute::MUT);
 
-        builder.CreateParameter(funcType->GetParamType(0), loc, *func);
+        auto thisParam = builder.CreateParameter(funcType->GetParamType(0), loc, *func);
+        thisParam->SetSrcCodeIdentifier("this");
         body = builder.CreateBlockGroup(*func);
         func->InitBody(*body);
     }

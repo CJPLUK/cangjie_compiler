@@ -227,28 +227,28 @@ void Value::ClearUsersOnly()
     users.clear();
 }
 
-Parameter::Parameter(Type* ty, const std::string& indexStr, Func* ownerFunc)
-    : Value(ty, indexStr, ValueKind::KIND_PARAMETER), ownerFunc(ownerFunc)
+Parameter::Parameter(Type* ty, const std::string& id, Func* ownerFunc)
+    : Value(ty, id, ValueKind::KIND_PARAMETER), ownerFunc(ownerFunc)
 {
     if (ownerFunc) {
         ownerFunc->AddParam(*this);
     }
 }
 
-Parameter::Parameter(Type* ty, const std::string& indexStr, Lambda& ownerLambda)
-    : Value(ty, indexStr, ValueKind::KIND_PARAMETER), ownerLambda(&ownerLambda)
+Parameter::Parameter(Type* ty, const std::string& id, Lambda& ownerLambda)
+    : Value(ty, id, ValueKind::KIND_PARAMETER), ownerLambda(&ownerLambda)
 {
     ownerLambda.AddParam(*this);
 }
 
 std::string Parameter::GetSrcCodeIdentifier() const
 {
-    std::string ident;
-    auto debugExpr = GetDebugExpr();
-    if (debugExpr != nullptr) {
-        ident = debugExpr->GetSrcCodeIdentifier();
-    }
-    return ident;
+    return srcCodeIdentifier;
+}
+
+void Parameter::SetSrcCodeIdentifier(const std::string& newName)
+{
+    srcCodeIdentifier = newName;
 }
 
 Func* Parameter::GetOwnerFunc() const
@@ -311,12 +311,12 @@ LocalVar::LocalVar(Type* ty, std::string indexStr, Expression* expr)
 
 std::string LocalVar::GetSrcCodeIdentifier() const
 {
-    std::string ident;
-    auto debugExpr = GetDebugExpr();
-    if (debugExpr != nullptr) {
-        ident = debugExpr->GetSrcCodeIdentifier();
-    }
-    return ident;
+    return srcCodeIdentifier;
+}
+
+void LocalVar::SetSrcCodeIdentifier(const std::string& newName)
+{
+    srcCodeIdentifier = newName;
 }
 
 BlockGroup* LocalVar::GetOwnerBlockGroup() const

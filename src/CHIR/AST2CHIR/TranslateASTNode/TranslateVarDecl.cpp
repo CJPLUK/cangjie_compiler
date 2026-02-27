@@ -61,6 +61,7 @@ Ptr<Value> Translator::TranslateLeftValueOfVarDecl(const AST::VarDecl& decl, boo
             // Debug is only useful for allocated value, but not for implicit added
             // it will generate bug in cjdb if we generate debug expr for implicit added
             if (!decl.TestAttr(AST::Attribute::IMPLICIT_ADD)) {
+                StaticCast<LocalVar*>(leftValue)->SetSrcCodeIdentifier(decl.identifier);
                 CreateAndAppendExpression<Debug>(GetDeclLoc(builder.GetChirContext(), decl), varPos, builder.GetUnitTy(),
                     leftValue, decl.identifier, currentBlock);
             }
