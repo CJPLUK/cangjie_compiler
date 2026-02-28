@@ -185,6 +185,13 @@ public:
     BlockGroup* GetParentBlockGroup() const;
 
     /**
+     * @brief Retrieves the function or lambda body which this expression belongs to.
+     *
+     * @return The function or lambda body.
+     */
+    BlockGroup* GetFuncOrLambdaBody() const;
+
+    /**
      * @brief Retrieves the top-level function which this expression belongs to.
      *
      * @return The top-level func.

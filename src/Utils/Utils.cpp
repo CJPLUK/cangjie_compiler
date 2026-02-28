@@ -18,6 +18,11 @@
 
 #include <fcntl.h>
 #include <functional>
+#if (defined(__linux__) && !defined(__ohos__) && !defined(__android__)) || defined(_WIN32)
+#include <malloc.h>
+#elif defined(__APPLE__)
+#include <malloc/malloc.h>
+#endif
 #include <map>
 #include <queue>
 
@@ -226,4 +231,19 @@ std::optional<std::string> GetApplicationPath(
     return {exePath};
 }
 #endif
+
+void FreeIdleMemoryToOS()
+{
+    // there is no `malloc_trim` in <malloc.h> of Android.
+#if defined(__linux__) && !defined(__ohos__) && !defined(__android__)
+    malloc_trim(0);
+#elif defined(_WIN32)
+    _heapmin();
+#elif defined(__APPLE__)
+    malloc_zone_t *default_zone = malloc_default_zone();
+    if (default_zone) {
+        malloc_zone_pressure_relief(default_zone, 0);
+    }
+#endif
+}
 } // namespace

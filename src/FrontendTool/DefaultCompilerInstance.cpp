@@ -256,8 +256,7 @@ bool DefaultCIImpl::CodegenOnePackage(Package& pkg, bool enableIncrement)
 bool DefaultCIImpl::EmitLLVMSimilarBytecode(Package& pkg, bool enableIncrement)
 {
     // 1. translate CHIR to LLVM IR
-    CHIR::CHIRBuilder builder(ci.chirData.GetCHIRContext());
-    llvmModules = CodeGen::GenPackageModules(builder, ci.chirData, ci.invocation.globalOptions, ci, enableIncrement);
+    llvmModules = CodeGen::GenPackageModules(ci, enableIncrement);
 
     // 2. save LLVM IR to bc file
     Utils::ProfileRecorder recorder("CodeGen", "Save bc file");

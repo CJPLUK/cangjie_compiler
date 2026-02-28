@@ -16,6 +16,19 @@
 #include "cangjie/CHIR/Optimization/BlockGroupCopyHelper.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 namespace Cangjie::CHIR {
+Block* GetEntryBlock(const BlockGroup& oldBG, std::vector<Block*>& blocks)
+{
+    auto oldBlocks = oldBG.GetBlocks();
+    CJC_ASSERT(oldBlocks.size() == blocks.size());
+    CJC_ASSERT(!blocks.empty());
+    for (size_t i = 0; i < oldBlocks.size(); ++i) {
+        if (oldBlocks[i] == oldBG.GetEntryBlock()) {
+            return blocks[i];
+        }
+    }
+    CJC_ABORT();
+    return blocks.front();
+}
 
 Devirtualization::Devirtualization(
     TypeAnalysisWrapper* typeAnalysisWrapper, DevirtualizationInfo& devirtFuncInfo)
@@ -324,8 +337,11 @@ void Devirtualization::InstantiateFuncIfPossible(CHIRBuilder& builder, std::vect
             auto oriBlockGroup = callee->GetBody();
             BlockGroupCopyHelper helper(builder);
             helper.GetInstMapFromApply(*apply, newFunc);
-            auto [newGroup, newBlockGroupRetValue] = helper.CloneBlockGroup(*oriBlockGroup, *newFunc);
-            newFunc->InitBody(*newGroup);
+            auto newBody = builder.CreateBlockGroup(*newFunc);
+            newFunc->InitBody(*newBody);
+            auto [newBlocks, newBlockGroupRetValue] = helper.CloneBlockGroup(*oriBlockGroup, *newBody);
+            auto funcEntry = GetEntryBlock(*oriBlockGroup, newBlocks);
+            newBody->SetEntryBlock(funcEntry);
             newFunc->SetReturnValue(*newBlockGroupRetValue);
 
             std::vector<Value*> args;
@@ -336,9 +352,9 @@ void Devirtualization::InstantiateFuncIfPossible(CHIRBuilder& builder, std::vect
                 args.push_back(arg);
                 paramMap.emplace(callee->GetParam(i), arg);
             }
-            helper.SubstituteValue(newGroup, paramMap);
+            helper.ReplaceExprOperands(newBlocks, paramMap);
 
-            FixCastProblemAfterInst(newGroup, builder);
+            FixCastProblemAfterInst(newBlocks, builder);
             newFunc->SetReturnValue(*newBlockGroupRetValue);
             frozenInstFuns.push_back(newFunc);
             frozenInstFuncMap[newId] = newFunc;

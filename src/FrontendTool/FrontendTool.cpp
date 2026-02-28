@@ -12,9 +12,6 @@
 
 #include "cangjie/FrontendTool/FrontendTool.h"
 
-#ifdef __linux__
-#include <malloc.h>
-#endif
 #include <memory>
 #include <string>
 #include <vector>

@@ -531,12 +531,14 @@ void Block::RemoveExprOnly(Expression& expr)
 
 void Block::AppendExprOnly(Expression& expr)
 {
+    CJC_ASSERT(expr.GetParentBlockGroup() == GetParentBlockGroup());
     exprs.emplace_back(&expr);
 }
 
 void Block::AppendNonTerminatorExpression(Expression* expression)
 {
     CJC_ASSERT(!expression->IsTerminator());
+    CJC_ASSERT(expression->GetParentBlockGroup() == GetParentBlockGroup());
     expression->GetParentBlock()->RemoveExprOnly(*expression);
     expression->SetParent(this);
     AppendExprOnly(*expression);
@@ -551,6 +553,7 @@ void Block::AppendExpressions(const std::vector<Expression*>& expressions)
 
 void Block::AppendExpression(Expression* expression)
 {
+    CJC_ASSERT(expression->GetParentBlockGroup() == GetParentBlockGroup());
     if (expression->IsTerminator()) {
         AppendTerminator(StaticCast<Terminator*>(expression));
     } else {
@@ -590,6 +593,7 @@ BlockGroup* Block::GetParentBlockGroup() const
 
 void Block::AppendTerminator(Terminator* term)
 {
+    CJC_ASSERT(term->GetParentBlockGroup() == GetParentBlockGroup());
     AppendExprOnly(*term);
     term->SetParent(this);
     // update precedessors
@@ -603,6 +607,13 @@ Func* Block::GetTopLevelFunc() const
     auto blockGroup = GetParentBlockGroup();
     CJC_NULLPTR_CHECK(blockGroup);
     return blockGroup->GetTopLevelFunc();
+}
+
+BlockGroup* Block::GetFuncOrLambdaBody() const
+{
+    auto blockGroup = GetParentBlockGroup();
+    CJC_NULLPTR_CHECK(blockGroup);
+    return blockGroup->GetFuncOrLambdaBody();
 }
 
 Terminator* Block::GetTerminator() const
@@ -664,6 +675,7 @@ bool Block::IsEntry() const
 
 void Block::InsertExprIntoHead(Expression& expr)
 {
+    CJC_ASSERT(expr.GetParentBlockGroup() == GetParentBlockGroup());
     CJC_ASSERT(!expr.IsTerminator());
     // 1. remove expr from expr's parent block
     if (expr.parent != nullptr) {
@@ -762,6 +774,15 @@ Func* BlockGroup::GetTopLevelFunc() const
     }
     CJC_ASSERT(users.size() == 1);
     return users[0]->GetTopLevelFunc();
+}
+
+BlockGroup* BlockGroup::GetFuncOrLambdaBody() const
+{
+    if (ownerFunc != nullptr) {
+        return ownerFunc->GetBody();
+    }
+    CJC_ASSERT(users.size() == 1);
+    return users[0]->GetFuncOrLambdaBody();
 }
 
 void BlockGroup::SetOwnerFunc(Func* func)

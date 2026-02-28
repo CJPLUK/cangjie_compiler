@@ -41,7 +41,7 @@ CHIRBuilder::~CHIRBuilder()
 BlockGroup* CHIRBuilder::CreateBlockGroup(Func& func)
 {
     auto blockGroup = new BlockGroup(std::to_string(func.GenerateBlockGroupId()));
-    this->allocatedBlockGroups.push_back(blockGroup);
+    StoreAllocatedPtrInFuncOrLambda(*blockGroup);
     return blockGroup;
 }
 
@@ -54,9 +54,9 @@ Block* CHIRBuilder::CreateBlock(BlockGroup* parentGroup)
     auto func = parentGroup->GetTopLevelFunc();
     CJC_NULLPTR_CHECK(func);
     std::string idstr = "#" + std::to_string(func->GenerateBlockId());
-
     auto basicBlock = new Block(idstr, parentGroup);
-    this->allocatedBlocks.push_back(basicBlock);
+    auto bg = basicBlock->GetFuncOrLambdaBody();
+    StoreAllocatedPtrInFuncOrLambda(*bg, basicBlock);
     if (markAsCompileTimeValue) {
         basicBlock->EnableAttr(Attribute::CONST);
     }
@@ -100,8 +100,9 @@ Parameter* CHIRBuilder::CreateParameter(Type* ty, const DebugLocation& loc, Func
 
 Parameter* CHIRBuilder::CreateParameter(Type* ty, const DebugLocation& loc, Lambda& parentLambda)
 {
-    CJC_NULLPTR_CHECK(parentLambda.GetTopLevelFunc());
-    auto id = parentLambda.GetTopLevelFunc()->GenerateLocalId();
+    auto topFunc = parentLambda.GetTopLevelFunc();
+    CJC_NULLPTR_CHECK(topFunc);
+    auto id = topFunc->GenerateLocalId();
     auto param = new Parameter(ty, "%" + std::to_string(id), parentLambda);
     param->EnableAttr(Attribute::READONLY);
     param->SetDebugLocation(loc);
@@ -324,4 +325,18 @@ void CHIRBuilder::DisableIRCheckerAfterPlugin()
 bool CHIRBuilder::IsEnableIRCheckerAfterPlugin() const
 {
     return enableIRCheckerAfterPlugin;
+}
+
+void CHIRBuilder::StoreAllocatedPtrInFuncOrLambda(BlockGroup& bg, Base* ptr)
+{
+    auto it = allocatedPtrInFuncOrLambda.find(&bg);
+    if (it == allocatedPtrInFuncOrLambda.end()) {
+        if (ptr == nullptr) {
+            allocatedPtrInFuncOrLambda.emplace(&bg, std::vector<Base*>{});
+        } else {
+            allocatedPtrInFuncOrLambda.emplace(&bg, std::vector<Base*>{ptr});
+        }
+    } else {
+        it->second.emplace_back(ptr);
+    }
 }
