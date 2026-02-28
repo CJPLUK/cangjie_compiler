@@ -270,10 +270,24 @@ bool FunctionInline::CheckCanRewrite(const Apply& apply)
     return false;
 }
 
-static std::vector<Block*> GetExitBlocks(const BlockGroup& blockGroup)
+static Block* GetEntryBlock(const BlockGroup& oldBG, std::vector<Block*>& blocks)
+{
+    auto oldBlocks = oldBG.GetBlocks();
+    CJC_ASSERT(oldBlocks.size() == blocks.size());
+    CJC_ASSERT(!blocks.empty());
+    for (size_t i = 0; i < oldBlocks.size(); ++i) {
+        if (oldBlocks[i] == oldBG.GetEntryBlock()) {
+            return blocks[i];
+        }
+    }
+    CJC_ABORT();
+    return blocks.front();
+}
+
+static std::vector<Block*> GetExitBlocks(std::vector<Block*>& blocks)
 {
     std::vector<Block*> exitBlocks;
-    for (auto block : blockGroup.GetBlocks()) {
+    for (auto block : blocks) {
         auto term = block->GetTerminator();
         CJC_NULLPTR_CHECK(term);
         if (term->GetExprKind() == ExprKind::EXIT) {
@@ -321,14 +335,15 @@ void FunctionInline::ReplaceFuncResult(LocalVar* resNew, LocalVar* resOld)
     return;
 }
 
-void FunctionInline::SetGroupDebugLocation(BlockGroup& group, const DebugLocation& loc)
+void FunctionInline::SetGroupDebugLocation(const std::vector<Block*>& blocks, const DebugLocation& loc)
 {
-    group.SetDebugLocation(loc);
     auto changeLoc = [&loc](Expression& expr) {
         expr.SetDebugLocation(loc);
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(group, changeLoc);
+    for (auto block : blocks) {
+        Visitor::Visit(*block, changeLoc);
+    }
 }
 
 void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& name)
@@ -380,14 +395,12 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
     //   Exit()
     // }
     // `newFuncGroup` is `Block Group: 7`
-    CJC_NULLPTR_CHECK(apply.GetTopLevelFunc());
-    auto [newFuncGroup, returnVal] = CloneBlockGroupForInline(*oldFuncGroup, *apply.GetTopLevelFunc(), apply);
-    SetGroupDebugLocation(*newFuncGroup, apply.GetDebugLocation());
+    auto [newBlocks, returnVal] = CloneBlockGroupForInline(*oldFuncGroup, apply);
+    SetGroupDebugLocation(newBlocks, apply.GetDebugLocation());
     // `funcEntry` is `Block #27`
-    auto funcEntry = newFuncGroup->GetEntryBlock();
+    auto funcEntry = GetEntryBlock(*oldFuncGroup, newBlocks);
     // `exitBlock` is `Block #27`, `returnVal` is `%20`
-    auto exitBlocks = GetExitBlocks(*newFuncGroup);
-    CJC_NULLPTR_CHECK(newFuncGroup->GetTopLevelFunc());
+    auto exitBlocks = GetExitBlocks(newBlocks);
 
     // step 2: change connection of func args
     // Func foo2 { // Block Group: 4
@@ -404,30 +417,9 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
     //   Exit()
     // }
     auto applyArgs = apply.GetArgs();
-    ReplaceFuncArgs(funcArgs, applyArgs, *newFuncGroup);
+    ReplaceFuncArgs(funcArgs, applyArgs, *apply.GetParentBlockGroup());
 
-    FixCastProblemAfterInst(newFuncGroup, builder);
-
-    // step 3: move copied blocks
-    // Func foo2 { // Block Group: 4
-    // Block #14:
-    //   [ret] %11: Int64& = Allocate(Int64)
-    //   %12: Int64 = Constant(2)
-    //   %13: Int64 = Apply(@_CN7default4foo1El, %12)
-    //   %14: Unit = Store(%13, %11)
-    //   Exit()
-    // Block #27:
-    //   %19: Unit = Debug(%7, param)
-    //   %20: Int64& = Allocate(Int64)
-    //   %21: Unit = Store(%7, %20)
-    //   Exit()
-    // }
-    // `applyGroup` is `Block Group: 2`
-    auto applyGroup = apply.GetParentBlock()->GetParentBlockGroup();
-    CJC_NULLPTR_CHECK(applyGroup->GetTopLevelFunc());
-    for (auto block : newFuncGroup->GetBlocks()) {
-        block->MoveTo(*applyGroup);
-    }
+    FixCastProblemAfterInst(newBlocks, builder);
 
     // if callee must throw exception, then we can't get return value
     // step 4 : Insert a load for return value of inlined function and replace the use
@@ -509,11 +501,10 @@ void FunctionInline::RecordEffectMap(const Apply& apply)
 
 // Clone a new block group for Function Inline and return the new local variableCHIRBuilder::CloneBlock
 // for function result value.
-std::pair<BlockGroup*, LocalVar*> FunctionInline::CloneBlockGroupForInline(
-    const BlockGroup& other, Func& parentFunc, const Apply& apply)
+std::pair<std::vector<Block*>, LocalVar*> FunctionInline::CloneBlockGroupForInline(
+    const BlockGroup& oldBG, const Apply& apply)
 {
     BlockGroupCopyHelper helper(builder);
     helper.GetInstMapFromApply(apply);
-    auto [newGroup, newBlockGroupRetValue] = helper.CloneBlockGroup(other, parentFunc);
-    return {newGroup, newBlockGroupRetValue};
+    return helper.CloneBlockGroup(oldBG, *apply.GetParentBlockGroup());
 }

@@ -30,6 +30,7 @@
 #include "cangjie/FrontendTool/IncrementalCompilerInstance.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 #include "cangjie/Utils/TaskQueue.h"
+#include "cangjie/Utils/Utils.h"
 
 namespace Cangjie::CodeGen {
 void EmitMain(CGModule& cgMod);
@@ -462,9 +463,9 @@ void GenSubCHIRPackage(CGModule& cgMod)
 
 class PackageGeneratorImpl : public IRGeneratorImpl {
 public:
-    PackageGeneratorImpl(CHIR::CHIRBuilder& chirBuilder, const CHIRData& chirData, const GlobalOptions& options,
+    PackageGeneratorImpl(CHIRData& chirData, const GlobalOptions& options,
         bool enableIncrement, const CachedMangleMap& cachedMangleMap)
-        : cgPkgCtx(chirBuilder, chirData, options, enableIncrement, cachedMangleMap)
+        : cgPkgCtx(chirData, options, enableIncrement, cachedMangleMap)
     {
     }
 
@@ -634,16 +635,23 @@ void PackageGeneratorImpl::EmitIR()
 #endif
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(CHIR::CHIRBuilder& chirBuilder, const CHIRData& chirData,
-    const GlobalOptions& options, DefaultCompilerInstance& compilerInstance, bool enableIncrement)
+std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(
+    DefaultCompilerInstance& compilerInstance, bool enableIncrement)
 {
     CachedMangleMap cachedMangleMap;
     if (enableIncrement) {
         cachedMangleMap = StaticCast<Cangjie::IncrementalCompilerInstance&>(compilerInstance).cacheMangles;
     }
-    auto temp = PackageGeneratorImpl(chirBuilder, chirData, options, enableIncrement, cachedMangleMap);
-    temp.EmitIR();
-    return temp.ReleaseLLVMModules();
+    std::vector<std::unique_ptr<llvm::Module>> llvmModules;
+    {
+        auto temp = PackageGeneratorImpl(
+            *compilerInstance.chirData, compilerInstance.invocation.globalOptions, enableIncrement, cachedMangleMap);
+        temp.EmitIR();
+        llvmModules = temp.ReleaseLLVMModules();
+    }
+    compilerInstance.FreeCHIRData();
+    Utils::FreeIdleMemoryToOS();
+    return llvmModules;
 }
 #endif
 

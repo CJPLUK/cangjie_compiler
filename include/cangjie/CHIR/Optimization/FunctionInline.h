@@ -60,10 +60,10 @@ private:
     void RecordEffectMap(const Apply& apply);
     void ReplaceFuncResult(LocalVar* resNew, LocalVar* resOld);
 
-    std::pair<BlockGroup*, LocalVar*> CloneBlockGroupForInline(
-        const BlockGroup& other, Func& parentFunc, const Apply& apply);
+    std::pair<std::vector<Block*>, LocalVar*> CloneBlockGroupForInline(
+        const BlockGroup& oldBG, const Apply& apply);
 
-    void SetGroupDebugLocation(BlockGroup& group, const DebugLocation& loc);
+    void SetGroupDebugLocation(const std::vector<Block*>& blocks, const DebugLocation& loc);
 
     void InlineImpl(BlockGroup& bg);
 

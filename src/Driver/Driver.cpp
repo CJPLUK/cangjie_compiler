@@ -12,9 +12,6 @@
 
 #include "cangjie/Driver/Driver.h"
 
-#ifdef __linux__
-#include <malloc.h>
-#endif
 #include <string>
 #include <utility>
 #include <vector>
@@ -31,7 +28,7 @@
 #include "cangjie/Utils/ProfileRecorder.h"
 // DO NOT remove this header file, otherwise, the signal handling of Driver will fail:
 #include "cangjie/Utils/Signal.h"
-
+#include "cangjie/Utils/Utils.h"
 #include "Job.h"
 
 using namespace Cangjie;
@@ -85,10 +82,7 @@ bool DeleteInstance(DefaultCompilerInstance* instance)
 {
     Utils::ProfileRecorder recorder("DeleteInstance", "CompleteTime");
     delete instance;
-#ifdef __linux__
-    (void)malloc_trim(0); // After the memory is released, the heap memory space shrinks to the minimum size, which
-                          // makes better use of the memory space and avoids memory waste.
-#endif
+    Utils::FreeIdleMemoryToOS();
     return true;
 }
 } // namespace

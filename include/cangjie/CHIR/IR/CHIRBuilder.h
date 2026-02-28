@@ -185,11 +185,11 @@ public:
     template <typename TExpr, typename... Args> TExpr* CreateExpression(Type* resultTy, Args&&... args)
     {
         TExpr* expr = new TExpr(std::forward<Args>(args)...);
-        this->allocatedExprs.push_back(expr);
-        CJC_NULLPTR_CHECK(expr->GetTopLevelFunc());
+        auto bg = expr->GetFuncOrLambdaBody();
+        StoreAllocatedPtrInFuncOrLambda(*bg, expr);
         std::string idStr = "%" + std::to_string(expr->GetTopLevelFunc()->GenerateLocalId());
         LocalVar* res = new LocalVar(resultTy, idStr, expr);
-        this->allocatedValues.push_back(res);
+        StoreAllocatedPtrInFuncOrLambda(*bg, res);
         return expr;
     }
 
@@ -216,7 +216,8 @@ public:
     {
         static_assert(std::is_base_of_v<Terminator, TExpr>);
         TExpr* expr = new TExpr(std::forward<Args>(args)...);
-        this->allocatedExprs.push_back(expr);
+        auto bg = expr->GetFuncOrLambdaBody();
+        StoreAllocatedPtrInFuncOrLambda(*bg, expr);
         return expr;
     }
 
@@ -244,11 +245,11 @@ public:
         CJC_NULLPTR_CHECK(parentBlock);
         TLitVal* litVal = CreateLiteralValue<TLitVal>(resultTy, std::forward<Args>(args)...);
         Constant* expr = new Constant(litVal, parentBlock);
-        this->allocatedExprs.push_back(expr);
-        CJC_NULLPTR_CHECK(parentBlock->GetTopLevelFunc());
+        auto bg = expr->GetFuncOrLambdaBody();
+        StoreAllocatedPtrInFuncOrLambda(*bg, expr);
         std::string idStr = "%" + std::to_string(parentBlock->GetTopLevelFunc()->GenerateLocalId());
         LocalVar* res = new LocalVar(resultTy, idStr, expr);
-        this->allocatedValues.push_back(res);
+        StoreAllocatedPtrInFuncOrLambda(*bg, res);
         return expr;
     }
 
@@ -342,14 +343,8 @@ public:
 
     void MergeAllocatedInstance()
     {
-        context.GetAllocatedExprs().insert(
-            context.GetAllocatedExprs().end(), allocatedExprs.begin(), allocatedExprs.end());
         context.GetAllocatedValues().insert(
             context.GetAllocatedValues().end(), allocatedValues.begin(), allocatedValues.end());
-        context.GetAllocatedBlockGroups().insert(context.GetAllocatedBlockGroups().end(),
-            allocatedBlockGroups.begin(), allocatedBlockGroups.end());
-        context.GetAllocatedBlocks().insert(
-            context.GetAllocatedBlocks().end(), allocatedBlocks.begin(), allocatedBlocks.end());
         context.GetAllocatedStructs().insert(
             context.GetAllocatedStructs().end(), allocatedStructs.begin(), allocatedStructs.end());
         context.GetAllocatedClasses().insert(
@@ -358,14 +353,13 @@ public:
             context.GetAllocatedEnums().end(), allocatedEnums.begin(), allocatedEnums.end());
         context.GetAllocatedExtends().insert(
             context.GetAllocatedExtends().end(), allocatedExtends.begin(), allocatedExtends.end());
-        allocatedExprs.clear();
+        context.MergeAllocatedPtrInFuncOrLambda(allocatedPtrInFuncOrLambda);
         allocatedValues.clear();
-        allocatedBlockGroups.clear();
-        allocatedBlocks.clear();
         allocatedStructs.clear();
         allocatedClasses.clear();
         allocatedEnums.clear();
         allocatedExtends.clear();
+        allocatedPtrInFuncOrLambda.clear();
     }
 
     std::unordered_set<CustomType*> GetAllCustomTypes() const;
@@ -376,20 +370,21 @@ public:
     bool IsEnableIRCheckerAfterPlugin() const;
 
 private:
+    void StoreAllocatedPtrInFuncOrLambda(BlockGroup& bg, Base* ptr = nullptr);
+
+private:
     CHIRContext& context;
 
     // A flag indicate if the created CHIR value/expression should be marked as compile time value for const evaluation
     bool markAsCompileTimeValue = false;
     bool enableIRCheckerAfterPlugin = true;
     size_t threadIdx;
-    std::vector<Expression*> allocatedExprs;
     std::vector<Value*> allocatedValues;
-    std::vector<BlockGroup*> allocatedBlockGroups;
-    std::vector<Block*> allocatedBlocks;
     std::vector<StructDef*> allocatedStructs;
     std::vector<ClassDef*> allocatedClasses;
     std::vector<EnumDef*> allocatedEnums;
     std::vector<ExtendDef*> allocatedExtends;
+    std::unordered_map<BlockGroup*, std::vector<Base*>> allocatedPtrInFuncOrLambda;
 };
 } // namespace Cangjie::CHIR
 #endif // CANGJIE_CHIR_CHIRBUILDER_H

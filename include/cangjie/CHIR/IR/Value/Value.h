@@ -481,6 +481,13 @@ public:
     
     Func* GetTopLevelFunc() const;
 
+    /**
+     * @brief Retrieves the function or lambda body which this block belongs to.
+     *
+     * @return The function or lambda body.
+     */
+    BlockGroup* GetFuncOrLambdaBody() const;
+
     // ===--------------------------------------------------------------------===//
     // Modify Self
     // ===--------------------------------------------------------------------===//
@@ -562,6 +569,12 @@ public:
      * the method will also continue looking up until ownerFunc is not empty.
      */
     Func* GetTopLevelFunc() const;
+    /**
+     * @brief Retrieves the function or lambda body which this block group belongs to.
+     *
+     * @return The function or lambda body.
+     */
+    BlockGroup* GetFuncOrLambdaBody() const;
 
     Func* GetOwnerFunc() const;
     void SetOwnerFunc(Func* func);

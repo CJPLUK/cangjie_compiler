@@ -65,7 +65,8 @@ CompilerInstance::CompilerInstance(CompilerInvocation& invocation, DiagnosticEng
     CJC_NULLPTR_CHECK(typeManager);
     CJC_NULLPTR_CHECK(packageManager);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    chirData.InitData(&fileNameMap, invocation.globalOptions.GetJobs());
+    chirData = std::make_unique<CHIRData>();
+    chirData->InitData(&fileNameMap, invocation.globalOptions.GetJobs());
 #endif
     if (invocation.globalOptions.compilePackage) {
         std::copy(invocation.globalOptions.packagePaths.begin(), invocation.globalOptions.packagePaths.end(),
@@ -850,7 +851,7 @@ bool CompilerInstance::GenerateCHIRForPkg(AST::Package& pkg)
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     // use this result when APILevel check supports arbitrary const expressions
     (void)CHIR::ComputeAnnotations(pkg, *this);
-    auto& constAnalysisWrapper = chirData.GetConstAnalysisResultRef();
+    auto& constAnalysisWrapper = chirData->GetConstAnalysisResultRef();
 #endif
     CHIR::CHIRBuilder builder1(GetCHIRContext(), invocation.globalOptions.GetJobs());
     CHIR::ToCHIR convertor(*this, pkg, constAnalysisWrapper, builder1);
@@ -866,9 +867,9 @@ bool CompilerInstance::GenerateCHIRForPkg(AST::Package& pkg)
     astPkg2chirPkgMap.emplace(&pkg, chirPkg);
     chirInfo.optEffectMap = convertor.GetOptEffectMap();
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    chirData.AppendNewPackage(chirPkg);
-    chirData.SetImplicitFuncs(convertor.GetImplicitFuncs());
-    chirData.SetConstVarInitFuncs(convertor.GetConstVarInitFuncs());
+    chirData->AppendNewPackage(chirPkg);
+    chirData->SetImplicitFuncs(convertor.GetImplicitFuncs());
+    chirData->SetConstVarInitFuncs(convertor.GetConstVarInitFuncs());
     chirInfo.curVirtFuncWrapDep = convertor.GetCurVirtualFuncWrapperDepForIncr();
     chirInfo.delVirtFuncWrapForIncr = convertor.GetDeleteVirtualFuncWrapperForIncr();
     chirInfo.ccOutFuncsRawMangle = convertor.GetCCOutFuncsRawMangle();
@@ -1179,24 +1180,32 @@ bool CompilerInstance::DeserializeCHIR()
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 CHIR::CHIRContext& CompilerInstance::GetCHIRContext()
 {
-    return chirData.GetCHIRContext();
+    return chirData->GetCHIRContext();
 }
 
 // used only by cjlint
 const CHIR::ConstAnalysisWrapper& CompilerInstance::GetConstAnalysisWrapper() const
 {
-    return chirData.GetConstAnalysisResult();
+    return chirData->GetConstAnalysisResult();
 }
 
 std::vector<CHIR::Package*> CompilerInstance::GetAllCHIRPackages() const
 {
-    return chirData.GetAllCHIRPackages();
+    return chirData->GetAllCHIRPackages();
+}
+
+void CompilerInstance::FreeCHIRData()
+{
+    if (chirData) {
+        chirData.reset();
+    }
 }
 
 void CHIRData::InitData(std::unordered_map<unsigned int, std::string>* fileNameMap, size_t threadNum)
 {
     cctx.SetFileNameMap(fileNameMap);
     cctx.SetThreadNum(threadNum);
+    constAnalysisWrapper = std::make_unique<CHIR::ConstAnalysisWrapper>(builder);
 }
 
 CHIR::CHIRContext& CHIRData::GetCHIRContext()
@@ -1244,11 +1253,18 @@ std::vector<CHIR::FuncBase*> CHIRData::GetConstVarInitFuncs() const
 
 CHIR::ConstAnalysisWrapper& CHIRData::GetConstAnalysisResultRef()
 {
-    return constAnalysisWrapper;
+    CJC_ASSERT(constAnalysisWrapper != nullptr);
+    return *constAnalysisWrapper;
 }
 
 const CHIR::ConstAnalysisWrapper& CHIRData::GetConstAnalysisResult() const
 {
-    return constAnalysisWrapper;
+    CJC_ASSERT(constAnalysisWrapper != nullptr);
+    return *constAnalysisWrapper;
+}
+
+void CHIRData::FreeConstAnalysisWrapper()
+{
+    constAnalysisWrapper.reset();
 }
 #endif

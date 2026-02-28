@@ -35,12 +35,12 @@ private:
 
 class CGPkgContext {
 public:
-    CGPkgContext(CHIR::CHIRBuilder& chirBuilder, const CHIRData& chirData, const GlobalOptions& options,
+    CGPkgContext(CHIRData& chirData, const GlobalOptions& options,
         bool enableIncrement, const CachedMangleMap& cachedMangleMap);
     ~CGPkgContext();
     void Clear();
 
-    CHIR::CHIRBuilder& GetCHIRBuilder() const
+    CHIR::CHIRBuilder& GetCHIRBuilder()
     {
         return chirBuilder;
     }
@@ -90,11 +90,10 @@ public:
 
     CHIR::Value* FindCHIRGlobalValue(const std::string& mangledName);
 
-    CHIR::CHIRBuilder& chirBuilder;
-
 private:
-    const CHIRData& chirData;
+    CHIRData& chirData;
     const GlobalOptions& options;
+    CHIR::CHIRBuilder chirBuilder;
     const bool enableIncrement;
     CachedMangleMap correctedCachedMangleMap;
 
