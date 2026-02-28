@@ -636,6 +636,7 @@ template <> Parameter* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
     } else {
         CJC_ABORT();
     }
+    result->SetSrcCodeIdentifier(obj->srcCodeIdentifier()->data());
     result->SetAnnoInfo(Create<AnnoInfo>(obj->base()->annoInfo()));
     StaticCast<Value*>(result)->identifier = obj->base()->identifier()->str();
     return result;
@@ -646,6 +647,7 @@ template <> LocalVar* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const 
     auto associatedExpr = GetExpression<Expression>(obj->associatedExpr());
     CJC_NULLPTR_CHECK(associatedExpr);
     auto result = associatedExpr->GetResult();
+    result->SetSrcCodeIdentifier(obj->srcCodeIdentifier()->data());
     return result;
 }
 

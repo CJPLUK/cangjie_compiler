@@ -73,7 +73,7 @@ private:
     LocalVar* CreateBoxClassObj(const LocalVar& env, const ClassDef& classDef);
     void ReplaceEnvWithBoxObjMemberVar(LocalVar& env, LocalVar& boxObj, LocalVar& lValue);
     void LiftNestedFunctionWithCFuncType(Lambda& nestedFunc);
-    std::pair<LocalVar*, LocalVar*> SetBoxClassAsMutableVar(LocalVar& rValue);
+    std::pair<LocalVar*, LocalVar*> SetBoxClassAsMutableVar(LocalVar& rValue, const std::string& srcCodeIdentifier);
     void RecordDuplicateLambdaName(const Lambda& func);
     std::string GenerateGlobalFuncIdentifier(const Lambda& lambda);
 

@@ -241,6 +241,8 @@ public:
     template <typename TLitVal, typename... Args>
     Constant* CreateConstantExpression(Type* resultTy, Block* parentBlock, Args&&... args)
     {
+        CJC_NULLPTR_CHECK(resultTy);
+        CJC_NULLPTR_CHECK(parentBlock);
         TLitVal* litVal = CreateLiteralValue<TLitVal>(resultTy, std::forward<Args>(args)...);
         Constant* expr = new Constant(litVal, parentBlock);
         this->allocatedExprs.push_back(expr);
@@ -254,6 +256,8 @@ public:
     template <typename TLitVal, typename... Args>
     Constant* CreateConstantExpression(const DebugLocation& loc, Type* resultTy, Block* parentBlock, Args&&... args)
     {
+        CJC_NULLPTR_CHECK(resultTy);
+        CJC_NULLPTR_CHECK(parentBlock);
         auto expr = CreateConstantExpression<TLitVal>(resultTy, parentBlock, args...);
         expr->SetDebugLocation(loc);
         return expr;

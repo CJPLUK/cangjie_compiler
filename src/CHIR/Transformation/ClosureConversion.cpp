@@ -981,10 +981,12 @@ void ClosureConversion::ReplaceEnvWithBoxObjMemberVar(LocalVar& env, LocalVar& b
     env.GetExpr()->RemoveSelfFromBlock();
 }
 
-std::pair<LocalVar*, LocalVar*> ClosureConversion::SetBoxClassAsMutableVar(LocalVar& rValue)
+std::pair<LocalVar*, LocalVar*> ClosureConversion::SetBoxClassAsMutableVar(
+    LocalVar& rValue, const std::string& srcCodeIdentifier)
 {
     auto retTy = builder.GetType<RefType>(rValue.GetType());
     auto lValue = builder.CreateExpression<Allocate>(retTy, rValue.GetType(), rValue.GetExpr()->GetParentBlock());
+    lValue->GetResult()->SetSrcCodeIdentifier(srcCodeIdentifier);
     lValue->MoveAfter(rValue.GetExpr());
     auto asg =
         builder.CreateExpression<Store>(builder.GetUnitTy(), &rValue, lValue->GetResult(), lValue->GetParentBlock());
@@ -1003,7 +1005,7 @@ Value* ClosureConversion::BoxMutableVar(LocalVar& env)
     // if not use `-g`, we generate less expressions to improve runtime performance
     if (opts.enableCompileDebug) {
         // var a: Class-$BOX_xxx = $BOX_xxx()
-        auto [lValue, rValue] = SetBoxClassAsMutableVar(*boxObj);
+        auto [lValue, rValue] = SetBoxClassAsMutableVar(*boxObj, env.GetSrcCodeIdentifier());
         allocRes = lValue;
         boxObj = rValue;
     }
@@ -1810,7 +1812,8 @@ Func* ClosureConversion::LiftLambdaToGlobalFunc(
     // Specially, the lifted lambda should inherit local var ID
     globalFunc->InheritIDFromFunc(*nestedFunc.GetBody()->GetTopLevelFunc());
     // Specially, record the `env` value
-    Value* thisPtr = builder.CreateParameter(classRefTy, INVALID_LOCATION, *globalFunc);
+    auto thisPtr = builder.CreateParameter(classRefTy, INVALID_LOCATION, *globalFunc);
+    thisPtr->SetSrcCodeIdentifier("$env");
     for (auto param : nestedFunc.GetParams()) {
         globalFunc->AddParam(*param);
     }
