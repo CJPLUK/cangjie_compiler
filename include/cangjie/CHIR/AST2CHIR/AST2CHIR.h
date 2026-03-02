@@ -354,8 +354,13 @@ private:
             auto it = deserializedVals.find(key);
             res = it == deserializedVals.end() ? nullptr : dynamic_cast<T*>(it->second);
         }
-        if (res && !decl.TestAttr(AST::Attribute::SPECIFIC)) {
-            deserializedDecls.insert(&decl);
+        // When common part chir is deserialized, the list of members of imported nominal declarations
+        // might be lacking new declarations, which were added when compiling specific part of multiplatform dependency
+        if (res &&
+            !decl.TestAttr(AST::Attribute::SPECIFIC) &&
+            !(decl.TestAttr(AST::Attribute::COMMON) && decl.TestAttr(AST::Attribute::IMPORTED))
+        ) {
+            noNeedToTranslateDecls.insert(&decl);
         }
         return res;
     }
@@ -367,7 +372,7 @@ private:
     // Check whether the decl need be translated for CJMP.
     inline bool NeedTranslate(const AST::Decl& decl) const
     {
-        return deserializedDecls.find(&decl) == deserializedDecls.end();
+        return noNeedToTranslateDecls.find(&decl) == noNeedToTranslateDecls.end();
     }
     void ProcessCommonAndSpecificExtends();
     void ProcessClassStructVarInits(Translator& trans);
@@ -460,7 +465,7 @@ private:
     /* Add fields for CJMP. */
     bool outputCHIR{false}; // Output type is CHIR
     bool mergingSpecific{false}; // Merging specific part over already compiled chir
-    std::unordered_set<Ptr<const AST::Decl>> deserializedDecls; // decls which don't need to be retranslated.
+    std::unordered_set<Ptr<const AST::Decl>> noNeedToTranslateDecls;
     // Deserialized node cache table, key is identifier.
     std::unordered_map<std::string, CustomTypeDef*> deserializedDefs;
     std::unordered_map<std::string, Value*> deserializedVals;
