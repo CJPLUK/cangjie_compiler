@@ -494,7 +494,7 @@ void ParserImpl::CheckPropDeclJavaMirror(PropDecl& decl)
     if (decl.outerDecl && decl.outerDecl->TestAttr(Attribute::JAVA_MIRROR)) {
         ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_prop_is_forbidden, decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
-        decl.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
+        decl.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
     }
 }
 
