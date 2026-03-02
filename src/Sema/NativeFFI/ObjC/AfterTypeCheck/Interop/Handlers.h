@@ -99,7 +99,7 @@ private:
  * Creates and inserts a `$getObjCClass(): NativeObjCClass` function for each @ObjCMirror/@ObjCImpl class:
  *
  * ```cangjie
- * public func $getObjCClass(): NativeObjCClass {
+ * public static func $getObjCClass(): NativeObjCClass {
  *     getClass("ClassName")
  * }
  * ```
