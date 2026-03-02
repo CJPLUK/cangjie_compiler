@@ -29,6 +29,7 @@
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 #include "CJMP/MPTypeCheckerImpl.h"
+#include "InheritanceChecker/MemberSignature.h"
 
 namespace Cangjie {
 class Synthesizer;
@@ -120,8 +121,11 @@ public:
      */
     void PerformDesugarAfterInstantiation(ASTContext& ctx, AST::Package& pkg);
 
+    // Parse package config file and storage to corresponding pkg.
+    void ParsePackageConfigFile(Ptr<AST::Package>& pkg, InteropCJPackageConfigReader packagesFullConfig);
+
     // Desugar after sema.
-    void PerformDesugarAfterSema(const std::vector<Ptr<AST::Package>>& pkgs);
+    void PerformDesugarAfterSema(std::vector<Ptr<AST::Package>>& pkgs);
 
     /**
      * Synthesize the given @p expr in given @p scopeName and return the found candidate decls or types.
@@ -426,7 +430,7 @@ private:
      */
     void AddObjectSuperClass(ASTContext& ctx, AST::ClassDecl& cd);
     /**
-     * LLVM-java interop scenario.
+     * CJNative-java interop scenario.
      */
     bool AddJObjectSuperClassJavaInterop(ASTContext& ctx, AST::ClassDecl& cd);
     void AddDefaultSuperCall(const AST::FuncBody& funcBody) const;
@@ -1705,6 +1709,13 @@ private:
     Ptr<AST::Node> strictDeprecatedContext = nullptr;
     // cjmp typechecker implementation class
     class MPTypeCheckerImpl* mpImpl;
+    /**
+     * Will be passed as a reference in TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck
+     * at Perform desugar after typecheck before generic instantiation stage.
+     *
+     * Needed for Java, Objective C interop Synthetic class wrappers generation.
+     */
+    std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap> structMemberMap;
 };
 } // namespace Cangjie
 #endif

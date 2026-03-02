@@ -11,9 +11,11 @@
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "Utils.h"
 #include "NativeFFI/Utils.h"
+#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "cangjie/AST/Utils.h"
 
 
@@ -124,7 +126,7 @@ void JavaDesugarManager::InsertJavaRefVarDecl(ClassDecl& decl)
 void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
 {
     auto curFile = decl.curFile;
-    auto isJObject = IsJObject(decl);
+    auto isJObject = IsJObject(decl) || decl.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD);
     auto& javaEntityDecl = *lib.GetJavaEntityDecl();
 
     auto param = CreateFuncParam("$ref", CreateRefType(javaEntityDecl), nullptr, javaEntityDecl.ty);
@@ -329,8 +331,6 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     OwnedPtr<CallExpr> newObjectCall;
 
     if (IsJArray(*ctor.outerDecl)) {
-        CJC_ASSERT_WITH_MSG(
-            !ctor.outerDecl->generic->typeParameters.empty(), "JArray ctor must be generic");
         auto genericParam = ctor.outerDecl->generic->typeParameters[0].get();
         newObjectCall = lib.CreateCFFINewJavaArrayCall(
             WithinFile(CreateRefExpr(*jniEnvVar), curFile), *ctor.funcBody->paramLists[0], genericParam);
@@ -352,7 +352,8 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     }
 }
 
-void JavaDesugarManager::AddJavaMirrorMethodBody(const ClassLikeDecl& mirror, FuncDecl& fun, OwnedPtr<Expr> javaRefCall)
+void JavaDesugarManager::AddJavaMirrorMethodBody(
+    ClassLikeDecl& mirror, FuncDecl& fun, OwnedPtr<Expr> javaRefCall, GenericConfigInfo* genericConfig)
 {
     if (fun.TestAttr(Attribute::ABSTRACT) && !IsSynthetic(mirror)) {
         return;
@@ -367,26 +368,23 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(const ClassLikeDecl& mirror, Fu
     }
 
     OwnedPtr<Expr> methodCall;
-    CJC_ASSERT_WITH_MSG(!fun.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& paramList = *fun.funcBody->paramLists[0].get();
     if (fun.TestAttr(Attribute::STATIC)) {
-        methodCall = lib.CreateCFFICallStaticMethodCall(
-            std::move(jniEnvCall), MemberJNISignature(utils, fun),
-            paramList, *curFile);
+        auto memberJNISignature =
+            genericConfig ? MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
+        methodCall =
+            lib.CreateCFFICallStaticMethodCall(std::move(jniEnvCall), memberJNISignature, paramList, *curFile);
     } else {
         if (IsJArray(mirror)) {
-            CJC_ASSERT_WITH_MSG(
-                !mirror.generic->typeParameters.empty(), "JArray ctor must be generic");
             auto genericParam = mirror.generic->typeParameters[0].get();
             CJC_ASSERT(genericParam);
             methodCall = lib.CreateCFFICallArrayMethodCall(
-                std::move(jniEnvCall), std::move(javaRefCall), paramList, genericParam,
-                GetArrayOperationKind(fun));
+                std::move(jniEnvCall), std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
         } else {
+            auto memberJNISignature =
+                genericConfig ? MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
             methodCall = lib.CreateCFFICallMethodCall(
-                std::move(jniEnvCall), std::move(javaRefCall),
-                MemberJNISignature(utils, fun),
-                paramList, *fun.curFile);
+                std::move(jniEnvCall), std::move(javaRefCall), memberJNISignature, paramList, *fun.curFile);
         }
     }
 
@@ -403,13 +401,23 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(const ClassLikeDecl& mirror, Fu
 
     auto callResRef = CreateRefExpr(*methodCallRes);
     CopyBasicInfo(methodCallRes.get(), callResRef.get());
-    auto unwrapJavaEntityCall = lib.UnwrapJavaEntity(std::move(callResRef), fun.funcBody->retType->ty, mirror);
-    if (!unwrapJavaEntityCall) {
+
+
+    OwnedPtr<Expr> retCallExpr = nullptr;
+    // cjmapping interface return param support lambda.
+    if (fun.funcBody->retType->ty->kind == TypeKind::TYPE_FUNC &&
+        fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
+        retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), fun.funcBody->retType->ty, mirror);
+    } else {
+        retCallExpr = lib.UnwrapJavaEntity(std::move(callResRef), fun.funcBody->retType->ty, mirror);
+    }
+
+    if (!retCallExpr) {
         fun.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
     std::vector<OwnedPtr<Node>> blockNodes;
-    auto retExpr = CreateReturnExpr(std::move(unwrapJavaEntityCall), fun.funcBody.get());
+    auto retExpr = CreateReturnExpr(std::move(retCallExpr), fun.funcBody.get());
     retExpr->ty = TypeManager::GetNothingTy();
     retExpr->refFuncBody = fun.funcBody.get();
     blockNodes.push_back(std::move(methodCallRes));
@@ -417,16 +425,19 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(const ClassLikeDecl& mirror, Fu
     // Return type has to be specified, so it's safe to use it below
     fun.funcBody->body = CreateBlock(std::move(blockNodes), fun.funcBody->retType->ty);
     fun.funcBody->ty = TypeManager::GetNothingTy();
+    if(fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
+        fun.funcBody->parentClassLike = &mirror;
+    }
     if (IsSynthetic(mirror)) {
         fun.DisableAttr(Attribute::ABSTRACT);
     }
 }
 
-void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror)
+void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror, GenericConfigInfo *genericConfig)
 {
     CJC_ASSERT(!fun.TestAttr(Attribute::CONSTRUCTOR) &&
-        (fun.TestAttr(Attribute::JAVA_MIRROR)));
-    AddJavaMirrorMethodBody(mirror, fun, CreateJavaRefCall(mirror, mirror.curFile));
+        (fun.TestAttr(Attribute::JAVA_MIRROR) || fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)));
+    AddJavaMirrorMethodBody(mirror, fun, CreateJavaRefCall(mirror, mirror.curFile), genericConfig);
 }
 
 void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)
@@ -480,9 +491,6 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
     auto curFile = prop.curFile;
     OwnedPtr<CallExpr> jniSetterCall;
 
-    CJC_ASSERT_WITH_MSG(!prop.setters.empty(), "expected at least one setter");
-    CJC_ASSERT_WITH_MSG(!prop.setters[0]->funcBody->paramLists.empty(), "setter paramLists cannot be empty");
-    CJC_ASSERT_WITH_MSG(!prop.setters[0]->funcBody->paramLists[0]->params.empty(), "setter params cannot be empty");
     auto paramRef = WithinFile(CreateRefExpr(*prop.setters[0]->funcBody->paramLists[0]->params[0]), curFile);
 
     if (prop.TestAttr(Attribute::STATIC)) {
@@ -592,6 +600,17 @@ void JavaDesugarManager::GenerateInMirror(ClassDecl& classDecl, bool doStub)
     }
 }
 
+void JavaDesugarManager::GenerateInSynthetic(ClassDecl& cd)
+{
+    if (IsSynthetic(cd)) {
+        if (auto id = DynamicCast<InheritableDecl*>(&cd)) {
+            GenerateSyntheticClassMemberStubs(cd, memberMap.at(id));
+        } else {
+            CJC_ABORT_WITH_MSG("Illegal state: synthetic classes expected to be InheritableDecl*");
+        }
+    }
+}
+
 void JavaDesugarManager::ReplaceCallsWithArrayJavaEntityGet(File& file)
 {
     Walker(&file, Walker::GetNextWalkerID(), [this, &file](auto node) {
@@ -612,7 +631,6 @@ void JavaDesugarManager::ReplaceCallsWithArrayJavaEntityGet(File& file)
         }
 
         auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
-        CJC_ASSERT_WITH_MSG(!ma->baseExpr->ty->typeArgs.empty(), "JArray type must be generic");
         auto arrayElementType = ma->baseExpr->ty->typeArgs[0];
 
         if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
@@ -655,7 +673,6 @@ void JavaDesugarManager::ReplaceCallsWithArrayJavaEntitySet(File& file)
         }
 
         auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
-        CJC_ASSERT_WITH_MSG(!ma->baseExpr->ty->typeArgs.empty(), "JArray type must be generic");
         auto arrayElementType = ma->baseExpr->ty->typeArgs[0];
 
         if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
@@ -707,6 +724,9 @@ void JavaDesugarManager::GenerateInMirrors(File& file, bool doStub)
             }
             if (auto classDecl = As<ASTKind::CLASS_DECL>(cldecl)) {
                 GenerateInMirror(*classDecl, doStub);
+                if (doStub) {
+                    GenerateInSynthetic(*classDecl);
+                }
             }
             if (doStub && cldecl->astKind == ASTKind::INTERFACE_DECL) {
                 InsertAbstractJavaRefGetter(*cldecl);

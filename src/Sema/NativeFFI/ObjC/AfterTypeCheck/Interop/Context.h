@@ -31,7 +31,7 @@ struct InteropContext {
         const BaseMangler& mangler,
         const std::string& cjLibOutputPath)
         : pkg(pkg), diag(diag), typeManager(typeManager), importManager(importManager), bridge(importManager, diag),
-          typeMapper(bridge, typeManager), mangler(mangler), nameGenerator(mangler),
+          typeMapper(bridge, typeManager), mangler(mangler), nameGenerator(mangler, typeManager),
           factory(bridge, typeManager, nameGenerator, typeMapper, importManager),
           cjLibOutputPath(cjLibOutputPath)
     {

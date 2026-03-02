@@ -61,8 +61,6 @@ void CheckEnumConstructorsUseJavaTypes(DiagnosticEngine& diag, EnumDecl& enumDec
 {
     for (auto& enumCtr : enumDecl.constructors) {
         if (auto funcEnumCtr = DynamicCast<FuncDecl>(enumCtr.get())) {
-            CJC_ASSERT_WITH_MSG(
-                !funcEnumCtr->funcBody->paramLists[0]->params.empty(), "at least one paramLists expected");
             for (auto& argDecl : funcEnumCtr->funcBody->paramLists[0]->params) {
                 CollectJavaTypesAndDiag(diag, *argDecl, &enumDecl);
             }

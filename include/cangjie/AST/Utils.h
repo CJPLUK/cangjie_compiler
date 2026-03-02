@@ -250,15 +250,27 @@ namespace Cangjie::Interop::Java {
 using namespace Cangjie::AST;
 
 
-bool IsImpl(const Decl& decl);
+bool IsImpl(const Node& decl);
 bool IsJObject(const Decl& decl);
 /**
  * For stages where packageName is not set yet
  */
 bool IsJObject(const Decl& decl, const std::string& packageName);
-bool IsMirror(const Decl& decl);
-bool IsCJMapping(const Decl& decl);
-bool IsObject(const Decl& decl);
+bool IsMirror(const Node& node);
+bool IsCJMapping(const Node& node);
+bool IsObject(const Node& node);
+
+/**
+ * The forward class is used to forward the method call to Java side.
+ * An example of a forward class is as follows(pseudocode):
+ *
+ * public class A_fwd <: A {
+ *     public func foo() {
+ *         jniCall("Java/A", "foo", "()V", [])
+ *     }
+ * }
+ */
+bool IsFwdClass(const Node& decl);
 
 /**
  * public func $getJavaRef(): Java_CFFI_JavaEntity {
@@ -267,7 +279,7 @@ bool IsObject(const Decl& decl);
  */
 void InsertJavaRefGetterStubWithBody(ClassDecl& decl);
 
-bool IsDeclAppropriateForSyntheticClassGeneration(const Decl& decl);
+bool IsDeclAppropriateForSyntheticClassGeneration(const Node& decl);
 
 std::string GetSyntheticNameFromClassLike(const ClassLikeDecl& cld);
 

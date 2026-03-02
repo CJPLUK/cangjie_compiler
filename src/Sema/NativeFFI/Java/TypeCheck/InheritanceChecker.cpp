@@ -13,13 +13,6 @@ namespace Cangjie::Interop::Java {
 
 namespace {
 
-Ptr<Annotation> GetForeignNameAnnotation(const Decl& decl)
-{
-    auto it = std::find_if(decl.annotations.begin(), decl.annotations.end(),
-        [](const auto& anno) { return anno->kind == AnnotationKind::FOREIGN_NAME; });
-    return it != decl.annotations.end() ? it->get() : nullptr;
-}
-
 std::string GetAnnoValue(Ptr<Annotation> anno)
 {
     CJC_ASSERT(anno);
@@ -40,10 +33,10 @@ void DiagConflictingForeignName(
         if (!anno->TestAttr(Attribute::COMPILER_ADD)) {
             auto declWithAnnoRange = MakeRange(anno->GetBegin(), declWithAnno.identifier.End());
             return diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_conflicting_annotation, declWithAnno,
-                declWithAnnoRange, declWithAnno.identifier);
+                declWithAnnoRange, declWithAnno.identifier, anno->identifier);
         } else {
             return diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_conflicting_derived_annotation,
-                declWithAnno, MakeRange(declWithAnno.identifier), declWithAnno.identifier, GetAnnoValue(anno));
+                declWithAnno, MakeRange(declWithAnno.identifier), declWithAnno.identifier, anno->identifier, GetAnnoValue(anno));
         }
     }();
 
@@ -118,7 +111,7 @@ void CheckForeignName(DiagnosticEngine& diag, TypeManager& typeManager, const Me
 
     if (childAnno && !childAnno->TestAttr(Attribute::COMPILER_ADD)) {
         auto range = MakeRange(childAnno->GetBegin(), child.decl->identifier.End());
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_appeared_in_child, *child.decl, range);
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_appeared_in_child, *child.decl, range, childAnno->identifier);
     } else if (childAnno && !parentAnno) {
         DiagConflictingForeignName(diag, *child.decl, *parent.decl, checkingDecl);
     } else if (!childAnno && parentAnno && child.replaceOther) {

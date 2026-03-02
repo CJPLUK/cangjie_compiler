@@ -33,6 +33,7 @@ protected:
     std::string res;
     static const std::string TAB;
     static const std::string TAB2;
+    static const std::string TAB3;
 
     template <typename Container, typename Element>
     static std::string Join(const Container& container, const std::string& delimiter,
