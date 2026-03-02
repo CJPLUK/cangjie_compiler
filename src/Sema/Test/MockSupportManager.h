@@ -111,7 +111,8 @@ private:
         OwnedPtr<AST::EnumPattern> optionFuncTyPattern, OwnedPtr<AST::CallExpr> handlerCallExpr);
     Ptr<AST::Decl> GenerateSpiedObjectVar(const AST::Decl& decl);
 
-    std::vector<Ptr<AST::Ty>> CloneFuncDecl(Ptr<AST::FuncDecl> fromDecl, Ptr<AST::FuncDecl> toDecl);
+    std::vector<Ptr<AST::Ty>> CloneFuncDecl(Ptr<AST::FuncDecl> fromDecl, Ptr<AST::FuncDecl> toDecl,
+        Ptr<AST::File> curFile = nullptr, std::string fullPackageName = "");
     void GenerateSpyCallHandler(AST::FuncDecl& funcDecl, AST::Decl& spiedObjectDecl);
     void PrepareInterfaceDecl(AST::InterfaceDecl& interfaceDecl);
 

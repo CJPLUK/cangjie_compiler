@@ -1609,7 +1609,8 @@ OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(
     return accessorCall;
 }
 
-std::vector<Ptr<Ty>> MockSupportManager::CloneFuncDecl(Ptr<FuncDecl> fromDecl, Ptr<FuncDecl> toDecl)
+std::vector<Ptr<Ty>> MockSupportManager::CloneFuncDecl(
+    Ptr<FuncDecl> fromDecl, Ptr<FuncDecl> toDecl, Ptr<File> curFile, std::string fullPackageName)
 {
     CopyBasicInfo(fromDecl, toDecl);
     toDecl->CloneAttrs(*fromDecl);
@@ -1617,6 +1618,13 @@ std::vector<Ptr<Ty>> MockSupportManager::CloneFuncDecl(Ptr<FuncDecl> fromDecl, P
     toDecl->fullPackageName = fromDecl->fullPackageName;
     toDecl->identifier = fromDecl->identifier;
     toDecl->outerDecl = fromDecl->outerDecl;
+
+    if (curFile) {
+        toDecl->curFile = curFile;
+    }
+    if (!fullPackageName.empty()) {
+        toDecl->fullPackageName = fullPackageName;
+    }
 
     toDecl->funcBody = MakeOwned<FuncBody>();
 
@@ -1641,6 +1649,8 @@ std::vector<Ptr<Ty>> MockSupportManager::CloneFuncDecl(Ptr<FuncDecl> fromDecl, P
         clonedParam->type = MockUtils::CreateType<Type>(clonedParam->ty);
         clonedParam->outerDecl = toDecl;
         clonedParam->identifier = param->identifier;
+        clonedParam->curFile = toDecl->curFile;
+        clonedParam->fullPackageName = toDecl->fullPackageName;
         paramList->params.emplace_back(std::move(clonedParam));
     }
     toDecl->funcBody->paramLists.emplace_back(std::move(paramList));
@@ -1786,11 +1796,11 @@ void MockSupportManager::PrepareClassLikeWithDefaults(
         CJC_ASSERT(accessorDecl->identifier == mockUtils->Mangle(*originalFunc) + MockUtils::defaultAccessorSuffix);
 
         auto accessorImplDecl = MakeOwned<FuncDecl>();
-        auto implTypeParamsTy = CloneFuncDecl(accessorDecl, accessorImplDecl);
+        auto implTypeParamsTy =
+            CloneFuncDecl(accessorDecl, accessorImplDecl, outerDecl->curFile, outerDecl->fullPackageName);
 
         accessorImplDecl->identifier = accessorDecl->identifier;
         accessorImplDecl->outerDecl = outerDecl;
-        accessorImplDecl->curFile = outerDecl->curFile;
         if (accessorDecl->TestAttr(Attribute::STATIC)) {
             accessorImplDecl->EnableAttr(Attribute::REDEF);
         } else {

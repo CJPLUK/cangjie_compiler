@@ -725,6 +725,9 @@ std::vector<Ptr<Ty>> MockUtils::AddGenericIfNeeded(Decl& originalDecl, Decl& moc
     for (auto& typeParam : newGeneric->typeParameters) {
         typeParam->outerDecl = &mockedDecl;
         typeParam->ty = typeManager.GetGenericsTy(*typeParam);
+        typeParam->fullPackageName = mockedDecl.fullPackageName;
+        typeParam->curFile = mockedDecl.curFile;
+        typeParam->DisableAttr(Attribute::IMPORTED);
         typeParamTys.emplace_back(typeParam->ty);
     }
 
