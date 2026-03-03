@@ -23,6 +23,13 @@ using namespace TypeCheckUtil;
 using namespace Sema::Desugar::AfterTypeCheck;
 
 namespace {
+
+template <class... Ts> struct overloaded : Ts... {
+    using Ts::operator()...;
+};
+
+template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
 // Create `stdx.effect.ImmediateHandlerReturn.Result` from the type
 // (Any) -> ImmediateHandlerReturn
 OwnedPtr<RefExpr> CreateRefValue(FuncTy& funcTy)
@@ -577,34 +584,37 @@ OwnedPtr<AST::Expr> TypeChecker::TypeCheckerImpl::MakeThrow(
 OwnedPtr<AST::Expr> TypeChecker::TypeCheckerImpl::MakeReturn(
     OwnedPtr<AST::Expr> expr, std::variant<Ptr<FuncBody>, std::tuple<Ptr<FuncDecl>, Ptr<Ty>>> funcBodyOrReturnDecl)
 {
-    if (auto deferredStuff = std::get_if<std::tuple<Ptr<FuncDecl>, Ptr<Ty>>>(&funcBodyOrReturnDecl)) {
-        auto [returnDecl, ty] = *deferredStuff;
-        auto refExpr = CreateRefExpr("Return");
-        refExpr->isAlone = false;
-        refExpr->ref.target = returnDecl;
-        auto subst = GenerateTypeMapping(*returnDecl, {expr->GetTy()});
-        refExpr->SetTy(typeManager.GetInstantiatedTy(returnDecl->GetTy(), subst));
-        refExpr->instTys = {expr->GetTy()};
-        refExpr->ref.targets.emplace_back(StaticCast<FuncDecl*>(refExpr->ref.target));
-        CopyBasicInfo(expr.get(), refExpr.get());
+    return std::visit(
+        overloaded {
+            [&expr, this](std::tuple<Ptr<FuncDecl>, Ptr<Ty>> deferredStuff) -> OwnedPtr<Expr> {
+                auto [returnDecl, ty] = deferredStuff;
+                auto refExpr = CreateRefExpr("Return");
+                refExpr->isAlone = false;
+                refExpr->ref.target = returnDecl;
+                auto subst = GenerateTypeMapping(*returnDecl, {expr->GetTy()});
+                refExpr->SetTy(typeManager.GetInstantiatedTy(returnDecl->GetTy(), subst));
+                refExpr->instTys = {expr->GetTy()};
+                refExpr->ref.targets.emplace_back(StaticCast<FuncDecl*>(refExpr->ref.target));
+                CopyBasicInfo(expr.get(), refExpr.get());
 
-        std::vector<OwnedPtr<FuncArg>> args;
-        auto arg = CreateFuncArg(std::move(expr));
-        args.emplace_back(std::move(arg));
-        auto callExpr =
-            AST::CreateCallExpr(std::move(refExpr), std::move(args), returnDecl, ty, CallKind::CALL_DECLARED_FUNCTION);
+                std::vector<OwnedPtr<FuncArg>> args;
+                auto arg = CreateFuncArg(std::move(expr));
+                args.emplace_back(std::move(arg));
+                auto callExpr =
+                    AST::CreateCallExpr(std::move(refExpr), std::move(args), returnDecl, ty, CallKind::CALL_DECLARED_FUNCTION);
 
-        return callExpr;
-    } else if (auto funcBody = std::get<Ptr<FuncBody>>(funcBodyOrReturnDecl)) {
-        auto returnExpr = MakeOwnedNode<ReturnExpr>();
-        returnExpr->expr = std::move(expr);
-        returnExpr->refFuncBody = funcBody;
-        returnExpr->SetTy(TypeManager::GetNothingTy());
-        return returnExpr;
-    } else {
-        CJC_ABORT();
-        return nullptr;
-    }
+                return callExpr;
+            },
+            [&expr](Ptr<FuncBody> funcBody) -> OwnedPtr<Expr> {
+                auto returnExpr = MakeOwnedNode<ReturnExpr>();
+                returnExpr->expr = std::move(expr);
+                returnExpr->refFuncBody = funcBody;
+                returnExpr->SetTy(TypeManager::GetNothingTy());
+                return returnExpr;
+            },
+        },
+        funcBodyOrReturnDecl
+    );
 }
 
 /*
