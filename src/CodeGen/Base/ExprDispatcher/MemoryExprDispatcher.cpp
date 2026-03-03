@@ -201,8 +201,7 @@ void HandleStoreElementRef(IRBuilder2& irBuilder, const CHIR::StoreElementRef& s
         // - we are in the scope of a struct instance method(without "$withTI" postfix),
         //   the "struct" mentioned above is the `this` parameter of the method.
         if (IsTypeContainsRef(srcCGType->GetLLVMType())) {
-            irBuilder.CallGCWriteAgg(llvm::cast<llvm::StructType>(srcCGType->GetLLVMType()),
-                {tmp, payloadPtr, value->GetRawValue(), size});
+            irBuilder.CallGCWriteAgg(llvm::cast<llvm::StructType>(srcCGType->GetLLVMType()), {tmp, payloadPtr, value->GetRawValue(), size});
         } else {
             irBuilder.CreateMemCpy(payloadPtr, llvm::MaybeAlign(), value->GetRawValue(), llvm::MaybeAlign(), size);
         }

@@ -4,6 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include "Base/CGTypes/CGVArrayType.h"
 #include "IRBuilder.h"
 
 #include "Base/CGTypes/CGArrayType.h"
@@ -276,7 +277,7 @@ void IRBuilder2::CallArrayIntrinsicSet(
         }
     } else if (elemType->isArrayTy()) {
         auto size = getInt64(GetLLVMModule()->getDataLayout().getTypeAllocSize(elemType));
-        CallGCWriteAgg(elemType, {array, elePtr, value, size});
+        CallGCWriteAgg(llvm::cast<llvm::StructType>(StaticCast<CGArrayType>(elemCGType)->GetLayoutType()), {array, elePtr, value, size});
     } else if (elemType == CGType::GetRefType(GetLLVMContext())) {
         CallGCWrite({value, array, elePtr});
     } else {
@@ -391,7 +392,7 @@ void IRBuilder2::CreateRefStore(CGValue* cgValue, llvm::Value* basePtr, llvm::Va
     } else if (isDstAddrspace1 && valueCGType->IsVArrayPtrType()) {
         auto valueType = valueCGType->GetPointerElementType()->GetLLVMType();
         auto size = getInt64(cgMod.GetLLVMModule()->getDataLayout().getTypeAllocSize(valueType));
-        CallGCWriteAgg(valueType, {base, place, value, size});
+        CallGCWriteAgg(llvm::cast<llvm::StructType>(StaticCast<CGVArrayType>(valueCGType->GetPointerElementType())->GetLayoutType()), {base, place, value, size});
     } else if (isDstAddrspace1 && valueCGType->IsRefType()) {
         CallGCWrite({value, base, place});
     } else {

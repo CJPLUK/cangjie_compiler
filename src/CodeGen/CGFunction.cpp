@@ -67,8 +67,14 @@ void CreateFunctionWrapperForNormalCases(
         auto paramDerefType = CGType::GetOrCreate(cgMod, DeRef(cgType.GetParamType(0)->GetOriginal()))->GetLLVMType();
         CJC_ASSERT(paramDerefType->isIntegerTy(8U) && "Should not reach here.");
         auto tmp = builder.LLVMIRBuilder2::CreateAlloca(paramDerefType, size);
-        builder.CallGCReadAgg(llvm::cast<llvm::StructType>(paramDerefType),
-            {tmp, thisVal, dataPtr, builder.CreateSExt(size, builder.getInt64Ty())});
+        auto i8Ty = llvm::Type::getInt8Ty(cgMod.GetLLVMContext());
+        auto structType = llvm::StructType::getTypeByName(cgMod.GetLLVMContext(), "i8_array");
+        if (structType == nullptr) {
+            structType = llvm::StructType::create(cgMod.GetLLVMContext(), "i8_array");
+            SetStructTypeBody(structType, std::vector<llvm::Type*>{i8Ty});
+            cgMod.GetCGContext().AddGeneratedStructType("i8_array");
+        }
+        builder.CallGCReadAgg(structType, {tmp, thisVal, dataPtr, builder.CreateSExt(size, builder.getInt64Ty())});
         dataPtr = tmp;
     }
     args[thisValOffset] = dataPtr;

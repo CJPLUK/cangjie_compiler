@@ -202,11 +202,11 @@ public:
     bool IsGlobalVariableBasePtr(llvm::Value* val) const;
     llvm::Instruction* CallGCRead(std::vector<llvm::Value*> args);
     llvm::Instruction* CallGCReadWeakRef(std::vector<llvm::Value*> args);
-    llvm::Instruction* CallGCReadAgg(llvm::Type* structType, std::vector<llvm::Value*> args);
+    llvm::Instruction* CallGCReadAgg(llvm::StructType* structType, std::vector<llvm::Value*> args);
     llvm::Instruction* CallGCReadStaticRef(const std::vector<llvm::Value*>& args);
     llvm::Instruction* CallGCReadStaticAgg(llvm::StructType* type, std::vector<llvm::Value*> args);
     llvm::Instruction* CallGCWrite(std::vector<llvm::Value*> args);
-    llvm::Instruction* CallGCWriteAgg(llvm::Type* structType, std::vector<llvm::Value*> args);
+    llvm::Instruction* CallGCWriteAgg(llvm::StructType* structType, std::vector<llvm::Value*> args);
     llvm::Instruction* CallGCWriteStaticRef(const std::vector<llvm::Value*>& args);
     llvm::Instruction* CallGCWriteStaticAgg(llvm::StructType* type, std::vector<llvm::Value*> args);
     llvm::Instruction* CreateWriteBarrierForGlobalVariable(const CGValue& value, const CGValue& globalVar);
