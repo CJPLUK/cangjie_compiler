@@ -14,6 +14,7 @@
 #define CANGJIE_MODULES_CJO_MANAGERIMPL_H
 
 #include "cangjie/Modules/CjoManager.h"
+#include <unordered_set>
 
 namespace Cangjie {
 class CjoManagerImpl {
@@ -201,6 +202,8 @@ private:
     std::unordered_map<std::string, std::string> cjoPathFindCache;
     // Flag to track if BuildIndex has been called
     bool hasBuildIndex{false};
+    // Flag that package has been substituted type alias.
+    std::unordered_set<Ptr<AST::Package>> substitutedPackagesCache;
 };
 } // namespace Cangjie
 #endif

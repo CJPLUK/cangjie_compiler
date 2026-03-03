@@ -423,6 +423,10 @@ void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package
             continue;
         }
         auto& pkgInfo = pkgName2PkgInfo.second;
+        if (substitutedPackagesCache.find(pkgInfo->pkg.get()) != substitutedPackagesCache.end()) {
+            continue;
+        }
+        substitutedPackagesCache.emplace(pkgInfo->pkg.get());
         for (auto& file : pkgInfo->pkg->files) {
             // For compile platform part, need only substitute type alias in common part files.
             if (isSrcPackage && !file->TestAttr(Attribute::FROM_COMMON_PART)) {
