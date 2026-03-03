@@ -1292,6 +1292,9 @@ TEST_F(PackageTest, TypeAliasRefExport)
     ASSERT_TRUE(depPkg != nullptr);
     const std::vector<std::string> orginNames{"A", "A_G", "B", "C", "C_1", "D", "D_G"};
     std::function<void(Ptr<Type>)> visitType = [&orginNames, &visitType](Ptr<Type> type) {
+        if (!type) {
+            return;
+        }
         if (auto rt = DynamicCast<RefType>(type)) {
             EXPECT_FALSE(Utils::In(rt->ref.identifier.Val(), orginNames));
             for (auto& typeArg : rt->typeArguments) {

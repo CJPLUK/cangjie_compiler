@@ -592,6 +592,19 @@ bool Ty::HasQuestTy() const
     return false;
 }
 
+bool Ty::HasAliasTy() const
+{
+    if (kind == TypeKind::TYPE) {
+        return true;
+    }
+    for (auto it : this->typeArgs) {
+        if (it && it->HasAliasTy()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // 'invalid' and 'generic' attribute is widely used during sema process,
 // so deciding their value in constructor, not in checking runtime.
 bool Ty::HasInvalidTy() const

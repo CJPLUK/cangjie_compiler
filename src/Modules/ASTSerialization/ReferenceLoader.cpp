@@ -571,7 +571,8 @@ void ASTLoader::ASTLoaderImpl::LoadDeclRefs(const PackageFormat::Decl& declObj, 
             auto vda = StaticCast<VarDeclAbstract>(&decl);
             // In the incremental compilation scenario, the original type nodes in the source code package cannot be
             // overwritten.
-            if (!vda->type) {
+            // To optimize performance, only types with aliases will generate TypeNode here.
+            if (!vda->type && (decl.ty->HasAliasTy() || decl.ty->IsFunc())) {
                 vda->type = WrapType(decl.ty);
             }
             break;
