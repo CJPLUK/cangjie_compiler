@@ -504,12 +504,6 @@ llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& c
     entryBB = irBuilder.CreateEntryBasicBlock(getTiFn2, "entry");
     irBuilder.SetInsertPoint(entryBB);
     ti = irBuilder.LLVMIRBuilder2::CreateLoad(typeInfoPtrType, getTiFn2->getArg(1));
-    isRef = irBuilder.CreateTypeInfoIsReferenceCall(ti);
-    auto [refBB2, nonRefBB2] = Vec2Tuple<2>(irBuilder.CreateAndInsertBasicBlocks({"ref", "nonRef"}));
-    irBuilder.CreateCondBr(isRef, refBB2, nonRefBB2);
-    irBuilder.SetInsertPoint(refBB2);
-    irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
-    irBuilder.SetInsertPoint(nonRefBB2);
     irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
 
     return CGTypeInfo::GenFieldsFnsOfTypeTemplate(cgMod, funcPrefixName, {getTiFn1, getTiFn2});
