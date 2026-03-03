@@ -18,6 +18,7 @@
 #include "Promotion.h"
 #include "ScopeManager.h"
 #include "TypeCheckUtil.h"
+#include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Symbol.h"
@@ -30,6 +31,7 @@
 #include "cangjie/Utils/ProfileRecorder.h"
 #include "CJMP/MPTypeCheckerImpl.h"
 #include "InheritanceChecker/MemberSignature.h"
+#include "cangjie/Utils/SafePointer.h"
 
 namespace Cangjie {
 class Synthesizer;
@@ -601,11 +603,11 @@ private:
         OwnedPtr<AST::Block> otherExpr, AST::RefExpr& someVar, Ptr<AST::Ty> someTy) const;
 
     void DesugarTryToFrame(ASTContext& ctx, AST::TryExpr& te);
-    void DesugarPerform(ASTContext& ctx, AST::PerformExpr& pe);
+    void DesugarPerform(AST::PerformExpr& pe);
     void DesugarResume(ASTContext& ctx, AST::ResumeExpr& re);
     void DesugarImmediateResume(ASTContext& ctx, AST::ResumeExpr& re);
     void DesugarDeferredResume(ASTContext& ctx, AST::ResumeExpr& re);
-    OwnedPtr<AST::Expr> GetHelperFrameMethod(
+    OwnedPtr<AST::MemberAccess> GetHelperFrameMethod(
         AST::Node& base, const std::string& methodName, std::vector<Ptr<AST::Ty>> typeArgs);
     void CreateResult(
         ASTContext& ctx, const AST::TryExpr& te, AST::VarDecl& frame, std::vector<OwnedPtr<AST::Node>>& block);
@@ -616,7 +618,13 @@ private:
     AST::VarDecl& CreateFrame(ASTContext& ctx, AST::TryExpr& te, std::vector<OwnedPtr<AST::Node>>& block);
     Ptr<AST::FuncTy> CastDeferredHandlerFn(Ptr<AST::FuncTy> stdxFuncTy);
     Ptr<AST::Ty> ResumptionToInternalResumptionTy(Ptr<AST::Ty> stdxResumptionTy);
-    void EncloseTryLambda(ASTContext& ctx, OwnedPtr<AST::LambdaExpr>& tryLambda);
+    void EncloseTryLambda(
+        ASTContext& ctx, OwnedPtr<AST::LambdaExpr>& tryLambda, OwnedPtr<AST::Block>& tryBlock, bool isDeferred);
+    OwnedPtr<AST::Expr> MakeThrow(
+        OwnedPtr<AST::Expr> expr, std::optional<std::tuple<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> optThrowDecl);
+    OwnedPtr<AST::Expr> MakeReturn(
+        OwnedPtr<AST::Expr> expr,
+        std::variant<Ptr<AST::FuncBody>, std::tuple<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> funcBodyOrReturnDecl);
 
     /* Synthesize specialized for desugar after sema. Will not recover previous desugar results */
     Ptr<AST::Ty> SynthesizeWithoutRecover(const CheckerContext& ctx, Ptr<AST::Node> node);
