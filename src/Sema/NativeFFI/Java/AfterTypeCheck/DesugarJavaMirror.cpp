@@ -565,8 +565,9 @@ void JavaDesugarManager::DesugarJavaMirror(InterfaceDecl& mirror)
             if (isMirror && (isStatic || isDefault)) {
                 DesugarJavaMirrorMethod(*fd, mirror);
             }
-        } else if (auto prop = As<ASTKind::PROP_DECL>(decl.get())) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_property_is_forbidden, *prop);
+        } else {
+            // Properties are forbidden for JavaMirror and should be filtered out during parse checks
+            CJC_ASSERT(As<ASTKind::PROP_DECL>(decl.get()) == nullptr);
         }
     }
 }
