@@ -888,13 +888,13 @@ OwnedPtr<VarPattern> CreateTmpVarPattern(Ptr<Ty> ty)
 
 void JavaDesugarManager::DesugarMatchCase(MatchCase& matchCase)
 {
-    auto jObjectDecl = utils.GetJObjectDecl();
-
     std::vector<Ptr<TypePattern>> typePatterns = CollectTypePatternsWithJavaClass(matchCase.patterns);
 
     if (typePatterns.empty()) {
         return;
     }
+
+    static auto jObjectDecl = utils.GetJObjectDecl();
 
     std::vector<OwnedPtr<Expr>> isInstanceGuards;
     std::vector<std::tuple<Ptr<VarDecl>, Ptr<Ty>>> patternVars;
