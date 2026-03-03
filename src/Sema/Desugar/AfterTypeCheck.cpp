@@ -605,7 +605,7 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx,
                 DesugarTryToFrame(ctx, *StaticCast<TryExpr*>(node));
                 break;
             case ASTKind::PERFORM_EXPR:
-                DesugarPerform(ctx, *StaticCast<PerformExpr*>(node));
+                DesugarPerform(*StaticCast<PerformExpr*>(node));
                 break;
             case ASTKind::RESUME_EXPR:
                 DesugarResume(ctx, *StaticCast<ResumeExpr*>(node));
