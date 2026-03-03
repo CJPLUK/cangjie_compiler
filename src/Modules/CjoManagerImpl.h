@@ -177,6 +177,12 @@ public:
      */
     void SubstituteImportedTypeAliasTy(const std::vector<Ptr<AST::Package>>& srcPackages);
 
+    /**
+     * @brief Replace TypeAliasTy in a node.
+     * @param node The node to replace TypeAliasTy.
+     */
+    void ReplaceTypeAliasInNode(Ptr<AST::Node> node);
+
 private:
     DiagnosticEngine& diag;
     TypeManager& typeManager;
@@ -202,8 +208,8 @@ private:
     std::unordered_map<std::string, std::string> cjoPathFindCache;
     // Flag to track if BuildIndex has been called
     bool hasBuildIndex{false};
-    // Flag that package has been substituted type alias.
-    std::unordered_set<Ptr<AST::Package>> substitutedPackagesCache;
+    // Cache for substituted type alias to real type.
+    std::unordered_map<Ptr<AST::Ty>, Ptr<AST::Ty>> typeAliasCache;
 };
 } // namespace Cangjie
 #endif

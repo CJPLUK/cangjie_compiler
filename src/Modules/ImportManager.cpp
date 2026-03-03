@@ -1300,7 +1300,17 @@ bool ImportManager::IsTestPackage(const std::string& pkgName)
 
 bool ImportManager::IsTypeAccessible(const File& file, const Type& type) const
 {
-    auto decl = type.GetTarget();
+    std::function<Ptr<Decl>(Ptr<Decl>)> getRealTarget = [&getRealTarget](Ptr<Decl> decl) -> Ptr<Decl> {
+        auto target = decl;
+        if (auto tad = DynamicCast<TypeAliasDecl>(target);
+            tad && tad->type && !tad->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
+            auto realTarget = tad->type->GetTarget();
+            target = realTarget ? getRealTarget(realTarget) : target;
+        }
+        return target;
+    };
+    // NOTE: For compatibility reason, extension declaration's visibility does not depend on alias declarations.
+    auto decl = getRealTarget(type.GetTarget());
     if (!decl) {
         // Builtin type and primitive type is always accessible.
         return true;
