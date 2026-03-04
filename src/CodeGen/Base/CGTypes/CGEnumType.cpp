@@ -411,7 +411,7 @@ llvm::Constant* CGEnumType::GenFieldsOfTypeInfo()
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF: {
             CJC_NULLPTR_CHECK(optionLikeInfo);
-            fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetZeroSizedCGType(cgMod)->GetOriginal()));
+            fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetUnitCGType(cgMod)->GetOriginal()));
             fieldTypes.emplace_back(optionLikeInfo->associatedValueType);
             break;
         }
@@ -493,7 +493,7 @@ llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& c
     irBuilder.CreateCondBr(isRef, refBB, nonRefBB);
     irBuilder.SetInsertPoint(refBB);
     irBuilder.CreateRet(
-        irBuilder.CreateBitCast(CGType::GetZeroSizedCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
+        irBuilder.CreateBitCast(CGType::GetUnitCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
     irBuilder.SetInsertPoint(nonRefBB);
     irBuilder.CreateRet(irBuilder.CreateBitCast(CGType::GetBoolCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
 
@@ -523,9 +523,9 @@ llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplate()
             break;
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF: {
+            fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetUnitCGType(cgMod)->GetOriginal()));
             fieldTypes.emplace_back(
                 CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), CGType::GetObjectCGType(cgMod)->GetOriginal()));
-            fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetZeroSizedCGType(cgMod)->GetOriginal()));
             break;
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_NONREF: {

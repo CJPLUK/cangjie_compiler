@@ -77,7 +77,7 @@ EnumCtorLayout EnumCtorTIOrTTGenerator::GenLayoutForReferenceType(const std::str
     layout.size = 8u;
     layout.align = 8u;
     auto cgEnumType = StaticCast<CGEnumType*>(CGType::GetOrCreate(cgMod, &chirEnumType));
-    layout.fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetZeroSizedCGType(cgMod)->GetOriginal()));
+    layout.fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetUnitCGType(cgMod)->GetOriginal()));
     if (cgEnumType->IsOptionLikeT()) {
         layout.fieldTypes.emplace_back(CGType::GetRefTypeOfCHIRInt8(cgMod.GetCGContext().GetCHIRBuilder()));
     } else {
