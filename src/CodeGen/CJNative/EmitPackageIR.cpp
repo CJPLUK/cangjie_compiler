@@ -560,13 +560,14 @@ void ReplaceFunction(CGModule& cgMod)
         /// step3: store `this` without TypeInfo to the memory allocated by step2
         auto payloadPtr = irBuilder.GetPayloadFromObject(thisParamWithTI);
         if (auto thisType = CGType::GetOrCreate(cgMod, thisCHIRType)->GetLLVMType(); IsTypeContainsRef(thisType)) {
+            auto structType = llvm::cast<llvm::StructType>(thisType);
             if (isCalleeMutOrCtor) {
                 auto load = irBuilder.CreateEntryAlloca(thisType);
                 (void)irBuilder.CreateCJMemSetStructWith0(load);
-                irBuilder.CallGCReadAgg(llvm::cast<llvm::StructType>(thisType), {load, basePtr, thisParamWithoutTI, size64});
-                irBuilder.CallGCWriteAgg(llvm::cast<llvm::StructType>(thisType), {thisParamWithTI, payloadPtr, load, size64});
+                irBuilder.CallGCReadAgg(structType, {load, basePtr, thisParamWithoutTI, size64});
+                irBuilder.CallGCWriteAgg(structType, {thisParamWithTI, payloadPtr, load, size64});
             } else {
-                irBuilder.CallGCWriteAgg(llvm::cast<llvm::StructType>(thisType), {thisParamWithTI, payloadPtr, thisParamWithoutTI, size64});
+                irBuilder.CallGCWriteAgg(structType, {thisParamWithTI, payloadPtr, thisParamWithoutTI, size64});
             }
         } else {
             irBuilder.CreateMemCpy(payloadPtr, llvm::MaybeAlign(), thisParamWithoutTI, llvm::MaybeAlign(), size32);
@@ -598,10 +599,11 @@ void ReplaceFunction(CGModule& cgMod)
             continue;
         }
         if (auto thisType = CGType::GetOrCreate(cgMod, thisCHIRType)->GetLLVMType(); IsTypeContainsRef(thisType)) {
+            auto structType = llvm::cast<llvm::StructType>(thisType);
             auto load = irBuilder.CreateEntryAlloca(thisType);
             (void)irBuilder.CreateCJMemSetStructWith0(load);
-            irBuilder.CallGCReadAgg(llvm::cast<llvm::StructType>(thisType),{load, thisParamWithTI, payloadPtr, size64});
-            irBuilder.CallGCWriteAgg(llvm::cast<llvm::StructType>(thisType), {basePtr, thisParamWithoutTI, load, size64});
+            irBuilder.CallGCReadAgg(structType, {load, thisParamWithTI, payloadPtr, size64});
+            irBuilder.CallGCWriteAgg(structType, {basePtr, thisParamWithoutTI, load, size64});
         } else {
             irBuilder.CreateMemCpy(thisParamWithoutTI, llvm::MaybeAlign(), payloadPtr, llvm::MaybeAlign(), size32);
         }

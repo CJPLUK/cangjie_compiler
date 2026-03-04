@@ -13,11 +13,6 @@ namespace Cangjie {
 namespace CodeGen {
 class CGVArrayType : public CGType {
     friend class CGTypeMgr;
-public:
-    llvm::Type* GetLayoutType() const
-    {
-        return layoutType;
-    }
 
 protected:
     llvm::Type* GenLLVMType() override;
