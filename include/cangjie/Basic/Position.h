@@ -88,9 +88,9 @@ private:
     PositionStatus status{PositionStatus::KEEP};
 };
 
-const Position INVALID_POSITION = Position{0, 0, 0};
-const Position BEGIN_POSITION = Position{0, 1, 1};
-const Position DEFAULT_POSITION = Position{0, -1, -1};
+extern const Position INVALID_POSITION;
+extern const Position BEGIN_POSITION;
+extern const Position DEFAULT_POSITION;
 } // namespace Cangjie
 
 #endif // CANGJIE_BASIC_POSITION_H

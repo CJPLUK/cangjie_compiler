@@ -221,8 +221,8 @@ bool TempFileManager::Init(const GlobalOptions& options, bool isFrontend)
     }
     fileSuffixMap = {
         {TempFileKind::O_CJO, []() { return SERIALIZED_FILE_EXTENSION; }},
-        {TempFileKind::O_FULL_BCHIR, []() { return FULL_BCHIR_SERIALIZED_FILE_EXTENSION; }},
-        {TempFileKind::O_BCHIR, []() { return BCHIR_SERIALIZED_FILE_EXTENSION; }},
+        {TempFileKind::O_FULL_BCHIR, []() { return std::string(FULL_BCHIR_SERIALIZED_FILE_EXTENSION); }},
+        {TempFileKind::O_BCHIR, []() { return std::string(BCHIR_SERIALIZED_FILE_EXTENSION); }},
         {TempFileKind::T_BC, []() { return ".bc"; }},
         {TempFileKind::O_BC, []() { return ".bc"; }},
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
@@ -235,9 +235,9 @@ bool TempFileManager::Init(const GlobalOptions& options, bool isFrontend)
         {TempFileKind::O_OPT_BC, []() { return ".bc"; }},
         {TempFileKind::T_ASM, []() { return ".s"; }},
 #endif
-        {TempFileKind::O_CHIR, []() { return CHIR_SERIALIZATION_FILE_EXTENSION; }},
+        {TempFileKind::O_CHIR, []() { return std::string(CHIR_SERIALIZATION_FILE_EXTENSION); }},
         {TempFileKind::T_OBJ, []() { return ".o"; }},
-        {TempFileKind::T_EXE_MAC, []() { return  "_temp"; }},
+        {TempFileKind::T_EXE_MAC, []() { return "_temp"; }},
         {TempFileKind::T_DYLIB_MAC, []() { return "_temp.dylib"; }},
         {TempFileKind::O_CJO_FLAG, []() { return std::string(SERIALIZED_FILE_FLAG_EXTENSION); }},
     };
