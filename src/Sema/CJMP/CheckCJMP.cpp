@@ -338,6 +338,7 @@ void UpdateDeclMap(DiagnosticEngine& diag, ASTContext& ctx, Ptr<ExtendDecl>& ed)
     Walker(ed, collector).Walk();
 
     for (auto sym : syms) {
+        CJC_NULLPTR_CHECK(sym);
         // macro expanded decls are not added into declMap.
         // macro invoke func can NOT be seen by developer so should not be added.
         if (sym->node->astKind == ASTKind::MACRO_EXPAND_DECL || sym->node->TestAttr(Attribute::MACRO_INVOKE_FUNC)) {

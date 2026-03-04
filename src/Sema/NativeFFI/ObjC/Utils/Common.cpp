@@ -79,7 +79,6 @@ void GenerateSyntheticClassPropStub([[maybe_unused]] ClassDecl& synthetic, [[may
 
 } // namespace
 
-
 Ptr<Decl> FindMirrorMember(const std::string_view& mirrorMemberIdent, const InheritableDecl& target)
 {
     for (auto memberDecl : target.GetMemberDeclPtrs()) {
@@ -194,7 +193,8 @@ void GenerateSyntheticClassAbstractMemberImplStubs(ClassDecl& synthetic, const M
     }
 }
 
-Ptr<ClassDecl> GetImplSuperClass(const ClassDecl& target) {
+Ptr<ClassDecl> GetImplSuperClass(const ClassDecl& target)
+{
     auto super = target.GetSuperClassDecl();
     CJC_NULLPTR_CHECK(super);
 

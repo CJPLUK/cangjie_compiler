@@ -15,10 +15,10 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
-
 namespace Cangjie::Interop::Java {
 
-void CheckJavaHasDefaultAnnotation(Cangjie::DiagnosticEngine& diag, const Cangjie::AST::Annotation& ann, const Cangjie::AST::Decl& decl);
+void CheckJavaHasDefaultAnnotation(
+    Cangjie::DiagnosticEngine& diag, const Cangjie::AST::Annotation& ann, const Cangjie::AST::Decl& decl);
 
 } // namespace Cangjie::Interop::Java
 
