@@ -472,7 +472,7 @@ std::optional<std::string> BaseMangler::MangleEntryFunction(const FuncDecl& func
         return USER_MAIN_MANGLED_NAME;
     }
     if (funcDecl.identifier == TEST_ENTRY_NAME) {
-        return TEST_ENTRY_NAME;
+        return std::string(TEST_ENTRY_NAME);
     }
     return std::nullopt;
 }

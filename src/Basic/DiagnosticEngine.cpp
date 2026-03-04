@@ -11,7 +11,6 @@
  */
 #include "DiagnosticEngineImpl.h"
 
-#include <cstddef>
 #include <set>
 #include <sstream>
 #include <string>
@@ -30,6 +29,96 @@
 #endif
 
 namespace Cangjie {
+// Define the errorData array (declaration is in DiagnosticEngine.h)
+const std::vector<ErrorData> errorData = {
+#define ERROR(Kind, ...) {__VA_ARGS__},
+#define WARNING(Kind, Group, ...) {__VA_ARGS__},
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+
+// Define DIAG_KIND_STR array (declaration is in DiagnosticEngine.h)
+const std::vector<std::string_view> DIAG_KIND_STR = {
+#define NOTE(Kind, Info) #Kind,
+#define ERROR(Kind, Info) #Kind,
+#define WARNING(Kind, Group, Info) #Kind,
+#include "cangjie/Basic/DiagnosticsAll.def"
+#undef ERROR
+#undef WARNING
+#undef NOTE
+};
+const size_t DIAG_KIND_STR_SIZE = DIAG_KIND_STR.size();
+
+// Define DiagSeveritys array (declaration is in DiagnosticEngine.h)
+const std::vector<DiagSeverity> DiagSeveritys = {
+#define ERROR(Kind, Info) DiagSeverity::DS_ERROR,
+#define NOTE(Kind, Info) DiagSeverity::DS_NOTE,
+#define WARNING(Kind, Group, Info) DiagSeverity::DS_WARNING,
+#include "cangjie/Basic/DiagnosticsAll.def"
+#undef ERROR
+#undef WARNING
+#undef NOTE
+};
+
+// Define DiagMessages array (declaration is in DiagnosticEngine.h)
+const std::vector<std::string_view> DiagMessages = {
+#define ERROR(Kind, Info) Info,
+#define WARNING(Kind, Group, Info) Info,
+#define NOTE(Kind, Info) Info,
+#include "cangjie/Basic/DiagnosticsAll.def"
+#undef ERROR
+#undef WARNING
+#undef NOTE
+};
+
+// Define warnGroups array (declaration is in DiagnosticEngine.h)
+const std::vector<WarnGroup> warnGroups = {
+#define ERROR(Kind, ...) WarnGroup::NONE,
+#define WARNING(Kind, Group, ...) WarnGroup::Group,
+#define NOTE(Kind, Info) WarnGroup::NONE,
+#include "cangjie/Basic/DiagnosticsAll.def"
+#undef WARNING
+#undef ERROR
+#undef NOTE
+};
+
+// Define rDiagSeveritys array (declaration is in DiagnosticEngine.h)
+const std::vector<DiagSeverity> rDiagSeveritys = {
+#define ERROR(Kind, ...) DiagSeverity::DS_ERROR,
+#define WARNING(Kind, ...) DiagSeverity::DS_WARNING,
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+
+// Define rWarnGroups array (declaration is in DiagnosticEngine.h)
+const std::vector<WarnGroup> rWarnGroups = {
+#define ERROR(Kind, ...) WarnGroup::NONE,
+#define WARNING(Kind, Group, ...) WarnGroup::Group,
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+
+// Define warnGroupDescrs array (declaration is in DiagnosticEngine.h)
+const std::vector<std::string_view> warnGroupDescrs = {
+#define WARN_GROUP(DESCR, KIND) DESCR,
+#include "cangjie/Basic/DiagRefactor/DiagnosticWarnGroupKind.def"
+#undef WARN_GROUP
+};
+const size_t WARN_GROUP_DESCRS_SIZE = warnGroupDescrs.size();
+
+// Define RE_DIAG_KIND_STR array (declaration is in DiagnosticEngine.h)
+const std::vector<std::string_view> RE_DIAG_KIND_STR = {
+#define ERROR(Kind, ...) #Kind,
+#define WARNING(Kind, ...) #Kind,
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+const size_t RE_DIAG_KIND_STR_SIZE = RE_DIAG_KIND_STR.size();
+
 
 size_t HashForPosition(const Position& pos)
 {
@@ -424,7 +513,7 @@ void DiagnosticEngineImpl::HandleDiagnostic(Diagnostic& diagnostic) noexcept
             IsSupressedUnusedMain(diagnostic)) {
             return;
         } else if (diagnostic.warnGroup != WarnGroup::UNGROUPED) {
-            std::string warnGroupName = warnGroupDescrs[static_cast<unsigned>(diagnostic.warnGroup)];
+            std::string warnGroupName = std::string(warnGroupDescrs[static_cast<unsigned>(diagnostic.warnGroup)]);
             auto msg = "this warning can be suppressed by setting the compiler option `-Woff " + warnGroupName + "`";
             auto note = SubDiagnostic(msg);
             diagnostic.subDiags.push_back(note);
@@ -521,7 +610,7 @@ std::string DiagnosticEngineImpl::GetArgStr(
 
 void DiagnosticEngineImpl::ConvertArgsToDiagMessage(Diagnostic& diagnostic) noexcept
 {
-    std::string formatStr = DiagMessages[static_cast<int>(diagnostic.kind)];
+    std::string formatStr = std::string(DiagMessages[static_cast<size_t>(diagnostic.kind)]);
     // C string format length, like length of '%f', '%d'.
     const static size_t formatLens = 2;
     uint8_t index = 0;

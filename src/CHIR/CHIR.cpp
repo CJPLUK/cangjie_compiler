@@ -1055,7 +1055,7 @@ void EmitCHIR(const std::string& outputPath, const CHIR::Package& package, ToCHI
 {
     std::string path;
     if (FileUtil::IsDir(outputPath)) {
-        path = FileUtil::JoinPath(outputPath, package.GetName() + CHIR_SERIALIZATION_FILE_EXTENSION);
+        path = FileUtil::JoinPath(outputPath, package.GetName() + std::string(CHIR_SERIALIZATION_FILE_EXTENSION));
     } else {
         path = outputPath;
     }
@@ -1079,7 +1079,8 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
-        auto fileName = FileUtil::JoinPath(opts.output, chirPkg->GetName()) + CHIR_SERIALIZATION_FILE_EXTENSION;
+        auto fileName =
+            FileUtil::JoinPath(opts.output, chirPkg->GetName()) + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
         CHIRSerializer::Serialize(*chirPkg, fileName, CHIR::ToCHIR::RAW);
         return true;
     }
@@ -1149,7 +1150,8 @@ bool ToCHIR::Run()
     }
     // 2. for cjmp, while compiling common package, just be here and save CHIR to file.
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
-        auto fileName = FileUtil::JoinPath(opts.output, chirPkg->GetName()) + CHIR_SERIALIZATION_FILE_EXTENSION;
+        auto fileName =
+            FileUtil::JoinPath(opts.output, chirPkg->GetName()) + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
         CHIRSerializer::Serialize(*chirPkg, fileName, CHIR::ToCHIR::RAW);
         return true;
     }

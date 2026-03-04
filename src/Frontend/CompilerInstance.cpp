@@ -316,8 +316,8 @@ bool CompilerInstance::PerformParse()
         Utils::ProfileRecorder::SetPackageName(srcPkgs[0]->fullPackageName);
         Utils::ProfileRecorder::SetOutputDir(globalOpts.output);
         if (IsNeedSaveIncrCompilationLogFile(globalOpts, invocation.frontendOptions)) {
-            std::string incrLogPath =
-                invocation.globalOptions.GenerateCachedPathName(srcPkgs[0]->fullPackageName, CACHED_LOG_EXTENSION);
+            std::string incrLogPath = invocation.globalOptions.GenerateCachedPathName(
+                srcPkgs[0]->fullPackageName, std::string(CACHED_LOG_EXTENSION));
             IncrementalCompilationLogger::GetInstance().InitLogFile(incrLogPath);
             IncrementalCompilationLogger::GetInstance().WriteBuffToFile();
         }
@@ -472,7 +472,8 @@ bool CompilerInstance::WriteCachedInfo()
 {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     auto& pkg{*srcPkgs[0]};
-    std::string path{invocation.globalOptions.GenerateCachedPathName(pkg.fullPackageName, CACHED_AST_EXTENSION)};
+    std::string path{
+        invocation.globalOptions.GenerateCachedPathName(pkg.fullPackageName, std::string(CACHED_AST_EXTENSION))};
     WriteCache(pkg, std::move(cachedInfo), std::move(order), path);
 #endif
     return true;
