@@ -266,13 +266,18 @@ void TypeChecker::TypeCheckerImpl::SubstituteTypeForTypeAliasTypeMapping(
         return;
     }
     auto argsNum = tad.generic->typeParameters.size();
-    for (auto& it : typeMapping) {
-        for (size_t i = 0; i < argsNum; ++i) {
-            if (it.second == tad.generic->typeParameters[i]->ty) {
-                it.second = typeArgs[i];
-                break;
+    // First, create a mapping from type alias parameters to provided type arguments
+    TypeSubst aliasParamMapping;
+    for (size_t i = 0; i < argsNum; ++i) {
+        if (Ty::IsTyCorrect(tad.generic->typeParameters[i]->ty) && Ty::IsTyCorrect(typeArgs[i])) {
+            if (auto declGenParam = DynamicCast<TyVar*>(tad.generic->typeParameters[i]->ty)) {
+                aliasParamMapping[declGenParam] = typeArgs[i];
             }
         }
+    }
+    // Then, substitute type alias parameters by the generated type mapping.
+    for (auto& it : typeMapping) {
+        it.second = typeManager.SubstituteTypeAliasInTy(*it.second, true, aliasParamMapping);
     }
 }
 

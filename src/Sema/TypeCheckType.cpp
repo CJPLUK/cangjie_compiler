@@ -142,6 +142,17 @@ bool TypeChecker::TypeCheckerImpl::IsGenericTypeWithTypeArgs(AST::Type& type) co
     return !(type.GetTypeArgs().empty() && generic != nullptr);
 }
 
+bool TypeChecker::TypeCheckerImpl::CheckTypeParametersForAliasRef(AST::RefType& rt, const AST::TypeAliasDecl& aliasDecl)
+{
+    auto aliasDeclGenericTypeParametersNum = aliasDecl.generic ? aliasDecl.generic->typeParameters.size() : 0;
+    if (rt.typeArguments.size() != aliasDeclGenericTypeParametersNum) {
+        auto range = MakeRange(rt.begin, rt.end.IsZero() ? rt.begin + 1 : rt.end);
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_argument_no_match, rt, range);
+        return false;
+    }
+    return true;
+}
+
 void TypeChecker::TypeCheckerImpl::HandleAliasForRefType(RefType& rt, Ptr<Decl>& target)
 {
     if (!target || target->astKind != ASTKind::TYPE_ALIAS_DECL) {
@@ -149,6 +160,10 @@ void TypeChecker::TypeCheckerImpl::HandleAliasForRefType(RefType& rt, Ptr<Decl>&
     }
     auto aliasDecl = StaticCast<TypeAliasDecl*>(target);
     if (aliasDecl->type == nullptr) {
+        return;
+    }
+
+    if (!CheckTypeParametersForAliasRef(rt, *aliasDecl)) {
         return;
     }
     auto innerTypeAliasTarget = GetLastTypeAliasTarget(*aliasDecl);
