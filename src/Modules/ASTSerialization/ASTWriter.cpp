@@ -220,6 +220,8 @@ void CollectFullExportParamDecl(
     CJC_ASSERT(!fd.funcBody->paramLists.empty());
     bool fullExport = fd.isConst || fd.isInline || fd.isFrozen || IsDefaultImplementation(fd) ||
         IsGenericInCommonSerialization(serializingCommon, fd);
+    // Common replaced with specific. Even @Frozen need to be skipped, because specific will be fullExport'ed.
+    fullExport &= !fd.IsCommonMatchedWithSpecific();
 
     if (fullExport) {
         decls.emplace_back(&fd);
