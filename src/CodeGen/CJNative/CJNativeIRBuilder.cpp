@@ -1795,7 +1795,7 @@ llvm::Value* IRBuilder2::GetSize_32(const CHIR::Type& type)
         sizePHI->addIncoming(nonRefSize, nonRefSizeBB);
         return sizePHI;
     } else if (auto cgType = CGType::GetOrCreate(cgMod, &type); cgType->IsReference()) {
-        return getInt32(GetPayloadOffset());
+        return getInt32(GetPtrSize());
     } else {
         return GetLayoutSize_32(type);
     }
