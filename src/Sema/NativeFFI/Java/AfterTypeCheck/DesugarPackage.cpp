@@ -6,6 +6,7 @@
 
 #include "JavaDesugarManager.h"
 #include "JavaInteropManager.h"
+#include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/ConstantsUtils.h"
@@ -44,6 +45,12 @@ void JavaDesugarManager::ProcessJavaMirrorImplStage(DesugarJavaMirrorImplStage s
 void JavaDesugarManager::ProcessCJImplStage(DesugarCJImplStage stage, File& file)
 {
     switch (stage) {
+        case DesugarCJImplStage::PRE_GENERATE:
+            PreGenerateInCJMapping(file);
+            break;
+        case DesugarCJImplStage::FWD_GENERATE:
+            GenerateFwdClassInCJMapping(file);
+            break;
         case DesugarCJImplStage::IMPL_GENERATE:
             GenerateInCJMapping(file);
             break;
@@ -61,12 +68,18 @@ void JavaDesugarManager::ProcessCJImplStage(DesugarCJImplStage stage, File& file
     generatedDecls.clear();
 }
 
-void JavaInteropManager::DesugarPackage(Package& pkg)
+void JavaInteropManager::DesugarPackage(
+    Package& pkg, const std::unordered_map<Ptr<const InheritableDecl>, MemberMap>& memberMap)
 {
-    if (!(hasMirrorOrImpl || enableInteropCJMapping)) {
+    if (!(hasMirrorOrImpl || targetInteropLanguage == GlobalOptions::InteropLanguage::Java)) {
         return;
     }
-    JavaDesugarManager desugarer{importManager, typeManager, diag, mangler, javagenOutputPath, outputPath};
+    JavaDesugarManager desugarer{
+        importManager, typeManager, diag, mangler, javagenOutputPath, outputPath, memberMap, pkg};
+
+    if (!InteropLibBridge::IsInteropLibAccessible(importManager)) {
+        return;
+    }
 
     if (hasMirrorOrImpl) {
         auto nbegin = static_cast<uint8_t>(DesugarJavaMirrorImplStage::BEGIN);
@@ -83,13 +96,16 @@ void JavaInteropManager::DesugarPackage(Package& pkg)
     }
 
     // Currently CJMapping is enable by compile config --enable-interop-cjmapping
-    if (enableInteropCJMapping) {
+    if (targetInteropLanguage == GlobalOptions::InteropLanguage::Java) {
         auto nbegin = static_cast<uint8_t>(DesugarCJImplStage::BEGIN);
         auto nend = static_cast<uint8_t>(DesugarCJImplStage::END);
         for (uint8_t nstage = nbegin; nstage != nend; nstage++) {
             auto stage = static_cast<DesugarCJImplStage>(nstage);
             if (stage == DesugarCJImplStage::BEGIN) {
                 continue;
+            }
+            if (stage == DesugarCJImplStage::PRE_GENERATE) {
+                desugarer.GenerateTuplesGlueCode(pkg);
             }
             for (auto& file : pkg.files) {
                 desugarer.ProcessCJImplStage(stage, *file);

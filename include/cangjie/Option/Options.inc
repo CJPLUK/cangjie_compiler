@@ -301,8 +301,9 @@ OPTION("--output-javagen-dir", OUTPUT_JAVA_GEN_DIR, SEPARATED, { BACKEND(ALL) },
 OPTION("--no-prelude", NO_PRELUDE, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Not import cangjie std.core package by default, only applicable when compiling std.core")
-OPTION("--enable-interop-cjmapping", ENABLE_INTEROP_CJMAPPING, FLAG, {BACKEND(CJNATIVE)}, { GROUP(GLOBAL) COMMA GROUP(VISIBLE)}, nullptr, {},
-    MULTIPLE_OCCURRENCE, "enable cj data structure mapping for interop")
+OPTION("--enable-interop-cjmapping", ENABLE_INTEROP_CJMAPPING, FLAG_WITH_ARG, {BACKEND(CJNATIVE)},
+    { GROUP(GLOBAL) COMMA GROUP(VISIBLE)}, nullptr, {}, MULTIPLE_OCCURRENCE, 
+    "enable cj data structure mapping for interop")
 OPTION("--static", STATIC, FLAG, { BACKEND(CJNATIVE) },
     { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Statically link cangjie library")
@@ -350,6 +351,9 @@ OPTION("--dump-all", DUMP_ALL, FLAG, { BACKEND(ALL) },
 OPTION("--dump-to-screen", DUMP_TO_SCREEN, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Dump to screen instead of file")
+OPTION("--import-interop-cj-package-config-path", USE_INTEROP_CJ_PACKAGE_CONFIG_RPATH, SEPARATED, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
+    "Add interop cj package config directory to path")
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 OPTION("--debug-annotations", DUMP_ANNOTATIONS_DEBUG, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,

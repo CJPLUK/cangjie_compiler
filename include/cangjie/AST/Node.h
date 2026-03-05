@@ -32,6 +32,7 @@
 #include "cangjie/AST/Types.h"
 #include "cangjie/Basic/Linkage.h"
 #include "cangjie/Basic/Position.h"
+#include "cangjie/Basic/InteropCJPackageConfigReader.h"
 #include "cangjie/Lex/Token.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
@@ -281,6 +282,22 @@ struct Node {
     bool IsClassLikeDecl() const noexcept
     {
         return astKind == ASTKind::CLASS_DECL || astKind == ASTKind::INTERFACE_DECL;
+    }
+
+    /**
+     * Whether a declaration is InterfaceDecl.
+     */
+    bool IsInterfaceDecl() const noexcept
+    {
+        return astKind == ASTKind::INTERFACE_DECL;
+    }
+
+    /**
+     * Whether a declaration is abstract ClassDecl.
+     */
+    bool IsAbstractClass() const noexcept
+    {
+        return astKind == ASTKind::CLASS_DECL && this->TestAttr(Attribute::ABSTRACT);
     }
 
     /**
@@ -2938,6 +2955,19 @@ struct Package : Node {
     bool noSubPkg{false};
     bool needExported{true}; /**< Parent path of package path is "src", there is no need to export this package. */
 
+    // ===--------------------------------------------------------------------===//
+    // Interop CJ Package Level Symbol Config
+    // ===--------------------------------------------------------------------===//
+    InteropCJStrategy interopCJApiStrategy = InteropCJStrategy::NONE;
+    InteropCJGenericStrategyType interopCJGenericTypeStrategy = InteropCJGenericStrategyType::NONE;
+    std::vector<std::string> interopCJIncludedApis;
+    std::vector<std::string> interopCJExcludedApis;
+    std::unordered_map<std::string, std::unordered_map<std::string, GenericTypeArguments>>
+        allowedInteropCJGenericInstantiations;
+    std::vector<std::string> interopTuples; /**< Record interop tuple configuration. Writed in sema. */
+    bool isInteropCJPackageConfig{false};
+    std::vector<LambdaPattern> lambdaPatterns;
+
 private:
     std::vector<std::string> allDependentStdPkgs; /**< Record all dependent standard packages. */
 
@@ -2985,6 +3015,10 @@ public:
     const std::vector<std::string>& GetAllDependentStdPkgs() const
     {
         return allDependentStdPkgs;
+    }
+
+    const std::vector<LambdaPattern>& GetLambdaPatterns() const {
+        return lambdaPatterns;
     }
 };
 

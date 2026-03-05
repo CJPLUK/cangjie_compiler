@@ -595,6 +595,10 @@ public:
 
     bool enableMemoryCollect = false; /**< Whether enable memory usage report. */
 
+    enum class InteropLanguage : uint8_t { NA, Java, ObjC };
+
+    InteropLanguage targetInteropLanguage{InteropLanguage::NA};
+
     std::optional<unsigned int> errorCountLimit = 8; /**< limits the amount of errors compiler prints */
 
 #ifdef CANGJIE_CHIR_WFC_OFF
@@ -825,6 +829,8 @@ public:
 
     bool cjdbMode = false; /** whether the option used in cjdb */
 
+    std::string interopCJPackageConfigPath = "./"; /**< cjinterop .toml package config file paths */
+    
     enum class SanitizerType : uint8_t {
         NONE,
         ADDRESS,

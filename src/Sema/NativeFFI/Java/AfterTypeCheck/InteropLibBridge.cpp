@@ -7,10 +7,10 @@
 #include "InteropLibBridge.h"
 #include "Desugar/AfterTypeCheck.h"
 #include "JavaDesugarManager.h"
+#include "NativeFFI/Utils.h"
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
-#include "NativeFFI/Utils.h"
 
 namespace {
 
@@ -76,6 +76,12 @@ constexpr auto INTEROPLIB_CFFI_JAVA_METHODID_CONSTR_ID = "Java_CFFI_MethodIDCons
 constexpr auto INTEROPLIB_CFFI_JAVA_METHODID_CONSTR_STATIC_ID = "Java_CFFI_MethodIDConstrStatic";
 constexpr auto INTEROPLIB_CFFI_JAVA_FIELDID_CONSTR_ID = "Java_CFFI_FieldIDConstr";
 constexpr auto INTEROPLIB_CFFI_JAVA_FIELDID_CONSTR_STATIC_ID = "Java_CFFI_FieldIDConstrStatic";
+constexpr auto INTEROPLIB_JAVA_OBJECT_CONTROLLER = "JavaObjectController";
+constexpr auto DELETE_LOCAL_REF = "deleteLocalRef";
+constexpr auto DETACH_CJ_OBJECT = "detachCJObject";
+constexpr auto ATTACH_CJ_OBJECT = "attachCJObject";
+constexpr auto GET_JAVALAMBDA_OBJECT_DECL_ID = "getJavaLambdaObject";
+constexpr auto GET_JAVALAMBDA_ENTITY_DECL_ID = "getJavaLambdaEntity";
 
 } // namespace
 
@@ -98,6 +104,11 @@ Ptr<TypeAliasDecl> InteropLibBridge::GetJobjectDecl()
 Ptr<StructDecl> InteropLibBridge::GetJavaEntityDecl()
 {
     return GetInteropLibDecl<ASTKind::STRUCT_DECL>(INTEROPLIB_CFFI_JAVA_ENTITY);
+}
+
+Ptr<ClassDecl> InteropLibBridge::GetJavaObjectControllerDecl()
+{
+    return GetInteropLibDecl<ASTKind::CLASS_DECL>(INTEROPLIB_JAVA_OBJECT_CONTROLLER);
 }
 
 Ptr<TypeAliasDecl> InteropLibBridge::GetJniEnvPtrDecl()
@@ -326,6 +337,49 @@ Ptr<FuncDecl> InteropLibBridge::GetFieldIdConstrStatic()
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_FIELDID_CONSTR_STATIC_ID);
 }
 
+Ptr<FuncDecl> InteropLibBridge::GetJavaLambdaObjectDecl()
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(GET_JAVALAMBDA_OBJECT_DECL_ID);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetJavaLambdaEntityDecl()
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(GET_JAVALAMBDA_ENTITY_DECL_ID);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetJavaObjectControllerMethodDecl(std::string methodName)
+{
+    auto classDecl = GetJavaObjectControllerDecl();
+    for (auto& member : classDecl->GetMemberDecls()) {
+        auto funcDecl = As<ASTKind::FUNC_DECL>(member.get());
+        if (funcDecl && funcDecl->identifier == methodName) {
+            return funcDecl;
+        }
+    }
+
+    CJC_ASSERT(false && "JavaObjectController doesn't have method");
+    return nullptr;
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetJavaObjectControllerInitDecl()
+{
+    return GetJavaObjectControllerMethodDecl("init");
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetAttachCJObjectDecl()
+{
+    return GetJavaObjectControllerMethodDecl(ATTACH_CJ_OBJECT);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetDetachCJObjectDecl()
+{
+    return GetJavaObjectControllerMethodDecl(DETACH_CJ_OBJECT);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetDeleteLocalRefDecl()
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(DELETE_LOCAL_REF);
+}
 // ty
 
 Ptr<Ty> InteropLibBridge::GetJNIEnvPtrTy()
@@ -350,6 +404,30 @@ Ptr<Ty> InteropLibBridge::GetJavaEntityTy()
 Ptr<Ty> InteropLibBridge::GetJobjectTy()
 {
     return typeManager.GetPointerTy(typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT));
+}
+
+OwnedPtr<CallExpr> InteropLibBridge::CreateGetJavaLambdaObjectCall(
+    OwnedPtr<RefExpr> refExpr, std::string classSign, Ptr<File> curFile)
+{
+    auto fd = GetJavaLambdaObjectDecl();
+    return CreateGetJavaLambdaCall(fd, std::move(refExpr), classSign, curFile);
+}
+
+OwnedPtr<CallExpr> InteropLibBridge::CreateGetJavaLambdaEntityCall(
+    OwnedPtr<RefExpr> refExpr, std::string classSign, Ptr<File> curFile)
+{
+    auto fd = GetJavaLambdaEntityDecl();
+    return CreateGetJavaLambdaCall(fd, std::move(refExpr), classSign, curFile);
+}
+
+OwnedPtr<CallExpr> InteropLibBridge::CreateGetJavaLambdaCall(
+    Ptr<FuncDecl> fd, OwnedPtr<RefExpr> refExpr, std::string classSign, Ptr<File> curFile)
+{
+    auto strTy = fd->funcBody->paramLists[0]->params[1]->ty;
+    auto classSignExpr = CreateLitConstExpr(LitConstKind::STRING, classSign, strTy);
+    auto call = CreateCall(fd, curFile, std::move(refExpr), std::move(classSignExpr));
+    CJC_NULLPTR_CHECK(call);
+    return call;
 }
 
 OwnedPtr<PointerExpr> InteropLibBridge::CreateJobjectNull()
@@ -512,6 +590,15 @@ OwnedPtr<Expr> InteropLibBridge::CreateJavaEntityCall(OwnedPtr<Expr> arg)
 
     Ptr<FuncDecl> suitableCtor;
 
+    if (arg->ty->IsTuple()) {
+        auto curFile = arg->curFile;
+        auto clazzName = curFile->GetFullPackageName() + "." + GetCjMappingTupleName(*arg->ty);
+        std::replace(clazzName.begin(), clazzName.end(), '.', '/');
+        auto entity = CreateCFFINewJavaCFFINewJavaProxyObjectForCJMappingCall(
+            WithinFile(CreateGetJniEnvCall(curFile), curFile), std::move(arg), clazzName, true);
+        return CreateJavaEntityJobjectCall(std::move(entity));
+    }
+
     for (auto& decl : javaEntityDecl->body->decls) {
         if (auto ctor = As<ASTKind::FUNC_DECL>(decl.get()); ctor && ctor->TestAttr(Attribute::CONSTRUCTOR)) {
             CJC_ASSERT_WITH_MSG(!ctor->funcBody->paramLists.empty(), "paramLists cannot be empty");
@@ -642,16 +729,16 @@ OwnedPtr<Expr> InteropLibBridge::SelectJPrimitiveNameByTypeKind(TypeKind kind, [
     return CreateRefExpr(*LookupEnumMember(javaEntityKindDecl, typeName));
 }
 
-OwnedPtr<Expr> InteropLibBridge::SelectEntityWrapperByTypeKind([[maybe_unused]] TypeKind kind,
-    [[maybe_unused]] Ptr<Ty> ty, Ptr<FuncParam> param, Ptr<File> file)
+OwnedPtr<Expr> InteropLibBridge::SelectEntityWrapperByTypeKind(
+    [[maybe_unused]] TypeKind kind, [[maybe_unused]] Ptr<Ty> ty, Ptr<FuncParam> param, Ptr<File> file)
 {
     auto paramRef = CreateRefExpr(*param);
     paramRef->curFile = file;
     return WrapJavaEntity(CreateMatchWithTypeCast(std::move(paramRef), ty));
 }
 
-OwnedPtr<Expr> InteropLibBridge::SelectEntityUnwrapperByTypeKind([[maybe_unused]] TypeKind kind,
-    [[maybe_unused]] Ptr<Ty> ty, Ptr<Expr> entity, const ClassLikeDecl& mirror)
+OwnedPtr<Expr> InteropLibBridge::SelectEntityUnwrapperByTypeKind(
+    [[maybe_unused]] TypeKind kind, [[maybe_unused]] Ptr<Ty> ty, Ptr<Expr> entity, const ClassLikeDecl& mirror)
 {
     auto cEntity = ASTCloner::Clone(entity);
     cEntity->curFile = entity->curFile;
@@ -919,8 +1006,6 @@ OwnedPtr<Expr> InteropLibBridge::CreateCFFICallArrayMethodCall(OwnedPtr<Expr> jn
     FuncParamList& params, const Ptr<GenericParamDecl> genericParam, ArrayOperationKind kind)
 {
     CJC_ASSERT(kind == ArrayOperationKind::GET || kind == ArrayOperationKind::SET);
-    CJC_ASSERT_WITH_MSG(params.params.size() > 1, "expected at least two parameters");
-
     static auto javaEntityKindDecl = GetJavaEntityKindDecl();
     static auto jObject = utils.GetJObjectDecl();
     static auto javaRef = GetJavaRefField(*jObject);
@@ -965,9 +1050,8 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCFFICallMethodCall(OwnedPtr<Expr> jni
     std::vector<OwnedPtr<Expr>> cffiMethodArgs;
     CJC_NULLPTR_CHECK(obj->curFile);
     for (auto& param : params.params) {
-        auto paramRef = WithinFile(CreateRefExpr(*param), Ptr(&curFile));
-        paramRef->curFile = obj->curFile;
-        cffiMethodArgs.push_back(WrapJavaEntity(std::move(paramRef)));
+        auto paramRef = CreateParamExpr(*param, obj->curFile);
+        cffiMethodArgs.push_back(std::move(paramRef));
     }
 
     return CreateCallMethodCall(std::move(jniEnv), std::move(obj), signature, std::move(cffiMethodArgs), curFile);
@@ -979,10 +1063,24 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCFFICallStaticMethodCall(
     std::vector<OwnedPtr<Expr>> cffiMethodArgs;
 
     for (auto& param : params.params) {
-        cffiMethodArgs.push_back(WrapJavaEntity(WithinFile(CreateRefExpr(*param), Ptr(&curFile))));
+        auto paramExpr = CreateParamExpr(*param, Ptr(&curFile));
+        cffiMethodArgs.push_back(std::move(paramExpr));
     }
 
     return CreateCallStaticMethodCall(std::move(jniEnv), signature, std::move(cffiMethodArgs), curFile);
+}
+
+OwnedPtr<Expr> InteropLibBridge::CreateParamExpr(FuncParam& param, Ptr<File> curFile)
+{
+    if (param.ty->kind == TypeKind::TYPE_FUNC) {
+        std::string lambdaJavaClassSign = NormalizeJavaSignature(
+            curFile->curPackage->fullPackageName + "." + GetLambdaJavaClassName(param.ty) + "$Box");
+        auto refExpr = WithinFile(CreateRefExpr(param), curFile);
+        auto callExpr = CreateGetJavaLambdaEntityCall(std::move(refExpr), lambdaJavaClassSign, curFile);
+        return std::move(callExpr);
+    }
+    auto refExpr = WithinFile(CreateRefExpr(param), curFile);
+    return WrapJavaEntity(std::move(refExpr));
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateDeleteCJObjectCall(
@@ -1240,6 +1338,29 @@ OwnedPtr<Expr> InteropLibBridge::WrapExceptionHandling(OwnedPtr<Expr> env, Owned
     return CreateCallExpr(std::move(fdRef), std::move(args), nullptr, retTy, CallKind::CALL_DECLARED_FUNCTION);
 }
 
+OwnedPtr<CallExpr> InteropLibBridge::CreateJavaObjectControllerCall(
+    OwnedPtr<Expr> javaEntity, OwnedPtr<Expr> className, ClassDecl& classDecl)
+{
+    auto funcDecl = GetJavaObjectControllerInitDecl();
+    auto javaObjectCtroDecl = GetJavaObjectControllerDecl();
+
+    auto curFile = classDecl.curFile;
+    auto instantiationRefType = CreateRefType(classDecl);
+    auto instantiationTy = typeManager.GetClassTy(classDecl, classDecl.ty->typeArgs);
+
+    std::vector<OwnedPtr<FuncArg>> callArgs;
+    callArgs.push_back(CreateFuncArg(std::move(javaEntity)));
+    callArgs.push_back(CreateFuncArg(std::move(className)));
+
+    auto fdRefexpr = CreateRefExpr(*funcDecl);
+    fdRefexpr->ref.identifier = javaObjectCtroDecl->identifier;
+    fdRefexpr->typeArguments.emplace_back(std::move(instantiationRefType));
+    auto fdRef = WithinFile(std::move(fdRefexpr), curFile);
+
+    auto callTy = typeManager.GetClassTy(*javaObjectCtroDecl, {std::move(instantiationTy)});
+    return CreateCallExpr(std::move(fdRef), std::move(callArgs), funcDecl, callTy, CallKind::CALL_OBJECT_CREATION);
+}
+
 namespace {
 
 Ptr<PropDecl> GetJavaEntityIsNullCall(StructDecl& entityDecl)
@@ -1402,6 +1523,10 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
         return UnwrapJavaImplOption(CreateGetJniEnvCall(curFile), std::move(entity), ty, *classLikeDecl, toRaw);
     }
 
+    if (ty->IsTuple()) {
+        return CreateGetFromRegistryByEntityCall(CreateGetJniEnvCall(curFile), std::move(entity), ty, false);
+    }
+
     auto classLikeTy = DynamicCast<ClassLikeTy*>(ty.get());
     if (!classLikeTy) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, DEFAULT_POSITION, "type " + ty->name);
@@ -1422,9 +1547,25 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
     }
 }
 
+bool InteropLibBridge::IsInteropLibAccessible(ImportManager& importManager)
+{
+    return importManager.GetPackageDecl(INTEROPLIB_PACKAGE_NAME);
+}
+
+bool InteropLibBridge::IsInteropLibAccessible() const
+{
+    return IsInteropLibAccessible(importManager);
+}
+
 void InteropLibBridge::CheckInteropLibVersion()
 {
     auto versionDecl = GetInteropLibVersionVarDecl();
+
+    if (!versionDecl && !IsInteropLibAccessible()) {
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_interoplib_must_be_imported, DEFAULT_POSITION);
+        return;
+    }
+
     if (!versionDecl || !versionDecl->initializer || versionDecl->initializer->astKind != ASTKind::LIT_CONST_EXPR ||
         versionDecl->initializer->ty->kind != TypeKind::TYPE_INT64) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interoplib_version_too_old, DEFAULT_POSITION,

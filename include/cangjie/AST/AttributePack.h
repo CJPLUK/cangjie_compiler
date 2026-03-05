@@ -608,6 +608,14 @@ enum class Attribute {
     JAVA_CJ_MAPPING,
 
     /**
+     * Mark whether a class decl is an interface-forward class.
+     * A forward class is used to forward the method call to Java side.
+     * W: Sema.
+     * R: Sema.
+     */
+    CJ_MIRROR_JAVA_INTERFACE_FWD,
+
+    /**
      * Mark whether a node is a desugared mirror field decl.
      * Usually the node is a prop decl.
      * W: Parser.
@@ -622,6 +630,13 @@ enum class Attribute {
      * R: AST2CHIR.
      */
     HAS_INITED_FIELD,
+
+    /**
+     * Mark whether a function in interface-forward class is a default implementation of cj-mapping interface.
+     * W: Sema.
+     * R: Sema.
+     */
+    CJ_MIRROR_JAVA_INTERFACE_DEFAULT,
 
     AST_ATTR_END,
 };
@@ -705,11 +720,15 @@ static const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::COMMON_WITH_DEFAULT, "COMMON_WITH_DEFAULT"},
     {AST::Attribute::JAVA_MIRROR, "JAVA_MIRROR"},
     {AST::Attribute::JAVA_MIRROR_SUBTYPE, "JAVA_MIRROR_SUBTYPE"},
-    {AST::Attribute::JAVA_CJ_MAPPING, "JAVA_CJ_MAPPING"},
+    {AST::Attribute::JAVA_HAS_DEFAULT, "JAVA_HAS_DEFAULT"},
+    {AST::Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER, "JAVA_MIRROR_SYNTHETIC_WRAPPER"},
     {AST::Attribute::OBJ_C_MIRROR, "OBJ_C_MIRROR"},
     {AST::Attribute::OBJ_C_MIRROR_SUBTYPE, "OBJ_C_MIRROR_SUBTYPE"},
+    {AST::Attribute::JAVA_CJ_MAPPING, "JAVA_CJ_MAPPING"},
+    {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD, "CJ_MIRROR_JAVA_INTERFACE_FWD"},
     {AST::Attribute::DESUGARED_MIRROR_FIELD, "DESUGARED_MIRROR_FIELD"},
     {AST::Attribute::HAS_INITED_FIELD, "HAS_INITED_FIELD"},
+    {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_DEFAULT, "CJ_MIRROR_JAVA_INTERFACE_DEFAULT"},
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
 };
 

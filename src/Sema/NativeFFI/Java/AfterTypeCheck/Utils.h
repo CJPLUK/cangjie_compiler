@@ -18,7 +18,8 @@
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
-#include "../../../InheritanceChecker/StructInheritanceChecker.h"
+#include "InheritanceChecker/MemberSignature.h"
+#include "InheritanceChecker/MemberSignature.h"
 #include "NativeFFI/Utils.h"
 
 namespace Cangjie::Interop::Java {
@@ -34,7 +35,7 @@ enum class ArrayOperationKind: uint8_t {
 
 class Utils final {
 public:
-    Utils(ImportManager& importManager, TypeManager& typeManager);
+    Utils(ImportManager& importManager, TypeManager& typeManager, Package& pkg);
 
     // Ty of `Option<ty>`
     Ptr<Ty> GetOptionTy(Ptr<Ty> ty);
@@ -59,8 +60,9 @@ public:
     StructDecl& GetStringDecl();
 
     std::string GetJavaClassNormalizeSignature(const Ty& cjtype) const;
-    std::string GetJavaTypeSignature(const Ty& cjtype);
-    std::string GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& args);
+    std::string GetJavaTypeSignature(const Ty& cjtype, std::string fullpackageName = "");
+    std::string GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& args, std::string fullpackageName = "");
+    std::string GetParamJavaSignature(const Ptr<Ty> ty, std::string fullpackageName);
     std::string GetJavaObjectTypeName(const Ty& ty);
 
     OwnedPtr<Expr> CreateOptionMatch(
@@ -78,6 +80,7 @@ private:
 private:
     ImportManager& importManager;
     TypeManager& typeManager;
+    Package& pkg;
 };
 
 /**
@@ -155,10 +158,15 @@ std::string GetJavaMemberName(const Decl& decl);
 bool HasPredefinedJavaName(const ClassLikeDecl& decl);
 
 /**
+ * Returns fully-qualified name of the extend decl
+ */
+std::string GetJavaFQNameFromExtendDecl(const ExtendDecl& extendDecl);
+
+/**
  * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror as attribute,
  * which is suitable for specifying in JNI calls
  */
-std::string GetJavaFQName(const Decl& decl);
+std::string GetJavaFQName(const Decl& decl, const std::string* genericActualName = nullptr);
 
 /**
  * Returns fully-qualified name of the decl or fq-name specified in @JavaMirror as attribute,
@@ -198,8 +206,8 @@ void MangleJNIName(std::string& name);
  * Performs mangling of `javaTy` with `mangler`. If `javaTy` is a mirrror or impl, then it returns `jobjectTy`
  */
 std::string GetMangledJniInitCjObjectFuncName(const BaseMangler& mangler,
-    const std::vector<OwnedPtr<FuncParam>>& params,
-    bool isGeneratedCtor);
+    const std::vector<OwnedPtr<FuncParam>>& params, bool isGeneratedCtor);
+std::string GetMangledJniInitCjObjectFuncName(const BaseMangler& mangler, const std::vector<Ptr<Ty>>& types);
 
 std::string GetMangledJniInitCjObjectFuncNameForEnum(
     const BaseMangler& mangler, const std::vector<OwnedPtr<FuncParam>>& params, const std::string funcName);
@@ -218,10 +226,12 @@ bool IsJArray(const Ty& ty);
 
 bool IsMirror(const Ty& ty);
 
-bool IsImpl(const Decl& decl);
 bool IsImpl(const Ty& ty);
 bool IsCJMappingInterface(const Ty& ty);
 bool IsCJMapping(const Ty& ty);
+bool IsCJMappingTuple(const Ptr<Ty>& ty, std::unordered_set<Ptr<Ty>> tupleConfigs);
+std::string ReplaceClassName(std::string& classTypeSignature, std::string newSegment);
+std::string NormalizeJavaSignature(const std::string& sig);
 
 ArrayOperationKind GetArrayOperationKind(Decl& decl);
 
@@ -296,11 +306,6 @@ Ptr<MemberDecl> FindFirstMemberDecl(
     return nullptr;
 }
 
-void GenerateSyntheticClassMemberStubs(
-    ClassDecl& synthetic,
-    const MemberMap& interfaceMembers,
-    const MemberMap& instanceMembers);
-
 
 /**
  * Returns FQ name of marker class for Cangjie side constructor of Java class
@@ -308,6 +313,8 @@ void GenerateSyntheticClassMemberStubs(
 std::string GetConstructorMarkerFQName();
 std::string GetConstructorMarkerClassName();
 OwnedPtr<ClassDecl> CreateConstructorMarkerClassDecl();
+
+void GenerateSyntheticClassMemberStubs(ClassDecl& synthetic, const MemberMap& members);
 
 } // namespace Cangjie::Interop::Java
 

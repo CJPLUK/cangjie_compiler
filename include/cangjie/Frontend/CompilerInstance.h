@@ -258,7 +258,7 @@ public:
      *
      * @return empty vector If Parse failed.
      */
-    std::vector<Ptr<AST::Package>> GetSourcePackages() const;
+    std::vector<Ptr<AST::Package>> GetSourcePackages();
 
     /**
      * Get Source Manager.

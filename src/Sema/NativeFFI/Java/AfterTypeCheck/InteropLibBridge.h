@@ -34,13 +34,31 @@ struct MemberJNISignature {
     {
             auto& retTy = *member.funcBody->retType->ty;
             std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
-            signature = utils.GetJavaTypeSignature(retTy, paramTys);
+            signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
+    }
+
+    // Constructor added for using generic types in Java
+    MemberJNISignature(Utils& utils, FuncDecl& member, GenericConfigInfo* genericConfig)
+    {
+        auto jobject = StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl);
+        CJC_ASSERT(jobject);
+        Ptr<Ty> ty = jobject->ty;
+        classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
+        // turn "cj/A" to "cj/A${type}"
+        classTypeSignature = ReplaceClassName(classTypeSignature, genericConfig->declInstName);
+        name = GetJavaMemberName(member);
+
+        CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL);
+
+        auto& retTy = *member.funcBody->retType->ty;
+        std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
+        signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
     }
 
     MemberJNISignature(Utils& utils, PropDecl& member)
         : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
     {
-            signature = utils.GetJavaTypeSignature(*member.ty);
+            signature = utils.GetJavaTypeSignature(*member.ty, member.fullPackageName);
     }
 
     MemberJNISignature(Utils& utils, Decl& member, Ptr<ClassLikeDecl> jobject)
@@ -59,7 +77,7 @@ struct MemberJNISignature {
         classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
         name = GetJavaMemberName(member);
         CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL || member.astKind == ASTKind::PROP_DECL);
-        signature = utils.GetJavaTypeSignature(*member.ty);
+        signature = utils.GetJavaTypeSignature(*member.ty, member.fullPackageName);
     }
 };
 
@@ -83,6 +101,11 @@ public:
      * Java_CFFI_JavaEntityKind
      */
     Ptr<EnumDecl> GetJavaEntityKindDecl();
+
+    /**
+     * JavaObjectController<T>
+     */
+    Ptr<ClassDecl> GetJavaObjectControllerDecl();
 
     /**
      * Java_CFFI_JavaEntityKind.JOBJECT
@@ -278,6 +301,36 @@ public:
     Ptr<FuncDecl> GetFieldIdConstr();
     Ptr<FuncDecl> GetFieldIdConstrStatic();
 
+     /**
+     * JavaObjectController init() decl
+     */
+    Ptr<FuncDecl> GetJavaObjectControllerInitDecl();
+
+    /**
+     * JavaObjectController attachCJObject() decl
+     */
+    Ptr<FuncDecl> GetAttachCJObjectDecl();
+
+    /**
+     * JavaObjectController detachCJObject() decl
+     */
+    Ptr<FuncDecl> GetDetachCJObjectDecl();
+
+    /**
+     * deleteLocalRef()
+     */
+    Ptr<FuncDecl> GetDeleteLocalRefDecl();
+
+    /**
+     * getJavaLambdaObject(fun : Any, className: String) decl
+     */
+    Ptr<FuncDecl> GetJavaLambdaObjectDecl();
+
+    /**
+     * getJavaLambdaEntity(fun : Any, className: String) decl
+     */
+    Ptr<FuncDecl> GetJavaLambdaEntityDecl();
+
     /**
      * JNIEnv_ptr ty
      */
@@ -362,6 +415,11 @@ public:
         const std::string& classTypeSignature,
         const std::string& constructorSignature,
         std::vector<OwnedPtr<Expr>> args);
+
+    /**
+     * JavaObjectController<T>(javaEntity, className)
+     */
+    OwnedPtr<CallExpr> CreateJavaObjectControllerCall(OwnedPtr<Expr> javaEntity, OwnedPtr<Expr> className, ClassDecl& classDecl);
 
     /**
      * Java_CFFI_newJavaArray(env, signature, [args])
@@ -578,7 +636,13 @@ public:
         std::function<OwnedPtr<Expr>(TypeKind, Ptr<Ty>)> selector
     );
 
+    OwnedPtr<CallExpr> CreateGetJavaLambdaObjectCall(OwnedPtr<RefExpr> refExpr, std::string classSign, Ptr<File> curFile);
+    OwnedPtr<CallExpr> CreateGetJavaLambdaEntityCall(OwnedPtr<RefExpr> refExpr, std::string classSign, Ptr<File> curFile);
+    OwnedPtr<CallExpr> CreateGetJavaLambdaCall(Ptr<FuncDecl> fd, OwnedPtr<RefExpr> refExpr, std::string classSign, Ptr<File> curFile);
+
+    bool IsInteropLibAccessible() const;
     void CheckInteropLibVersion();
+    static bool IsInteropLibAccessible(ImportManager& importManager);
 
 private:
     static constexpr auto INTEROPLIB_VERSION = 9;
@@ -623,6 +687,9 @@ private:
     {
         return ImportDecl<K>(INTEROP_JAVA_LANG_PACKAGE, declname);
     }
+
+    Ptr<FuncDecl> GetJavaObjectControllerMethodDecl(std::string methodName);
+    OwnedPtr<Expr> CreateParamExpr(FuncParam& param, Ptr<File> curFile);
 
     ImportManager& importManager;
     TypeManager& typeManager;

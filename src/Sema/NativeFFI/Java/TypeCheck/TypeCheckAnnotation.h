@@ -17,8 +17,8 @@
 
 namespace Cangjie::Interop::Java {
 
-void CheckJavaHasDefaultAnnotation(Cangjie::DiagnosticEngine& diag, const Cangjie::AST::Annotation& anno,
-    const Cangjie::AST::Decl& decl);
+void CheckJavaHasDefaultAnnotation(
+    Cangjie::DiagnosticEngine& diag, const Cangjie::AST::Annotation& ann, const Cangjie::AST::Decl& decl);
 
 } // namespace Cangjie::Interop::Java
 

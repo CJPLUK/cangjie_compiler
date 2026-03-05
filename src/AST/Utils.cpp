@@ -744,9 +744,16 @@ void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
     // Collect the original field
     std::vector<VarDecl*> oldVars;
     for (auto& member : members) {
-        if (member->astKind == ASTKind::VAR_DECL) {
-            oldVars.emplace_back(StaticAs<ASTKind::VAR_DECL>(member.get()));
+        if (member->astKind != ASTKind::VAR_DECL) {
+            // extra check for ast kind is required since prop decl inherits var decl
+            continue;
         }
+        auto field = StaticAs<ASTKind::VAR_DECL>(member.get());
+        if (!field->type) {
+            continue;
+        }
+        // fields without syntactic type specified are invalid and should be skipped here
+        oldVars.emplace_back(field);
     }
     // Generate and insert the new prop
     for (auto var : oldVars) {
@@ -772,9 +779,9 @@ void SetPositionAndCurFileByProvidedNode(Node& consumer, Node& provider)
 }
 
 namespace Cangjie::Interop::Java {
-bool IsImpl(const Decl& decl)
+bool IsImpl(const Node& node)
 {
-    return !decl.TestAttr(Attribute::JAVA_MIRROR) && decl.TestAttr(Attribute::JAVA_MIRROR_SUBTYPE);
+    return !node.TestAttr(Attribute::JAVA_MIRROR) && node.TestAttr(Attribute::JAVA_MIRROR_SUBTYPE);
 }
 
 bool IsJObject(const Decl& decl)
@@ -789,19 +796,24 @@ bool IsJObject(const Decl& decl, const std::string& packageName)
         packageName == INTEROP_JAVA_LANG_PACKAGE;
 }
 
-bool IsMirror(const Decl& decl)
+bool IsMirror(const Node& node)
 {
-    return decl.TestAttr(Attribute::JAVA_MIRROR);
+    return node.TestAttr(Attribute::JAVA_MIRROR);
 }
 
-bool IsCJMapping(const Decl& decl)
+bool IsCJMapping(const Node& node)
 {
-    return decl.TestAttr(Attribute::JAVA_CJ_MAPPING);
+    return node.TestAttr(Attribute::JAVA_CJ_MAPPING);
 }
 
-bool IsObject(const Decl& decl)
+bool IsObject(const Node& node)
 {
-    return decl.ty->IsObject();
+    return node.ty->IsObject();
+}
+
+bool IsFwdClass(const Node& node)
+{
+    return node.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD);
 }
 
 /**
@@ -838,11 +850,9 @@ void InsertJavaRefGetterStubWithBody(ClassDecl& decl)
     decl.body->decls.emplace_back(std::move(fd));
 }
 
-bool IsDeclAppropriateForSyntheticClassGeneration(const Decl& decl)
+bool IsDeclAppropriateForSyntheticClassGeneration(const Node& node)
 {
-    return decl.TestAttr(Attribute::JAVA_MIRROR) &&
-        (decl.astKind == ASTKind::INTERFACE_DECL ||
-            (decl.astKind == ASTKind::CLASS_DECL && decl.TestAttr(Attribute::ABSTRACT)));
+    return IsMirror(node) && (node.IsInterfaceDecl() || node.IsAbstractClass());
 }
 
 std::string GetSyntheticNameFromClassLike(const ClassLikeDecl& cld)
