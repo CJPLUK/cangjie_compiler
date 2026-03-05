@@ -17,6 +17,8 @@
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 
+#include <llvm/IR/BasicBlock.h>
+
 namespace Cangjie {
 namespace CodeGen {
 class CHIRExprWrapper {
@@ -132,7 +134,7 @@ public:
     explicit CHIRCallExpr(const CHIR::Expression& chirExpr) : CHIRExprWrapper(chirExpr)
     {
     }
-    virtual CHIR::Type* GetThisType() const = 0;
+    virtual CHIR::Type* GetThisType(bool fromObj = true) const = 0;
     virtual std::vector<CHIR::Type*> GetInstantiatedTypeArgs() const = 0;
     virtual bool IsCalleeMethod() const = 0;
     virtual bool IsCalleeStructInstanceMethod() const = 0;
@@ -192,8 +194,9 @@ public:
         }
     }
 
-    CHIR::Type* GetThisType() const override
+    CHIR::Type* GetThisType(bool fromObj = true) const override
     {
+        (void)fromObj;
         if (GetExprKind() == CHIR::ExprKind::APPLY) {
             return StaticCast<const CHIR::Apply&>(chirExpr).GetThisType();
         } else {
@@ -263,13 +266,36 @@ private:
     }
 };
 
-class CHIRInvokeWrapper : public CHIRCallExpr {
+class CHIRInvokeExpr : public CHIRCallExpr {
 public:
-    explicit CHIRInvokeWrapper(const CHIR::Invoke& invoke) : CHIRCallExpr(invoke)
+    explicit CHIRInvokeExpr(const CHIR::Expression& chirExpr) : CHIRCallExpr(chirExpr)
     {
     }
 
-    explicit CHIRInvokeWrapper(const CHIR::InvokeWithException& invokeWithException) : CHIRCallExpr(invokeWithException)
+    virtual std::size_t GetVirtualMethodOffset() const = 0;
+
+    void SetPrepForVirtualCallBB(llvm::BasicBlock* prepForVirtualCallBB)
+    {
+        this->prepForVirtualCallBB = prepForVirtualCallBB;
+    }
+
+    llvm::BasicBlock* GetPrepForVirtualCallBB() const
+    {
+        return prepForVirtualCallBB;
+    }
+
+private:
+    llvm::BasicBlock* prepForVirtualCallBB = nullptr;
+};
+
+class CHIRInvokeWrapper : public CHIRInvokeExpr {
+public:
+    explicit CHIRInvokeWrapper(const CHIR::Invoke& invoke) : CHIRInvokeExpr(invoke)
+    {
+    }
+
+    explicit CHIRInvokeWrapper(const CHIR::InvokeWithException& invokeWithException)
+        : CHIRInvokeExpr(invokeWithException)
     {
     }
 
@@ -320,12 +346,14 @@ public:
         }
     }
 
-    CHIR::Type* GetThisType() const override
+    CHIR::Type* GetThisType(bool fromObj = true) const override
     {
         if (GetExprKind() == CHIR::ExprKind::INVOKE) {
-            return StaticCast<const CHIR::Invoke&>(chirExpr).GetObject()->GetType();
+            return fromObj ? StaticCast<const CHIR::Invoke&>(chirExpr).GetObject()->GetType()
+                           : StaticCast<const CHIR::Invoke&>(chirExpr).GetThisType();
         } else {
-            return StaticCast<const CHIR::InvokeWithException&>(chirExpr).GetObject()->GetType();
+            return fromObj ? StaticCast<const CHIR::InvokeWithException&>(chirExpr).GetObject()->GetType()
+                           : StaticCast<const CHIR::InvokeWithException&>(chirExpr).GetThisType();
         }
     }
 
@@ -368,7 +396,7 @@ public:
         return GetObject();
     }
 
-    size_t GetVirtualMethodOffset() const
+    std::size_t GetVirtualMethodOffset() const override
     {
         if (GetExprKind() == CHIR::ExprKind::INVOKE) {
             return StaticCast<const CHIR::Invoke&>(chirExpr).GetVirtualMethodOffset();
@@ -387,15 +415,14 @@ public:
     }
 };
 
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-class CHIRInvokeStaticWrapper : public CHIRCallExpr {
+class CHIRInvokeStaticWrapper : public CHIRInvokeExpr {
 public:
-    explicit CHIRInvokeStaticWrapper(const CHIR::InvokeStatic& invokeStatic) : CHIRCallExpr(invokeStatic)
+    explicit CHIRInvokeStaticWrapper(const CHIR::InvokeStatic& invokeStatic) : CHIRInvokeExpr(invokeStatic)
     {
     }
 
     explicit CHIRInvokeStaticWrapper(const CHIR::InvokeStaticWithException& invokeStaticWithException)
-        : CHIRCallExpr(invokeStaticWithException)
+        : CHIRInvokeExpr(invokeStaticWithException)
     {
     }
 
@@ -437,8 +464,9 @@ public:
         }
     }
 
-    CHIR::Type* GetThisType() const override
+    CHIR::Type* GetThisType(bool fromObj = true) const override
     {
+        (void)fromObj;
         if (GetExprKind() == CHIR::ExprKind::INVOKESTATIC) {
             return StaticCast<const CHIR::InvokeStatic&>(chirExpr).GetThisType();
         } else {
@@ -495,7 +523,7 @@ public:
         return nullptr;
     }
 
-    size_t GetVirtualMethodOffset() const
+    std::size_t GetVirtualMethodOffset() const override
     {
         if (GetExprKind() == CHIR::ExprKind::INVOKESTATIC) {
             return StaticCast<const CHIR::InvokeStatic&>(chirExpr).GetVirtualMethodOffset();
@@ -504,7 +532,6 @@ public:
         }
     }
 };
-#endif
 
 class CHIRUnaryExprWrapper : public CHIRExprWrapper {
 public:

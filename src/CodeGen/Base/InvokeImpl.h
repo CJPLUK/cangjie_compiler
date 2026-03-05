@@ -20,8 +20,8 @@ namespace CodeGen {
 class IRBuilder2;
 class CHIRInvokeWrapper;
 class CHIRInvokeStaticWrapper;
-llvm::Value* GenerateInvoke(IRBuilder2& irBuilder, const CHIRInvokeWrapper& invoke);
-llvm::Value* GenerateInvokeStatic(IRBuilder2& irBuilder, const CHIRInvokeStaticWrapper& invokeStatic);
+llvm::Value* GenerateInvoke(IRBuilder2& irBuilder, CHIRInvokeWrapper invoke);
+llvm::Value* GenerateInvokeStatic(IRBuilder2& irBuilder, CHIRInvokeStaticWrapper invokeStatic);
 } // namespace CodeGen
 } // namespace Cangjie
 #endif // CANGJIE_INVOKE_H
