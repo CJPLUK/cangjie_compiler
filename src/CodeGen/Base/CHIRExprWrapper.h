@@ -17,6 +17,8 @@
 #include "cangjie/CHIR/Expression/Terminator.h"
 #include "cangjie/CHIR/Utils.h"
 
+#include <llvm/IR/BasicBlock.h>
+
 namespace Cangjie {
 namespace CodeGen {
 class CHIRExprWrapper {
@@ -132,7 +134,7 @@ public:
     explicit CHIRCallExpr(const CHIR::Expression& chirExpr) : CHIRExprWrapper(chirExpr)
     {
     }
-    virtual CHIR::Type* GetThisType() const = 0;
+    virtual CHIR::Type* GetThisType(bool fromObj = true) const = 0;
     virtual std::vector<CHIR::Type*> GetInstantiatedTypeArgs() const = 0;
     virtual bool IsCalleeMethod() const = 0;
     virtual bool IsCalleeStructInstanceMethod() const = 0;
@@ -192,8 +194,9 @@ public:
         }
     }
 
-    CHIR::Type* GetThisType() const override
+    CHIR::Type* GetThisType(bool fromObj = true) const override
     {
+        (void)fromObj;
         if (GetExprKind() == CHIR::ExprKind::APPLY) {
             return StaticCast<const CHIR::Apply&>(chirExpr).GetThisType();
         } else {
@@ -320,12 +323,14 @@ public:
         }
     }
 
-    CHIR::Type* GetThisType() const override
+    CHIR::Type* GetThisType(bool fromObj = true) const override
     {
         if (GetExprKind() == CHIR::ExprKind::INVOKE) {
-            return StaticCast<const CHIR::Invoke&>(chirExpr).GetObject()->GetType();
+            return fromObj ? StaticCast<const CHIR::Invoke&>(chirExpr).GetObject()->GetType()
+                           : StaticCast<const CHIR::Invoke&>(chirExpr).GetThisType();
         } else {
-            return StaticCast<const CHIR::InvokeWithException&>(chirExpr).GetObject()->GetType();
+            return fromObj ? StaticCast<const CHIR::InvokeWithException&>(chirExpr).GetObject()->GetType()
+                           : StaticCast<const CHIR::InvokeWithException&>(chirExpr).GetThisType();
         }
     }
 
@@ -385,6 +390,19 @@ public:
             return StaticCast<const CHIR::InvokeWithException&>(chirExpr).GetVirtualMethodAttr(builder).TestAttr(attr);
         }
     }
+
+    void SetPrepForVirtualCallBB(llvm::BasicBlock* prepForVirtualCallBB)
+    {
+        this->prepForVirtualCallBB = prepForVirtualCallBB;
+    }
+
+    llvm::BasicBlock* GetPrepForVirtualCallBB() const
+    {
+        return prepForVirtualCallBB;
+    }
+
+private:
+    llvm::BasicBlock* prepForVirtualCallBB = nullptr;
 };
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
@@ -437,8 +455,9 @@ public:
         }
     }
 
-    CHIR::Type* GetThisType() const override
+    CHIR::Type* GetThisType(bool fromObj = true) const override
     {
+        (void)fromObj;
         if (GetExprKind() == CHIR::ExprKind::INVOKESTATIC) {
             return StaticCast<const CHIR::InvokeStatic&>(chirExpr).GetThisType();
         } else {
@@ -503,6 +522,19 @@ public:
             return StaticCast<const CHIR::InvokeStaticWithException&>(chirExpr).GetVirtualMethodOffset();
         }
     }
+
+    void SetPrepForVirtualCallBB(llvm::BasicBlock* prepForVirtualCallBB)
+    {
+        this->prepForVirtualCallBB = prepForVirtualCallBB;
+    }
+
+    llvm::BasicBlock* GetPrepForVirtualCallBB() const
+    {
+        return prepForVirtualCallBB;
+    }
+
+private:
+    llvm::BasicBlock* prepForVirtualCallBB = nullptr;
 };
 #endif
 

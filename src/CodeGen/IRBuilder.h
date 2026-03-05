@@ -467,6 +467,11 @@ private:
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     llvm::Value* FixFuncArg(const CGValue& srcValue, const CGType& destType, bool isThisArgInStructMut = false);
+    /**
+     * Create Outer TypeInfo for the given CHIRCallExpr.
+     * Return the created Outer TypeInfo.
+     */
+    llvm::Value* CreateOuterTypeInfo(const CHIRCallExpr& applyWrapper, llvm::Value* thisTypeInfo);
 #endif
     llvm::Value* GetEnumTag(const CHIR::Field& field);
     llvm::Value* GetEnumAssociatedValue(const CHIR::Field& field);
