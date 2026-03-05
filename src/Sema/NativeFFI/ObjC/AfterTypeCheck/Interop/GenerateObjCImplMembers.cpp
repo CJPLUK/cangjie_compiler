@@ -43,8 +43,7 @@ void GenerateObjCImplMembers::HandleImpl(InteropContext& ctx)
 
 void GenerateObjCImplMembers::GenerateCtor(InteropContext& ctx, ClassDecl& target, FuncDecl& from)
 {
-    auto ctor = ctx.factory.CreateImplCtor(target, from);
-    CJC_ASSERT(ctor);
+    auto ctor = ctx.factory.CreateImplCtor(from);
+    CJC_NULLPTR_CHECK(ctor);
     target.body->decls.emplace_back(std::move(ctor));
 }
-

@@ -19,6 +19,7 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Utils/SafePointer.h"
+#include "NativeFFI/Utils.h"
 
 namespace Cangjie::Interop::ObjC {
 
@@ -36,7 +37,7 @@ public:
 
     /**
      * For obj-c compatible expression `expr`, it returns corresponding expr over CType:
-     * - for mirror/impl: `$expr.$obj`
+     * - for mirror/impl: `$expr.$getObj()`
      * - for primitive value: the value itself
      */
     OwnedPtr<AST::Expr> UnwrapEntity(OwnedPtr<AST::Expr> expr);
@@ -44,7 +45,8 @@ public:
     /**
      * Returns obj-c compatible expression over `expr` of CType:
      * - for primitive value: the value itself
-     * - for CPointer<Unit> (mirror M): constructor call `M(expr)`
+     * - for CPointer<Unit> (mirror class M): constructor call `M(expr)`
+     * - for CPointer<Unit> (mirror interface M): constructor call `M$impl(expr)`
      * - for CPointer<Unit> (impl I): call to retrieve corresponding instance from regirstry for `expr`
      */
     OwnedPtr<AST::Expr> WrapEntity(OwnedPtr<AST::Expr> expr, AST::Ty& wrapTy);
@@ -62,81 +64,96 @@ public:
     /**
      * Returns native handle for decl mirror/impl type.
      * If `isStatic`, then returns handle related to class. (objc_getClass)
-     * If not `isStatic`, then returns handle related to instance (this.$obj)
+     * If not `isStatic`, then returns handle related to instance (this.$getObj())
      */
     OwnedPtr<AST::Expr> CreateNativeHandleExpr(AST::ClassLikeDecl& decl, bool isStatic, Ptr<AST::File> curFile);
 
     /**
-     * For mirror/impl `entity`, it returns pointer on obj-c object: `$entity.$obj`
+     * For mirror/impl `entity`, it returns pointer on obj-c object: `$entity.$getObj()`
      */
     OwnedPtr<AST::Expr> CreateNativeHandleExpr(OwnedPtr<AST::Expr> entity);
 
     /**
-     * For mirror/impl type `ty`, it returns this.$obj, where `this` is a reference on `ty`
+     * For mirror/impl type `ty`, it returns this.$getObj(), where `this` is a reference on `ty`
      */
     OwnedPtr<AST::Expr> CreateNativeHandleExpr(AST::ClassLikeTy& ty, Ptr<AST::File> curFile);
 
     OwnedPtr<AST::VarDecl> CreateNativeHandleField(AST::ClassDecl& target);
-    OwnedPtr<AST::Expr> CreateNativeHandleInit(AST::FuncDecl& ctor);
+    OwnedPtr<AST::FuncDecl> CreateGetObjCClassDecl(AST::ClassLikeDecl& target);
+    OwnedPtr<AST::FuncDecl> CreateGetObjCClass(AST::ClassLikeDecl& target);
+    OwnedPtr<AST::FuncDecl> CreateInitCjObjectReturningObjCSelf(const AST::Decl& target, AST::FuncDecl& ctor);
     OwnedPtr<AST::FuncDecl> CreateInitCjObject(
-        const AST::Decl& target, AST::FuncDecl& ctor, bool generateForOneWayMapping = false);
-    OwnedPtr<AST::FuncDecl> CreateDeleteCjObject(AST::Decl& target, bool generateForOneWayMapping = false);
+        AST::Decl& target, AST::FuncDecl& ctor, bool generateForOneWayMapping = false,
+        const Native::FFI::GenericConfigInfo* genericConfig = nullptr);
+    /**
+     * @C
+     * public func CJImpl_ObjC_PackageName_VarDeclNameInitCJObject() : RegistryID {
+     *     let tu = EnumName.VarDeclName
+     *     putToRegistry(tu)
+     * }
+     */
+    OwnedPtr<AST::FuncDecl> CreateInitCjObjectForEnumNoParams(AST::EnumDecl& target, AST::VarDecl& ctor);
+    OwnedPtr<AST::FuncDecl> CreateDeleteCjObject(AST::Decl& target, bool generateForOneWayMapping = false,
+        const Native::FFI::GenericConfigInfo* genericConfig = nullptr);
     /**
      * Returns generated top-level @C function (callable from obj-c) that calls @ObjCImpl `originMethod`.
      */
-    OwnedPtr<AST::FuncDecl> CreateMethodWrapper(AST::FuncDecl& method);
+    OwnedPtr<AST::FuncDecl> CreateMethodWrapper(AST::FuncDecl& method,
+        const Native::FFI::GenericConfigInfo* genericConfig = nullptr);
     OwnedPtr<AST::FuncDecl> CreateGetterWrapper(AST::PropDecl& prop);
     OwnedPtr<AST::FuncDecl> CreateSetterWrapper(AST::PropDecl& prop);
-    OwnedPtr<AST::FuncDecl> CreateGetterWrapper(AST::VarDecl& field);
+    OwnedPtr<AST::FuncDecl> CreateGetterWrapper(AST::VarDecl& field, const Native::FFI::GenericConfigInfo* genericConfig = nullptr);
     OwnedPtr<AST::FuncDecl> CreateSetterWrapper(AST::VarDecl& field);
     OwnedPtr<AST::ThrowExpr> CreateThrowUnreachableCodeExpr(AST::File& file);
+    OwnedPtr<AST::ThrowExpr> CreateThrowOptionalMethodUnimplemented(AST::File& file);
+    OwnedPtr<AST::ThrowExpr> CreateThrowStaticMethodCallOnInterfaceExpr(AST::File& file);
     std::set<Ptr<AST::FuncDecl>> GetAllParentCtors(AST::ClassDecl& target) const;
-    OwnedPtr<AST::FuncDecl> CreateImplCtor(AST::ClassDecl& target, AST::FuncDecl& from);
-    OwnedPtr<AST::FuncDecl> CreateMirrorCtorDecl(AST::ClassDecl& target);
+    OwnedPtr<AST::FuncDecl> CreateImplCtor(AST::FuncDecl& from);
+    OwnedPtr<AST::FuncDecl> CreateBaseCtorDecl(AST::ClassDecl& target);
     bool IsGeneratedMember(const AST::Decl& decl) const;
     bool IsGeneratedNativeHandleField(const AST::Decl& decl) const;
+    bool IsGeneratedGetObjCClassFunction(const AST::Decl& decl) const;
     bool IsGeneratedHasInitedField(const AST::Decl& decl) const;
     bool IsGeneratedCtor(const AST::Decl& decl) const;
-    Ptr<AST::FuncDecl> GetGeneratedMirrorCtor(AST::Decl& decl);
+    bool IsGeneratedBaseCtor(const AST::Decl& decl) const;
+    bool IsGeneratedNativeHandleGetter(const AST::Decl& decl) const;
+    Ptr<AST::FuncDecl> GetGeneratedBaseCtor(AST::Decl& decl);
     Ptr<AST::FuncDecl> GetGeneratedImplCtor(const AST::Decl& declArg, const AST::FuncDecl& origin);
-    OwnedPtr<AST::CallExpr> CreateObjCRuntimeMsgSendCall(
-        OwnedPtr<AST::Expr> nativeHandle,
-        const std::string& selector,
-        Ptr<AST::Ty> retTy,
-        std::vector<OwnedPtr<AST::Expr>> args
-    );
-    OwnedPtr<AST::CallExpr> CreateObjCRuntimeMsgSendCall(
-        Ptr<AST::FuncTy> ty,
-        OwnedPtr<AST::FuncType> funcType,
-        std::vector<OwnedPtr<AST::Expr>> funcArgs
-    );
-    OwnedPtr<AST::CallExpr> CreateGetInstanceVariableCall(
-        const AST::PropDecl& field,
-        OwnedPtr<AST::Expr> nativeHandle
-    );
-    OwnedPtr<AST::CallExpr> CreateObjCRuntimeSetInstanceVariableCall(
-        const AST::PropDecl& field,
-        OwnedPtr<AST::Expr> nativeHandle,
-        OwnedPtr<AST::Expr> value
-    );
+    OwnedPtr<AST::CallExpr> CreateObjCMsgSendCall(OwnedPtr<AST::Expr> nativeHandle, const std::string& selector,
+        Ptr<AST::Ty> retTy, std::vector<OwnedPtr<AST::Expr>> args);
+    OwnedPtr<AST::CallExpr> CreateObjCMsgSendCall(
+        Ptr<AST::FuncTy> ty, OwnedPtr<AST::FuncType> funcType, std::vector<OwnedPtr<AST::Expr>> funcArgs);
+    OwnedPtr<AST::CallExpr> CreateGetInstanceVariableCall(const AST::PropDecl& field, OwnedPtr<AST::Expr> nativeHandle);
+    OwnedPtr<AST::CallExpr> CreateSetInstanceVariableCall(
+        const AST::PropDecl& field, OwnedPtr<AST::Expr> nativeHandle, OwnedPtr<AST::Expr> value);
     OwnedPtr<AST::CallExpr> CreateRegisterNameCall(OwnedPtr<AST::Expr> selectorExpr);
     OwnedPtr<AST::CallExpr> CreateRegisterNameCall(const std::string& selector, Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> CreateGetClassCall(const AST::ClassLikeDecl& ty, Ptr<AST::File> curFile);
     OwnedPtr<AST::Expr> CreateGetClassCall(AST::ClassLikeTy& ty, Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> CreateObjCRespondsToSelectorCall(OwnedPtr<AST::Expr> id, OwnedPtr<AST::Expr> sel, Ptr<AST::File> file);
+    OwnedPtr<AST::Expr> CreateGetSuperClassExpr(OwnedPtr<AST::Expr> objCSuper, Ptr<AST::File> file);
 
     /**
-     * ObjCRuntime.alloc($classHandle)
+     * alloc($classHandle)
      */
     OwnedPtr<AST::CallExpr> CreateAllocCall(OwnedPtr<AST::Expr> className);
     /**
-     * ObjCRuntime.alloc(decl)
+     * alloc(decl)
      */
     OwnedPtr<AST::CallExpr> CreateAllocCall(AST::Decl& decl, Ptr<AST::File> curFile);
 
     OwnedPtr<AST::Expr> CreateMethodCallViaMsgSend(
-        AST::FuncDecl& fd,
-        OwnedPtr<AST::Expr> nativeHandle,
-        std::vector<OwnedPtr<AST::Expr>> rawArgs
-    );
+        AST::FuncDecl& fd, OwnedPtr<AST::Expr> nativeHandle, std::vector<OwnedPtr<AST::Expr>> rawArgs);
+
+    /**
+     * Creates method call of `fd` passing exact parameters mapping with  unwrapping and `handle`.
+     */
+    OwnedPtr<AST::Expr> CreateMethodCallViaMsgSend(AST::FuncDecl& fd, OwnedPtr<AST::Expr> handle);
+
+    /**
+     * Creates alloc-init chain over $fd.outerDecl as native handle with corresponding parameters passed
+     */
+    OwnedPtr<AST::Expr> CreateAllocInitCall(AST::FuncDecl& fd);
 
     OwnedPtr<AST::Expr> CreatePropGetterCallViaMsgSend(
         AST::PropDecl& pd,
@@ -148,54 +165,91 @@ public:
         OwnedPtr<AST::Expr> arg
     );
 
+    OwnedPtr<AST::Expr> CreateFuncCallViaOpaquePointer(
+        OwnedPtr<AST::Expr> ptr,
+        Ptr<AST::Ty> retTy,
+        std::vector<OwnedPtr<AST::Expr>> args
+    );
+
     OwnedPtr<AST::Expr> CreateAutoreleasePoolScope(Ptr<AST::Ty> ty, std::vector<OwnedPtr<AST::Node>> actions);
-    OwnedPtr<AST::FuncDecl> CreateFinalizer(AST::ClassDecl& mirror);
-    OwnedPtr<AST::VarDecl> CreateHasInitedField(AST::ClassDecl& mirror);
+    OwnedPtr<AST::FuncDecl> CreateFinalizer(AST::ClassDecl& target);
+    OwnedPtr<AST::VarDecl> CreateHasInitedField(AST::ClassDecl& target);
 
     OwnedPtr<AST::Expr> CreateUnsafePointerCast(OwnedPtr<AST::Expr> expr, Ptr<AST::Ty> elementType);
-    Ptr<AST::FuncDecl> GetObjCPointerConstructor();
-    Ptr<AST::VarDecl> GetObjCPointerPointerField();
+
+    void SetDesugarExpr(Ptr<AST::Expr> original, OwnedPtr<AST::Expr> desugared);
     OwnedPtr<AST::Expr> WrapObjCMirrorOption(
         const Ptr<AST::Expr> entity, Ptr<AST::ClassLikeDecl> mirror, const Ptr<AST::File> curFile);
     OwnedPtr<AST::Expr> CreateObjCobjectNull();
     Ptr<AST::Ty> GetObjCTy();
-    OwnedPtr<AST::Expr> CreateGetObjcEntityOrNullCall(AST::VarDecl &entity, Ptr<AST::File> file);
+    OwnedPtr<AST::Expr> CreateGetObjcEntityOrNullCall(AST::VarDecl& entity, Ptr<AST::File> file);
     OwnedPtr<AST::Expr> CreateOptionCast(Ptr<AST::VarDecl> jObjectVar, AST::ClassLikeDecl castDecl);
-    OwnedPtr<AST::Expr> UnwrapObjCMirrorOption(
-        OwnedPtr<AST::Expr> entity, Ptr<AST::Ty> ty);
-    OwnedPtr<AST::Expr> CreateOptionMatch(
-        OwnedPtr<AST::Expr> selector,
-        std::function<OwnedPtr<AST::Expr>(AST::VarDecl&)> someBranch,
-        std::function<OwnedPtr<AST::Expr>()> noneBranch,
+    OwnedPtr<AST::Expr> UnwrapObjCMirrorOption(OwnedPtr<AST::Expr> entity, Ptr<AST::Ty> ty);
+    OwnedPtr<AST::Expr> CreateOptionMatch(OwnedPtr<AST::Expr> selector,
+        std::function<OwnedPtr<AST::Expr>(AST::VarDecl&)> someBranch, std::function<OwnedPtr<AST::Expr>()> noneBranch,
         Ptr<AST::Ty> ty);
 
-    static constexpr auto NATIVE_HANDLE_IDENT = "$obj";
-    static constexpr auto REGISTRY_ID_IDENT = "$registryId";
+    OwnedPtr<AST::FuncDecl> CreateNativeHandleGetterDecl(AST::ClassLikeDecl& target);
+    OwnedPtr<AST::Expr> CreateNativeHandleFieldExpr(AST::ClassDecl& target);
+    /**
+     * objCRelease($obj)
+     */
+    OwnedPtr<AST::Expr> CreateObjCReleaseCall(OwnedPtr<AST::Expr> nativeHandle);
+    OwnedPtr<AST::Expr> CreateWithMethodEnvScope(OwnedPtr<AST::Expr> nativeHandle, AST::ClassDecl& outerDecl, Ptr<AST::Ty> retTy,
+        std::function<std::vector<OwnedPtr<AST::Node>>(OwnedPtr<AST::Expr>, OwnedPtr<AST::Expr>)> bodyFactory);
+    OwnedPtr<AST::Expr> CreateWithObjCSuperScope(OwnedPtr<AST::Expr> nativeHandle, AST::ClassDecl& outerDecl, Ptr<AST::Ty> retTy,
+        std::function<std::vector<OwnedPtr<AST::Node>>(OwnedPtr<AST::Expr>, OwnedPtr<AST::Expr>)> bodyFactory);
+
+    OwnedPtr<AST::Expr> CreateMethodCallViaMsgSendSuper(AST::FuncDecl& fd, OwnedPtr<AST::Expr> receiver,
+        OwnedPtr<AST::Expr> objCSuper, std::vector<OwnedPtr<AST::Expr>> rawArgs);
+    OwnedPtr<AST::Expr> CreatePropGetterCallViaMsgSendSuper(
+        AST::PropDecl& pd, OwnedPtr<AST::Expr> receiver, OwnedPtr<AST::Expr> objCSuper);
+    OwnedPtr<AST::Expr> CreatePropSetterCallViaMsgSendSuper(
+        AST::PropDecl& pd, OwnedPtr<AST::Expr> receiver, OwnedPtr<AST::Expr> objCSuper, OwnedPtr<AST::Expr> value);
+    /**
+     * putToRegistry(expr)
+     */
+    OwnedPtr<AST::CallExpr> CreatePutToRegistryCall(OwnedPtr<AST::Expr> expr);
+    /**
+     * getFromRegistry<typeArg>(registryId)
+     */
+    OwnedPtr<AST::CallExpr> CreateGetFromRegistryByIdCall(OwnedPtr<AST::Expr> registryId, OwnedPtr<AST::Type> typeArg);
+
+    /**
+     * match(respondsToSelector($obj, selector)) {
+     *      true => msgSend()
+     *      false => throw ObjCOptionalMethodUnimplementedException()
+     * }
+    */
+    OwnedPtr<AST::Expr> CreateOptionalMethodGuard(OwnedPtr<AST::Expr> msgSend, OwnedPtr<AST::Expr> cls,
+        const std::string& selector, const Ptr<AST::File> curFile);
+    static std::vector<OwnedPtr<AST::FuncParamList>> CreateParamLists(std::vector<OwnedPtr<AST::FuncParam>>&& params);
+    static std::vector<OwnedPtr<AST::FuncParam>>& GetParams(const AST::FuncDecl& fn);
+    static OwnedPtr<AST::VarDecl> CreateVar(const std::string& name, Ptr<AST::Ty> ty, bool isVar, OwnedPtr<AST::Expr> initializer = nullptr);
+    static OwnedPtr<AST::FuncDecl> CreateFunc(const std::string& name, Ptr<AST::FuncTy> fnTy, std::vector<OwnedPtr<AST::FuncParam>>&& params, std::vector<OwnedPtr<AST::Node>>&& nodes);
+    static OwnedPtr<AST::ParenExpr> CreateParenExpr(OwnedPtr<AST::Expr> expr);
+
+    OwnedPtr<AST::Expr> CreateNativeLambdaForBlockType(AST::Ty& ty, Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> CreateObjCBlockFromLambdaCall(OwnedPtr<AST::Expr> funcExpr);
+    OwnedPtr<AST::Expr> CreateObjectGetClassCall(OwnedPtr<AST::Expr> id, Ptr<AST::File> curFile);
 
 private:
+    void PutDeclToClassLikeBody(AST::Decl& decl, AST::ClassLikeDecl& target);
     void PutDeclToClassBody(AST::Decl& decl, AST::ClassDecl& target);
+    void PutDeclToInterfaceBody(AST::Decl& decl, AST::InterfaceDecl& target);
     void PutDeclToFile(AST::Decl& decl, AST::File& target);
-    /**
-     * ObjCRuntime.putToRegistry($obj)
-     */
-    OwnedPtr<AST::CallExpr> CreatePutToRegistryCall(OwnedPtr<AST::Expr> nativeHandle);
-    /**
-     * ObjCRuntime.getFromRegistry<typeArg>(registryId)
-     */
-    OwnedPtr<AST::CallExpr> CreateGetFromRegistryByIdCall(
-        OwnedPtr<AST::Expr> registryId, OwnedPtr<AST::Type> typeArg);
 
     OwnedPtr<AST::CallExpr> CreateGetFromRegistryByNativeHandleCall(
         OwnedPtr<AST::Expr> nativeHandle, OwnedPtr<AST::Type> typeArg);
 
     /**
-     * ObjCRuntime.removeFromRegistry(registryId)
+     * removeFromRegistry(registryId)
      */
     OwnedPtr<AST::CallExpr> CreateRemoveFromRegistryCall(OwnedPtr<AST::Expr> registryId);
-    /**
-     * ObjCRuntime.release(obj)
-     */
-    OwnedPtr<AST::CallExpr> CreateObjCRuntimeReleaseCall(OwnedPtr<AST::Expr> nativeHandle);
+    OwnedPtr<AST::CallExpr> CreateObjCMsgSendSuperCall(OwnedPtr<AST::Expr> receiver, OwnedPtr<AST::Expr> objCSuper,
+        const std::string& selector, Ptr<AST::Ty> retTy, std::vector<OwnedPtr<AST::Expr>> rawArgs);
+    OwnedPtr<AST::CallExpr> CreateObjCMsgSendSuperCall(OwnedPtr<AST::Expr> objCSuper, OwnedPtr<AST::Expr> sel,
+        Ptr<AST::FuncTy> ty, OwnedPtr<AST::FuncType> funcType, std::vector<OwnedPtr<AST::Expr>> funcArgs);
 
     InteropLibBridge& bridge;
     TypeManager& typeManager;

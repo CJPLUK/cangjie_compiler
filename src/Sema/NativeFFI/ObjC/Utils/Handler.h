@@ -18,6 +18,14 @@
 
 namespace Cangjie::Interop::ObjC {
 
+enum class InteropType {
+    NA,
+    ObjC_Mirror,
+    CJ_Mapping,
+    CJ_Mapping_Interface,
+    Fwd_Class,
+};
+
 /**
  * Base CRTP-class for handlers.
  * Every descendant should implement `void HandleImpl(ContextT& ctx)` method.

@@ -18,10 +18,10 @@ using namespace Cangjie::Interop::ObjC;
 
 void CheckMemberTypes::HandleImpl(TypeCheckContext& ctx)
 {
-    auto isMirrorSubtype = ctx.typeMapper.IsObjCMirrorSubtype(ctx.target);
+    auto isImpl = ctx.typeMapper.IsObjCImpl(*ctx.target.ty);
     for (auto& decl : ctx.target.GetMemberDeclPtrs()) {
         // Only public members of exported declarations must be checked.
-        if (isMirrorSubtype && !decl->TestAttr(Attribute::PUBLIC)) {
+        if (isImpl && !decl->TestAttr(Attribute::PUBLIC)) {
             continue;
         }
 
@@ -111,5 +111,12 @@ void CheckMemberTypes::CheckFuncParamTypes(FuncDecl& fd, TypeCheckContext& ctx)
 
 std::string CheckMemberTypes::GetDeclInteropName()
 {
-    return "Objective-C mirror";
+    if (interopType == InteropType::ObjC_Mirror) {
+        return "Objective-C mirror";
+    } else if (interopType == InteropType::CJ_Mapping) {
+        return "cangjie mirror decl";
+    } else {
+        CJC_ABORT();
+        return "";
+    }
 }

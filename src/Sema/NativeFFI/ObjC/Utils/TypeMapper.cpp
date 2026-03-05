@@ -5,9 +5,12 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "TypeMapper.h"
-#include "cangjie/AST/Match.h"
 #include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
+#include "cangjie/AST/Types.h"
+#include "cangjie/AST/Walker.h"
+#include <algorithm>
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -32,22 +35,57 @@ static constexpr auto DOUBLE_TYPE = "double";
 static constexpr auto BOOL_TYPE = "BOOL";
 static constexpr auto STRUCT_TYPE_PREFIX = "struct ";
 
-static constexpr auto OBJC_LANG_PACKAGE = "objc.lang";
-static constexpr auto OBJC_POINTER_TYPE = "ObjCPointer";
+static constexpr auto TYPEDEF_PREFIX = "typedef ";
 } // namespace
+
+namespace {
+void MangleTypedefName(std::string& name)
+{
+    size_t start_pos = 0;
+    while ((start_pos = name.find("_", start_pos)) != std::string::npos) {
+        name.replace(start_pos, 1, "_1");
+        start_pos += 2;
+    }
+
+    std::replace(name.begin(), name.end(), '.', '_');
+}
+} // namespace
+
+template <class TypeRep, class ToString>
+MappedCType TypeMapper::BuildFunctionalCType(const FuncTy& funcType, const std::vector<TypeRep>& argTypes,
+    const TypeRep& resultType, bool isBlock, ToString toString) const
+{
+    auto typedefNamePrefix = isBlock ? "Block" : "Func";
+    auto designator = isBlock ? '^' : '*';
+    auto mangledName = mangler.MangleType(funcType);
+    MangleTypedefName(mangledName);
+    mangledName = typedefNamePrefix + mangledName;
+
+    std::string decl = TYPEDEF_PREFIX;
+    decl.append(toString(resultType));
+    decl.append({'(', designator});
+    decl.append(mangledName);
+    decl.append({')', '('});
+    for (auto& argType : argTypes) {
+        decl.append(toString(argType));
+        decl.push_back(',');
+    }
+    if (decl.back() == ',') {
+        decl.pop_back();
+    }
+    decl.push_back(')');
+    return {mangledName, decl};
+}
 
 Ptr<Ty> TypeMapper::Cj2CType(Ptr<Ty> cjty) const
 {
     CJC_NULLPTR_CHECK(cjty);
 
-    if (cjty->IsCoreOptionType()) {
-        auto innerTy = cjty->typeArgs[0];
-        CJC_ASSERT(innerTy);
-        if (IsValidObjCMirror(*innerTy) || IsObjCImpl(*innerTy)) {
-            return bridge.GetNativeObjCIdTy();
-        }
+    if (IsObjCCJMapping(*cjty)) {
+        return bridge.GetRegistryIdTy();
     }
-    if (IsValidObjCMirror(*cjty) || IsObjCImpl(*cjty)) {
+
+    if (IsObjCObjectType(*cjty)) {
         return bridge.GetNativeObjCIdTy();
     }
 
@@ -56,11 +94,25 @@ Ptr<Ty> TypeMapper::Cj2CType(Ptr<Ty> cjty) const
         return typeManager.GetPointerTy(Cj2CType(cjty->typeArgs[0]));
     }
 
+    if (IsObjCFunc(*cjty)) {
+        CJC_ASSERT(cjty->typeArgs.size() == 1);
+        std::vector<Ptr<Ty>> realTypeArgs;
+        auto actualFuncType = DynamicCast<FuncTy>(cjty->typeArgs[0]);
+        CJC_NULLPTR_CHECK(actualFuncType);
+        for (auto paramTy : actualFuncType->paramTys) {
+            realTypeArgs.push_back(Cj2CType(paramTy));
+        }
+        return typeManager.GetPointerTy(
+            typeManager.GetFunctionTy(realTypeArgs, Cj2CType(actualFuncType->retTy), {.isC = true}));
+    }
+    if (IsObjCBlock(*cjty)) {
+        return bridge.GetNativeObjCIdTy();
+    }
     CJC_ASSERT(cjty->IsBuiltin() || Ty::IsCStructType(*cjty));
     return cjty;
 }
 
-std::string TypeMapper::Cj2ObjCForObjC(const Ty& from) const
+MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from) const
 {
     switch (from.kind) {
         case TypeKind::TYPE_UNIT:
@@ -95,26 +147,68 @@ std::string TypeMapper::Cj2ObjCForObjC(const Ty& from) const
             return BOOL_TYPE;
         case TypeKind::TYPE_STRUCT:
             if (IsObjCPointer(from)) {
-                return Cj2ObjCForObjC(*from.typeArgs[0]) + "*";
+                auto result = Cj2ObjCForObjC(*from.typeArgs[0]);
+                result.usage += "*";
+                return result;
             } else if (Ty::IsCStructType(from)) {
                 return STRUCT_TYPE_PREFIX + from.name;
+            } else if (IsObjCCJMapping(from)) {
+                return from.name + "*";
+            }
+            if (IsObjCFunc(from)) {
+                auto actualFuncType = DynamicCast<FuncTy>(from.typeArgs[0]);
+                if (!actualFuncType) {
+                    return UNSUPPORTED_TYPE;
+                }
+                return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, false,
+                    [this](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
             }
             CJC_ABORT();
             return UNSUPPORTED_TYPE;
         case TypeKind::TYPE_CLASS:
-        case TypeKind::TYPE_INTERFACE:
-            if (IsValidObjCMirror(from) || IsObjCImpl(from)) {
+            if (IsObjCBlock(from)) {
+                auto actualFuncType = DynamicCast<FuncTy>(from.typeArgs[0]);
+                if (!actualFuncType) {
+                    return UNSUPPORTED_TYPE;
+                }
+                return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, true,
+                    [this](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
+            }
+            if (IsObjCObjectType(from)) {
                 return from.name + "*";
             }
             return UNSUPPORTED_TYPE;
-        case TypeKind::TYPE_POINTER:
-            return Cj2ObjCForObjC(*from.typeArgs[0]) + "*";
+        case TypeKind::TYPE_INTERFACE:
+            if (IsObjCId(from)) {
+                return "id";
+            }
+            if (IsObjCMirror(from) || IsObjCCJMappingInterface(from)) {
+                return "id<" + from.name + ">";
+            }
+            return UNSUPPORTED_TYPE;
+        case TypeKind::TYPE_POINTER: {
+            if (from.typeArgs[0]->kind == TypeKind::TYPE_FUNC) {
+                return Cj2ObjCForObjC(*from.typeArgs[0]);
+            }
+            auto result = Cj2ObjCForObjC(*from.typeArgs[0]);
+            result.usage += "*";
+            return result;
+        }
+        case TypeKind::TYPE_FUNC: {
+            auto actualFuncType = DynamicCast<FuncTy>(&from);
+            CJC_NULLPTR_CHECK(actualFuncType);
+            return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, false,
+                [this](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
+        }
         case TypeKind::TYPE_ENUM:
+            if (IsObjCCJMapping(from)) {
+                return from.name + "*";
+            }
             if (!from.IsCoreOptionType()) {
                 CJC_ABORT();
                 return UNSUPPORTED_TYPE;
             };
-            if (IsValidObjCMirror(*from.typeArgs[0]) || IsObjCImpl(*from.typeArgs[0])) {
+            if (IsObjCObjectType(*from.typeArgs[0])) {
                 return Cj2ObjCForObjC(*from.typeArgs[0]);
             }
         default:
@@ -125,6 +219,9 @@ std::string TypeMapper::Cj2ObjCForObjC(const Ty& from) const
 
 bool TypeMapper::IsObjCCompatible(const Ty& ty)
 {
+    if (IsObjCCJMapping(ty)) {
+        return true;
+    }
     switch (ty.kind) {
         case TypeKind::TYPE_UNIT:
         case TypeKind::TYPE_INT8:
@@ -147,8 +244,18 @@ bool TypeMapper::IsObjCCompatible(const Ty& ty)
             if (IsObjCPointer(ty)) {
                 CJC_ASSERT(ty.typeArgs.size() == 1);
                 return IsObjCCompatible(*ty.typeArgs[0]);
-            } else if (Ty::IsCStructType(ty)) {
+            }
+            if (Ty::IsCStructType(ty)) {
                 return true;
+            }
+            if (IsObjCFunc(ty)) {
+                CJC_ASSERT(ty.typeArgs.size() == 1);
+                auto tyArg = ty.typeArgs[0];
+                if (!tyArg->IsFunc() || tyArg->IsCFunc()) {
+                    return false;
+                }
+                return std::all_of(std::begin(tyArg->typeArgs), std::end(tyArg->typeArgs),
+                    [](auto ty) { return IsObjCCompatible(*ty); });
             }
             return false;
         case TypeKind::TYPE_CLASS:
@@ -156,15 +263,21 @@ bool TypeMapper::IsObjCCompatible(const Ty& ty)
             if (IsValidObjCMirror(ty) || IsObjCImpl(ty)) {
                 return true;
             }
+            if (IsObjCBlock(ty)) {
+                CJC_ASSERT(ty.typeArgs.size() == 1);
+                auto tyArg = ty.typeArgs[0];
+                if (!tyArg->IsFunc() || tyArg->IsCFunc()) {
+                    return false;
+                }
+                return std::all_of(std::begin(tyArg->typeArgs), std::end(tyArg->typeArgs),
+                    [](auto ty) { return IsObjCCompatible(*ty); });
+            }
             return false;
         case TypeKind::TYPE_ENUM:
             if (!ty.IsCoreOptionType()) {
                 return false;
             };
             CJC_ASSERT(ty.typeArgs[0]);
-            if (ty.typeArgs[0]->IsCoreOptionType()) { // no nested options
-                return false;
-            }
             if (IsValidObjCMirror(*ty.typeArgs[0]) || IsObjCImpl(*ty.typeArgs[0])) {
                 return true;
             }
@@ -178,9 +291,14 @@ bool TypeMapper::IsObjCMirror(const Decl& decl)
     return decl.TestAttr(Attribute::OBJ_C_MIRROR);
 }
 
+bool TypeMapper::IsSyntheticWrapper(const Decl& decl)
+{
+    return decl.TestAttr(Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER);
+}
+
 bool TypeMapper::IsObjCMirrorSubtype(const Decl& decl)
 {
-    return IsObjCMirrorSubtype(*decl.ty);
+    return IsValidObjCMirrorSubtype(*decl.ty);
 }
 
 bool TypeMapper::IsObjCImpl(const Decl& decl)
@@ -204,9 +322,8 @@ bool TypeMapper::IsValidObjCMirror(const Ty& ty)
         return false;
     }
 
-    // all super interfaces must be @ObjCMirror
     for (auto parent : classLikeTy->GetSuperInterfaceTys()) {
-        if (!IsObjCMirror(*parent->decl)) {
+        if (!IsValidObjCMirror(*parent)) {
             return false;
         }
     }
@@ -220,34 +337,28 @@ bool TypeMapper::IsValidObjCMirror(const Ty& ty)
         return IsValidObjCMirror(*classTy->GetSuperClassTy());
     }
 
-    return false;
+    return true;
 }
 
-bool TypeMapper::IsObjCMirrorSubtype(const Ty& ty)
+bool TypeMapper::IsValidObjCMirrorSubtype(const Ty& ty)
 {
-    if (auto classTy = DynamicCast<ClassTy*>(&ty);
-        classTy && classTy->GetSuperClassTy() && !classTy->GetSuperClassTy()->IsObject()
-    ) {
-        if (!IsObjCMirrorSubtype(*classTy->GetSuperClassTy()) &&
-            (!classTy->GetSuperClassTy()->decl || !IsObjCMirror(*classTy->GetSuperClassTy()->decl))) {
-            return false;
-        }
-        return true;
+    auto classTy = DynamicCast<ClassTy*>(&ty);
+    if (!classTy) {
+        return false;
     }
 
-    if (auto ity = DynamicCast<ClassLikeTy*>(&ty)) {
-        if (ity->GetSuperInterfaceTys().empty()) {
+    auto hasMirrorSuperInterface = false;
+    for (auto superInterfaceTy : classTy->GetSuperInterfaceTys()) {
+        if (!IsValidObjCMirror(*superInterfaceTy)) {
             return false;
         }
-
-        for (auto parent : ity->GetSuperInterfaceTys()) {
-            if (IsObjCMirror(*parent->decl)) {
-                return true;
-            }
-        }
+        hasMirrorSuperInterface = true;
+    }
+    if (!classTy->GetSuperClassTy() || classTy->GetSuperClassTy()->IsObject()) {
+        return hasMirrorSuperInterface;
     }
 
-    return false;
+    return IsValidObjCMirrorSubtype(*classTy->GetSuperClassTy()) || IsValidObjCMirror(*classTy->GetSuperClassTy());
 }
 
 bool TypeMapper::IsObjCImpl(const Ty& ty)
@@ -262,20 +373,74 @@ bool TypeMapper::IsObjCMirror(const Ty& ty)
     return classLikeTy && classLikeTy->commonDecl && IsObjCMirror(*classLikeTy->commonDecl);
 }
 
+bool TypeMapper::IsSyntheticWrapper(const Ty& ty)
+{
+    auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
+    return classLikeTy && classLikeTy->commonDecl && IsSyntheticWrapper(*classLikeTy->commonDecl);
+}
+
+bool TypeMapper::IsObjCObjectType(const Ty& ty)
+{
+    if (ty.IsCoreOptionType()) {
+        CJC_ASSERT(ty.typeArgs.size() == 1);
+        return IsObjCObjectType(*ty.typeArgs[0]);
+    }
+    return IsObjCMirror(ty) || IsObjCImpl(ty) || IsSyntheticWrapper(ty) || IsObjCCJMapping(ty) ||
+        IsObjCCJMappingInterface(ty);
+}
+
+bool TypeMapper::IsObjCFwdClass(const Ty& ty)
+{
+    if (auto decl = Ty::GetDeclOfTy(&ty); decl) {
+        return IsObjCFwdClass(*decl);
+    }
+    return false;
+}
+
+bool TypeMapper::IsObjCFwdClass4Open(const Ty& ty)
+{
+    if (auto decl = Ty::GetDeclOfTy(&ty); decl) {
+        return IsObjCFwdClass4Open(*decl);
+    }
+    return false;
+}
+
 namespace {
 
 bool IsObjCPointerImpl(const StructDecl& structDecl)
 {
-    if (structDecl.fullPackageName != OBJC_LANG_PACKAGE) {
+    if (structDecl.fullPackageName != OBJ_C_LANG_PACKAGE_IDENT) {
         return false;
     }
-    if (structDecl.identifier.Val() != OBJC_POINTER_TYPE) {
+    if (structDecl.identifier != OBJ_C_POINTER_IDENT) {
         return false;
     }
     return true;
 }
 
+bool IsObjCFuncImpl(const StructDecl& structDecl)
+{
+    if (structDecl.fullPackageName != OBJ_C_LANG_PACKAGE_IDENT) {
+        return false;
+    }
+    if (structDecl.identifier != OBJ_C_FUNC_IDENT) {
+        return false;
+    }
+    return true;
 }
+
+bool IsObjCBlockImpl(const ClassDecl& decl)
+{
+    if (decl.fullPackageName != OBJ_C_LANG_PACKAGE_IDENT) {
+        return false;
+    }
+    if (decl.identifier != OBJ_C_BLOCK_IDENT) {
+        return false;
+    }
+    return true;
+}
+
+} // namespace
 
 bool TypeMapper::IsObjCPointer(const Decl& decl)
 {
@@ -291,4 +456,217 @@ bool TypeMapper::IsObjCPointer(const Ty& ty)
         return IsObjCPointerImpl(*structTy->decl);
     }
     return false;
+}
+
+bool TypeMapper::IsObjCFunc(const Decl& decl)
+{
+    if (auto structDecl = DynamicCast<StructDecl*>(&decl)) {
+        return IsObjCFuncImpl(*structDecl);
+    }
+    return false;
+}
+
+bool TypeMapper::IsObjCFunc(const Ty& ty)
+{
+    if (auto structTy = DynamicCast<StructTy*>(&ty)) {
+        return IsObjCFuncImpl(*structTy->decl);
+    }
+    return false;
+}
+
+bool TypeMapper::IsObjCBlock(const Decl& decl)
+{
+    if (auto classDecl = DynamicCast<ClassDecl*>(&decl)) {
+        return IsObjCBlockImpl(*classDecl);
+    }
+    return false;
+}
+
+bool TypeMapper::IsObjCBlock(const Ty& ty)
+{
+    if (auto classTy = DynamicCast<ClassTy*>(&ty)) {
+        return IsObjCBlockImpl(*classTy->decl);
+    }
+    return false;
+}
+
+bool TypeMapper::IsObjCFuncOrBlock(const Decl& decl)
+{
+    return IsObjCFunc(decl) || IsObjCBlock(decl);
+}
+
+bool TypeMapper::IsObjCFuncOrBlock(const Ty& ty)
+{
+    return IsObjCFunc(ty) || IsObjCBlock(ty);
+}
+
+bool TypeMapper::IsObjCCJMapping(const Decl& decl)
+{
+    bool isStruct = decl.astKind == ASTKind::STRUCT_DECL;
+    bool isEnum = decl.astKind == ASTKind::ENUM_DECL;
+    bool isClass = decl.astKind == ASTKind::CLASS_DECL;
+    bool isSupportedType = isStruct || isEnum || isClass;
+    return decl.TestAttr(Attribute::OBJ_C_CJ_MAPPING) && isSupportedType;
+}
+
+bool TypeMapper::IsObjCCJMappingInterface(const Decl& decl)
+{
+    bool isInterface = decl.astKind == ASTKind::INTERFACE_DECL;
+    return decl.TestAttr(Attribute::OBJ_C_CJ_MAPPING) && isInterface;
+}
+
+bool TypeMapper::IsObjCFwdClass(const Decl& decl)
+{
+    return decl.TestAttr(Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD);
+}
+
+bool TypeMapper::IsObjCFwdClass4Open(const Decl& decl)
+{
+    return decl.identifier.Val().find(OBJ_C_FWD_CLASS_SUFFIX) != std::string::npos;
+}
+
+bool TypeMapper::IsObjCId(const Ty& ty)
+{
+    auto interfaceTy = DynamicCast<InterfaceTy*>(&ty);
+    return interfaceTy && interfaceTy->declPtr && IsObjCId(*interfaceTy->declPtr);
+}
+
+bool TypeMapper::IsObjCId(const Decl& decl)
+{
+    if (decl.fullPackageName != OBJ_C_LANG_PACKAGE_IDENT) {
+        return false;
+    }
+    if (decl.identifier != OBJ_C_ID_IDENT) {
+        return false;
+    }
+    return true;
+}
+
+bool TypeMapper::IsObjCCJMapping(const Ty& ty)
+{
+    if (auto decl = Ty::GetDeclOfTy(&ty)) {
+        return IsObjCCJMapping(*decl);
+    }
+    return false;
+}
+
+bool TypeMapper::IsObjCCJMappingInterface(const Ty& ty)
+{
+    if (auto decl = Ty::GetDeclOfTy(&ty)) {
+        return IsObjCCJMappingInterface(*decl);
+    }
+    return false;
+}
+
+bool TypeMapper::IsOneWayMapping(const Decl& decl)
+{
+    // struct, enum, class
+    return decl.astKind == ASTKind::STRUCT_DECL || decl.astKind == ASTKind::ENUM_DECL ||
+        decl.astKind == ASTKind::CLASS_DECL;
+}
+
+namespace {
+bool SupportMembers(const Decl& decl, const std::vector<ASTKind>& kinds)
+{
+    for (const auto& kind : kinds) {
+        if (decl.astKind == kind) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsOpenClassTy(const Ty& ty)
+{
+    if (auto decl = Ty::GetDeclOfTy(&ty)) {
+        return decl->astKind == ASTKind::CLASS_DECL && decl->IsOpen();
+    }
+    return false;
+}
+
+inline bool SupportMemberFunc(const AST::Decl& decl, std::function<bool(Ptr<Ty>)> validTy)
+{
+    auto fnTy = Cangjie::DynamicCast<FuncTy>(decl.ty);
+    // Constructor do not check return type.
+    CJC_ASSERT(fnTy && fnTy->retTy);
+    bool isValid = decl.TestAttr(Attribute::CONSTRUCTOR) ? true : validTy(fnTy->retTy);
+    return isValid && std::all_of(std::begin(fnTy->paramTys), std::end(fnTy->paramTys), validTy);
+}
+} // namespace
+
+bool TypeMapper::IsObjCCJMappingMember(const AST::Decl& decl)
+{
+    CJC_ASSERT(decl.IsMemberDecl());
+    auto& outerDecl = *decl.outerDecl;
+    CJC_ASSERT(IsObjCCJMapping(outerDecl));
+    // For non-open members, we only care about public ones
+    if (!decl.IsOpen() && !decl.TestAttr(Attribute::PUBLIC)) {
+        return false;
+    }
+    // For open members, we only care about public or protected ones
+    if (decl.IsOpen() && !decl.TestAnyAttr(Attribute::PUBLIC, Attribute::PROTECTED)) {
+        return false;
+    }
+    // For classes, we only care about public member functions now
+    if (outerDecl.astKind == ASTKind::CLASS_DECL) {
+        // Only map member functions (including constructors)
+        if (!SupportMembers(decl, {ASTKind::FUNC_DECL})) {
+            return false;
+        }
+        // No need map for constructors in open class.
+        if (outerDecl.IsOpen() && decl.TestAttr(Attribute::CONSTRUCTOR)) {
+            return false;
+        }
+    }
+    if (decl.astKind == ASTKind::FUNC_DECL) {
+        std::function<bool(Ptr<Ty>)> validTy = [](auto ty) { return IsValidCJMapping(*ty) && !IsOpenClassTy(*ty); };
+        if (decl.IsOpen()) {
+            validTy = [](auto ty) { return IsPrimitiveMapping(*ty); };
+        }
+        return SupportMemberFunc(decl, validTy);
+    } else if (decl.astKind == ASTKind::PROP_DECL || decl.astKind == ASTKind::VAR_DECL) {
+        return IsValidCJMapping(*decl.ty);
+    }
+    return false;
+}
+
+bool TypeMapper::IsOneWayMapping(const Ty& ty)
+{
+    if (!ty.IsStruct() && !ty.IsEnum() && !ty.IsClass()) {
+        return false;
+    }
+    auto decl = Ty::GetDeclOfTy(&ty);
+    CJC_ASSERT(decl);
+    return IsOneWayMapping(*decl);
+}
+
+bool TypeMapper::IsValidCJMapping(const Ty& ty)
+{
+    return IsPrimitiveMapping(ty) || IsObjCCJMapping(ty) || IsObjCCJMappingInterface(ty);
+}
+
+bool TypeMapper::IsPrimitiveMapping(const Ty& ty)
+{
+    switch (ty.kind) {
+        case TypeKind::TYPE_UNIT:
+        case TypeKind::TYPE_INT8:
+        case TypeKind::TYPE_INT16:
+        case TypeKind::TYPE_INT32:
+        case TypeKind::TYPE_INT64:
+        case TypeKind::TYPE_INT_NATIVE:
+        case TypeKind::TYPE_IDEAL_INT:
+        case TypeKind::TYPE_UINT8:
+        case TypeKind::TYPE_UINT16:
+        case TypeKind::TYPE_UINT32:
+        case TypeKind::TYPE_UINT64:
+        case TypeKind::TYPE_UINT_NATIVE:
+        case TypeKind::TYPE_FLOAT32:
+        case TypeKind::TYPE_FLOAT64:
+        case TypeKind::TYPE_IDEAL_FLOAT:
+        case TypeKind::TYPE_BOOLEAN:
+        case TypeKind::TYPE_GENERICS:
+            return true;
+        default:
+            return false;
+    }
 }

@@ -360,6 +360,15 @@ ERROR(sema_objc_interop_not_supported, "Objective-C interoperability feature '%s
 ERROR(sema_objc_pointer_argument_must_be_objc_compatible, "ObjCPointer can only be used with Objective-C compatible types")
 ERROR(sema_objc_interop_toplevel_param_must_be_objc_compatible, "param type of Objective-C mirror top-level function '%s' must be Objective-C compatible")
 ERROR(sema_objc_interop_toplevel_ret_must_be_objc_compatible, "return type of Objective-C mirror top-level function '%s' must be Objective-C compatible")
+ERROR(sema_objc_method_must_have_foreign_name,
+    "%s declaration method '%s' with more than one parameter must have @ForeignName annotation",
+    "%s declaration method with more than one parameter must have must have @ForeignName annotation")
+ERROR(sema_objc_ctor_must_have_foreign_name,
+    "%s declaration constructor with more than one parameter must have @ForeignName annotation")
+ERROR(sema_objc_func_argument_must_be_objc_compatible, "%s can only be used with function type over Objective-C compatible types")
+ERROR(sema_objc_func_call_property_can_only_be_called, "%s property 'call' can only be called directly, no other operations are permitted")
+ERROR(sema_objc_impl_must_have_objc_mirror_super_class, "@ObjCImpl class must have @ObjCMirror super class")
+ERROR(sema_objc_setter_name_on_immutable_prop, "@ForeignSetterName cannot be specified on immutable property")
 
 // CJMapping for Objective-C
 ERROR(sema_objc_cjmapping_inheritance_interface_not_supported, "cangjie mirror decl type inheritance interface is not supported")

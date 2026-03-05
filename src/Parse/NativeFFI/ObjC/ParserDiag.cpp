@@ -12,6 +12,8 @@
 
 #include "../../ParserImpl.h"
 #include "OCFFIParserImpl.h"
+#include "cangjie/AST/Node.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -24,16 +26,6 @@ void OCFFIParserImpl::DiagObjCMirrorCannotBeSealed(const Node& node) const
 void OCFFIParserImpl::DiagObjCMirrorCannotHaveFinalizer(const Node& node) const
 {
     p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_cannot_have_finalizer, node);
-}
-
-void OCFFIParserImpl::DiagObjCMirrorMethodMustHaveForeignName(const Node& node) const
-{
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_method_must_have_foreign_name, node);
-}
-
-void OCFFIParserImpl::DiagObjCMirrorCtorMustHaveForeignName(const Node& node) const
-{
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_ctor_must_have_foreign_name, node);
 }
 
 void OCFFIParserImpl::DiagObjCMirrorCannotHavePrivateMember(const Node& node) const
@@ -71,9 +63,26 @@ void OCFFIParserImpl::DiagObjCImplCannotBeGeneric(const Node& node) const
     p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_impl_cannot_be_generic, node);
 }
 
-void OCFFIParserImpl::DiagObjCImplCannotBeOpen(const Node& node) const
+void OCFFIParserImpl::DiagObjCInitFuncMustBeStatic(const Node& node) const
 {
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_impl_cannot_be_open, node);
+    CJC_ASSERT(!node.TestAttr(Attribute::STATIC));
+    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_init_method_must_be_static, node);
+}
+
+void OCFFIParserImpl::DiagObjCInitFuncMustBeInMirrorClass(const FuncDecl& fd) const
+{
+    CJC_ASSERT(!fd.outerDecl || !fd.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR)
+        || fd.outerDecl->astKind != ASTKind::CLASS_DECL);
+
+    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_init_method_must_be_in_mirror_class, fd);
+}
+
+void OCFFIParserImpl::DiagObjCOptionalFuncMustBeInMirrorClass(const FuncDecl& fd) const
+{
+    CJC_ASSERT(!fd.outerDecl || !fd.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR)
+        || fd.outerDecl->astKind != ASTKind::INTERFACE_DECL);
+
+    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_optional_method_must_be_in_mirror_class, fd);
 }
 
 void OCFFIParserImpl::DiagObjCImplCannotBeInterface(const Node& node) const
@@ -118,8 +127,7 @@ void OCFFIParserImpl::DiagObjCMirrorFuncCannotHaveBody(const FuncDecl& decl) con
 
 void OCFFIParserImpl::DiagObjCMirrorFuncMustHaveExplicitType(const FuncDecl& decl) const
 {
-    p.ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_objc_mirror_func_must_have_explicit_type, decl, decl.identifier.Val());
+    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_func_must_have_explicit_type, decl, decl.identifier.Val());
 }
 
 void OCFFIParserImpl::DiagObjCMirrorFuncCannotBeConst(const FuncDecl& decl) const
