@@ -49,10 +49,18 @@ class CGCFFI;
 #endif
 struct CallBaseToReplaceInfo {
     llvm::CallBase* callWithoutTI;
-    CHIRApplyWrapper applyExprW;
+    const CGFunction& cgFuncCaller;
+    const CGFunction& cgFuncCallee;
+    const CHIR::Type& thisParamType;
+    const bool isCalleeMutOrCtor;
 
-    CallBaseToReplaceInfo(llvm::CallBase* callWithoutTI, const CHIRApplyWrapper& applyExprW)
-        : callWithoutTI(callWithoutTI), applyExprW(applyExprW)
+    CallBaseToReplaceInfo(llvm::CallBase* callWithoutTI, const CGFunction& cgFuncCaller, const CGFunction& cgFuncCallee,
+        const CHIR::Type& thisParamType, bool isCalleeMutOrCtor)
+        : callWithoutTI(callWithoutTI),
+          cgFuncCaller(cgFuncCaller),
+          cgFuncCallee(cgFuncCallee),
+          thisParamType(thisParamType),
+          isCalleeMutOrCtor(isCalleeMutOrCtor)
     {
     }
 };
@@ -196,10 +204,9 @@ public:
         return callBasesToInline;
     }
 
-    void AddCallBaseToReplace(llvm::CallBase* callWithoutTI, const CHIRApplyWrapper& applyExprW)
+    void AddCallBaseToReplace(const CallBaseToReplaceInfo& callBaseToReplaceInfo)
     {
-        auto tmp = CallBaseToReplaceInfo(callWithoutTI, applyExprW);
-        callBasesToReplace.emplace_back(tmp);
+        callBasesToReplace.emplace_back(callBaseToReplaceInfo);
     }
 
     const std::vector<CallBaseToReplaceInfo>& GetCallBasesToReplace() const

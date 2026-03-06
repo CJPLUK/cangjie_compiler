@@ -362,7 +362,14 @@ llvm::Value* IRBuilder2::CreateCallOrInvoke(const CGFunctionType& calleeType, ll
     if (auto f = llvm::dyn_cast<llvm::Function>(callee); f && f->hasFnAttribute(HAS_WITH_TI_WRAPPER_ATTR)) {
         auto applyExprW = dynamic_cast<const CHIRApplyWrapper*>(chirExpr);
         CJC_ASSERT(applyExprW);
-        cgMod.GetCGContext().AddCallBaseToReplace(callBaseInst, *applyExprW);
+        CallBaseToReplaceInfo callBaseToReplaceInfo = {
+            callBaseInst,
+            *cgMod.GetOrInsertCGFunction(applyExprW->GetTopLevelFunc()),
+            *cgMod.GetOrInsertCGFunction(applyExprW->GetCallee()),
+            *applyExprW->GetThisParam()->GetType(),
+            applyExprW->IsCalleeStructMutOrCtorMethod()
+        };
+        cgMod.GetCGContext().AddCallBaseToReplace(callBaseToReplaceInfo);
     }
 
     return GetReturnValue(calleeType, callBaseInst, argsVal);
