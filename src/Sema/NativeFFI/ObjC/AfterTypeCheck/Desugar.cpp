@@ -15,22 +15,59 @@
 
 void Cangjie::Interop::ObjC::Desugar(InteropContext&& ctx)
 {
+    if (!ctx.bridge.IsInteropLibAccessible()) {
+        return;
+    }
+
+    HandlerFactory<InteropContext>::Start<FindCJMappingInterface>()
+        .Use<InsertFwdClasses>()
+        .Use<GenerateGlueCode>(InteropType::CJ_Mapping_Interface)
+        .Use<DrainGeneratedDecls>()
+        .Handle(ctx);
+
+    HandlerFactory<InteropContext>::Start<FindFwdClass>()
+        .Use<InsertNativeHandleField>(InteropType::Fwd_Class)
+        .Use<InsertNativeHandleGetterDecl>(InteropType::Fwd_Class)
+        .Use<InsertNativeHandleGetterBody>(InteropType::Fwd_Class)
+        .Use<InsertBaseCtorDecl>(InteropType::Fwd_Class)
+        .Use<InsertBaseCtorBody>(InteropType::Fwd_Class)
+        .Use<InsertFinalizer>(InteropType::Fwd_Class)
+        .Use<DesugarMirrors>(InteropType::Fwd_Class)
+        .Use<DrainGeneratedDecls>()
+        .Handle(ctx);
+
+    HandlerFactory<InteropContext>::Start<FindCJMapping>()
+        .Use<GenerateFwdClass>()
+        .Use<GenerateInitCJObjectMethods>(InteropType::CJ_Mapping)
+        .Use<GenerateDeleteCJObjectMethod>(InteropType::CJ_Mapping)
+        .Use<GenerateWrappers>(InteropType::CJ_Mapping)
+        .Use<GenerateGlueCode>(InteropType::CJ_Mapping)
+        .Handle(ctx);
+
     HandlerFactory<InteropContext>::Start<FindMirrors>()
         .Use<CheckMirrorTypes>()
         .Use<CheckImplTypes>()
-        .Use<InsertNativeHandleField>()
-        .Use<InsertMirrorCtorDecl>()
-        .Use<InsertMirrorCtorBody>()
-        .Use<InsertFinalizer>()
-        .Use<DesugarMirrors>()
+        .Use<InsertNativeHandleField>(InteropType::ObjC_Mirror)
+        .Use<InsertNativeHandleGetterDecl>(InteropType::ObjC_Mirror)
+        .Use<InsertNativeHandleGetterBody>(InteropType::ObjC_Mirror)
+        .Use<InsertGetObjCClass>()
+        .Use<InsertBaseCtorDecl>(InteropType::ObjC_Mirror)
+        .Use<InsertBaseCtorBody>(InteropType::ObjC_Mirror)
+        .Use<InsertFinalizer>(InteropType::ObjC_Mirror)
+        .Use<GenerateInSyntheticWrappers>()
+        .Use<DesugarMirrors>(InteropType::ObjC_Mirror)
+        .Use<DesugarSyntheticWrappers>()
         .Use<GenerateObjCImplMembers>()
-        .Use<GenerateInitCJObjectMethods>()
-        .Use<GenerateDeleteCJObjectMethod>()
+        .Use<GenerateInitCJObjectMethods>(InteropType::ObjC_Mirror)
+        .Use<GenerateDeleteCJObjectMethod>(InteropType::ObjC_Mirror)
         .Use<DesugarImpls>()
-        .Use<GenerateWrappers>()
-        .Use<GenerateGlueCode>()
+        .Use<GenerateWrappers>(InteropType::ObjC_Mirror)
+        .Use<GenerateGlueCode>(InteropType::ObjC_Mirror)
         .Use<CheckObjCPointerTypeArguments>()
         .Use<RewriteObjCPointerAccess>()
+        .Use<CheckObjCFuncTypeArguments>()
+        .Use<RewriteObjCFuncCall>()
+        .Use<RewriteObjCBlockConstruction>()
         .Use<DrainGeneratedDecls>()
         .Handle(ctx);
 }

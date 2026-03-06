@@ -18,13 +18,13 @@ using namespace Cangjie::Interop::ObjC;
 
 void CheckImplTypes::HandleImpl(InteropContext& ctx)
 {
-    auto checker = HandlerFactory<TypeCheckContext>::Start<CheckMultipleInherit>()
-                       .Use<CheckMirrorSubtypeAttr>()
+    auto checker = HandlerFactory<TypeCheckContext>::Start<CheckMirrorSubtypeAttr>()
                        .Use<CheckImplInheritMirror>()
-                       .Use<CheckMemberTypes>();
+                       .Use<CheckForeignName>()
+                       .Use<CheckMemberTypes>(InteropType::ObjC_Mirror);
 
-    for (auto& impl : ctx.impls) {
-        auto typeCheckCtx = TypeCheckContext(*impl, ctx.diag, ctx.typeMapper);
+    for (auto impl : ctx.impls) {
+        auto typeCheckCtx = TypeCheckContext(*impl, ctx.diag, ctx.typeMapper, ctx.typeManager);
 
         checker.Handle(typeCheckCtx);
     }

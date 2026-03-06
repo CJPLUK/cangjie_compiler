@@ -12,6 +12,7 @@
 
 #include "OCFFIParserImpl.h"
 #include "../../ParserImpl.h"
+#include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/AST/Utils.h"
 
 using namespace Cangjie;
@@ -19,13 +20,28 @@ using namespace AST;
 
 void OCFFIParserImpl::CheckAnnotation(const Annotation& anno, ScopeKind scopeKind) const
 {
-    if (anno.kind == AnnotationKind::OBJ_C_MIRROR) {
-        CheckMirrorAnnoArgs(anno);
-        CheckMirrorAnnoTarget(anno, scopeKind);
-    } else {
-        CJC_ASSERT(anno.kind == AnnotationKind::OBJ_C_IMPL);
-        CheckImplAnnoArgs(anno);
-        CheckImplAnnoTarget(anno);
+    switch (anno.kind) {
+        case AnnotationKind::OBJ_C_MIRROR: {
+            CheckMirrorAnnoArgs(anno);
+            CheckMirrorAnnoTarget(anno, scopeKind);
+            break;
+        }
+        case AnnotationKind::OBJ_C_IMPL: {
+            CheckImplAnnoArgs(anno);
+            CheckImplAnnoTarget(anno);
+            break;
+        }
+        case AnnotationKind::OBJ_C_INIT: {
+            CheckInitAnnoArgs(anno);
+            CheckInitAnnoTarget(anno);
+            break;
+        }
+        case AnnotationKind::OBJ_C_OPTIONAL: {
+            CheckOptionalAnnoArgs(anno);
+            CheckOptionalAnnoTarget(anno);
+            break;
+        }
+        default: CJC_ABORT(); // Unexpected annotation
     }
 }
 
@@ -96,11 +112,6 @@ void OCFFIParserImpl::CheckImplSignature(ClassLikeDecl& decl, const PtrVector<An
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 
-    if (decl.astKind == ASTKind::CLASS_DECL && decl.TestAttr(Attribute::OPEN)) {
-        DiagObjCImplCannotBeOpen(decl);
-        decl.EnableAttr(Attribute::IS_BROKEN);
-    }
-
     if (decl.astKind == ASTKind::INTERFACE_DECL) {
         DiagObjCImplCannotBeInterface(decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
@@ -116,8 +127,19 @@ void OCFFIParserImpl::CheckMirrorAnnoArgs(const Annotation& anno) const
 void OCFFIParserImpl::CheckImplAnnoArgs(const Annotation& anno) const
 {
     static const std::string OBJC_IMPL_NAME = "@ObjCImpl";
-
     p.ffiParser->CheckZeroOrSingleStringLitArgAnnotation(anno, OBJC_IMPL_NAME);
+}
+
+void OCFFIParserImpl::CheckInitAnnoArgs(const Annotation& anno) const
+{
+    static const std::string OBJC_INIT_NAME = "@ObjCInit";
+    p.ffiParser->CheckNoArgAnnotation(anno, OBJC_INIT_NAME);
+}
+
+void OCFFIParserImpl::CheckOptionalAnnoArgs(const Annotation& anno) const
+{
+    static const std::string OBJC_OPTIONAL_NAME = "@ObjCOptional";
+    p.ffiParser->CheckNoArgAnnotation(anno, OBJC_OPTIONAL_NAME);
 }
 
 void OCFFIParserImpl::CheckMirrorAnnoTarget(const Annotation& anno, ScopeKind scopeKind) const
@@ -145,5 +167,76 @@ void OCFFIParserImpl::CheckImplAnnoTarget(const Annotation& anno) const
     if (anno.kind == AnnotationKind::OBJ_C_IMPL) {
         auto& lah = p.lookahead;
         p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
+    }
+}
+
+void OCFFIParserImpl::CheckInitAnnoTarget(const Annotation& anno) const
+{
+    if (p.Seeing(TokenKind::FUNC)) {
+        return;
+    }
+
+    if (anno.kind == AnnotationKind::OBJ_C_INIT) {
+        auto& lah = p.lookahead;
+        p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
+    }
+}
+
+void OCFFIParserImpl::CheckOptionalAnnoTarget(const Annotation& anno) const
+{
+    if (p.Seeing(TokenKind::FUNC)) {
+        return;
+    }
+
+    if (anno.kind == AnnotationKind::OBJ_C_OPTIONAL) {
+        auto& lah = p.lookahead;
+        p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
+    }
+}
+
+void OCFFIParserImpl::CheckOptionalAnnotation(AST::FuncDecl& fd) const
+{
+    CJC_ASSERT(!fd.TestAttr(Attribute::CONSTRUCTOR));
+
+    for (auto& anno : fd.annotations) {
+        if (anno->kind != AnnotationKind::OBJ_C_OPTIONAL) {
+            continue;
+        }
+
+        if (!fd.outerDecl || fd.outerDecl->astKind != ASTKind::INTERFACE_DECL
+            || !fd.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR)) {
+                DiagObjCOptionalFuncMustBeInMirrorClass(fd);
+                fd.EnableAttr(Attribute::IS_BROKEN);
+        }
+
+        if (!fd.TestAttr(Attribute::IS_BROKEN)) {
+            fd.EnableAttr(Attribute::OBJ_C_OPTIONAL);
+        }
+    }
+}
+
+void OCFFIParserImpl::CheckInitAnnotation(AST::FuncDecl& fd) const
+{
+    CJC_ASSERT(!fd.TestAttr(Attribute::CONSTRUCTOR));
+
+    for (auto& anno : fd.annotations) {
+        if (anno->kind != AnnotationKind::OBJ_C_INIT) {
+            continue;
+        }
+
+        if (!fd.outerDecl || fd.outerDecl->astKind != ASTKind::CLASS_DECL
+            || !fd.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR)) {
+                DiagObjCInitFuncMustBeInMirrorClass(fd);
+                fd.EnableAttr(Attribute::IS_BROKEN);
+        }
+
+        if (!fd.TestAttr(Attribute::STATIC)) {
+            DiagObjCInitFuncMustBeStatic(fd);
+            fd.EnableAttr(Attribute::IS_BROKEN);
+        }
+
+        if (!fd.TestAttr(Attribute::IS_BROKEN)) {
+            fd.EnableAttr(Attribute::OBJ_C_INIT);
+        }
     }
 }

@@ -1112,6 +1112,7 @@ OwnedPtr<GenericParamDecl> CreateGenericParamDecl(Decl& decl, const std::string&
     typeParam->identifier = name;
     typeParam->ty = typeManager.GetGenericsTy(*typeParam);
     typeParam->outerDecl = &decl;
+    typeParam->fullPackageName = decl.fullPackageName;
     return typeParam;
 }
 

@@ -22,18 +22,19 @@
 #include "NativeFFI/ObjC/Utils/InteropLibBridge.h"
 #include "NativeFFI/ObjC/Utils/NameGenerator.h"
 #include "NativeFFI/ObjC/Utils/TypeMapper.h"
+#include "InheritanceChecker/MemberSignature.h"
 
 namespace Cangjie::Interop::ObjC {
 
 struct InteropContext {
     explicit InteropContext(
         AST::Package& pkg, TypeManager& typeManager, ImportManager& importManager, DiagnosticEngine& diag,
-        const BaseMangler& mangler,
-        const std::string& cjLibOutputPath)
+        const BaseMangler& mangler, const std::string& cjLibOutputPath,
+        const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& structMemberSignatures)
         : pkg(pkg), diag(diag), typeManager(typeManager), importManager(importManager), bridge(importManager, diag),
           typeMapper(bridge, typeManager), mangler(mangler), nameGenerator(mangler, typeManager),
           factory(bridge, typeManager, nameGenerator, typeMapper, importManager),
-          cjLibOutputPath(cjLibOutputPath)
+          cjLibOutputPath(cjLibOutputPath), structMemberSignatures(structMemberSignatures)
     {
     }
 
@@ -41,6 +42,14 @@ struct InteropContext {
     std::vector<Ptr<AST::ClassLikeDecl>> mirrors;
     std::vector<Ptr<AST::FuncDecl>> mirrorTopLevelFuncs;
     std::vector<Ptr<AST::ClassDecl>> impls;
+    std::vector<Ptr<AST::Decl>> cjMappings;
+    std::vector<Ptr<AST::ClassLikeDecl>> cjMappingInterfaces;
+    std::vector<Ptr<AST::ClassDecl>> fwdClasses;
+    // forward class map for open class
+    std::unordered_map<Ptr<AST::Decl>, Ptr<AST::ClassDecl>> fwdClassMap;
+    // override member func (in fwd) -> open member func (in original class)
+    std::unordered_map<Ptr<AST::FuncDecl>, Ptr<AST::FuncDecl>> fwdOverrideTable;
+    std::vector<Ptr<AST::ClassDecl>> synWrappers;
     std::vector<OwnedPtr<AST::Decl>> genDecls;
 
     DiagnosticEngine& diag;
@@ -52,6 +61,7 @@ struct InteropContext {
     NameGenerator nameGenerator;
     ASTFactory factory;
     const std::string& cjLibOutputPath;
+    const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& structMemberSignatures;
 };
 
 } // namespace Cangjie::Interop::ObjC

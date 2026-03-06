@@ -601,11 +601,32 @@ enum class Attribute {
      */
     OBJ_C_MIRROR_SUBTYPE,
     /**
+     * Marks whether a cangjie method is an Objective-C init.
+     * W: Parser.
+     * R: Sema.
+     */
+    OBJ_C_INIT,
+
+    /**
+     * Marks cangjie method as @optional in Objective-C side
+     * W: Parser.
+     * R: Sema.
+     */
+    OBJ_C_OPTIONAL,
+
+    /**
      * Mark whether a pure cangjie decl is mapped to use by java side.
      * W: Parser
      * R: Sema.
      */
     JAVA_CJ_MAPPING,
+
+    /**
+     * Mark whether a pure cangjie decl is mapped to use by Objective-C side.
+     * W: Parser
+     * R: Sema.
+     */
+    OBJ_C_CJ_MAPPING,
 
     /**
      * Mark whether a class decl is an interface-forward class.
@@ -632,11 +653,26 @@ enum class Attribute {
     HAS_INITED_FIELD,
 
     /**
+     * Mark whether a class is a wrapper synthetic class generated for every mirror interface.
+     * W: Parser.
+     * R: Sema.
+     */
+    OBJ_C_MIRROR_SYNTHETIC_WRAPPER,
+
+    /**
      * Mark whether a function in interface-forward class is a default implementation of cj-mapping interface.
      * W: Sema.
      * R: Sema.
      */
     CJ_MIRROR_JAVA_INTERFACE_DEFAULT,
+
+    /**
+     * Mark whether a class decl is an interface-forward class.
+     * A forward class is used to forward the method call to ObjC side.
+     * W: Sema.
+     * R: Sema.
+     */
+    CJ_MIRROR_OBJC_INTERFACE_FWD,
 
     AST_ATTR_END,
 };
@@ -724,11 +760,16 @@ static const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER, "JAVA_MIRROR_SYNTHETIC_WRAPPER"},
     {AST::Attribute::OBJ_C_MIRROR, "OBJ_C_MIRROR"},
     {AST::Attribute::OBJ_C_MIRROR_SUBTYPE, "OBJ_C_MIRROR_SUBTYPE"},
+    {AST::Attribute::OBJ_C_INIT, "OBJ_C_INIT"},
+    {AST::Attribute::OBJ_C_OPTIONAL, "OBJ_C_OPTIONAL"},
     {AST::Attribute::JAVA_CJ_MAPPING, "JAVA_CJ_MAPPING"},
+    {AST::Attribute::OBJ_C_CJ_MAPPING, "OBJ_C_CJ_MAPPING"},
     {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD, "CJ_MIRROR_JAVA_INTERFACE_FWD"},
     {AST::Attribute::DESUGARED_MIRROR_FIELD, "DESUGARED_MIRROR_FIELD"},
     {AST::Attribute::HAS_INITED_FIELD, "HAS_INITED_FIELD"},
+    {AST::Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER, "OBJ_C_MIRROR_SYNTHETIC_WRAPPER"},
     {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_DEFAULT, "CJ_MIRROR_JAVA_INTERFACE_DEFAULT"},
+    {AST::Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD, "CJ_MIRROR_OBJC_INTERFACE_FWD"},
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
 };
 

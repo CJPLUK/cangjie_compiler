@@ -18,17 +18,12 @@
 
 namespace Cangjie::Interop::ObjC {
 
-class CheckInterface : public Handler<CheckInterface, TypeCheckContext> {
-public:
-    void HandleImpl(TypeCheckContext& ctx);
-};
-
 class CheckAbstractClass : public Handler<CheckAbstractClass, TypeCheckContext> {
 public:
     void HandleImpl(TypeCheckContext& ctx);
 };
 
-class CheckMultipleInherit : public Handler<CheckMultipleInherit, TypeCheckContext> {
+class CheckInheritanceInterface : public Handler<CheckInheritanceInterface, TypeCheckContext> {
 public:
     void HandleImpl(TypeCheckContext& ctx);
 };
@@ -50,12 +45,17 @@ public:
 
 class CheckGeneric : public Handler<CheckGeneric, TypeCheckContext> {
 public:
+void HandleImpl(TypeCheckContext& ctx);
+};
+
+class CheckInitMethod : public Handler<CheckInitMethod, TypeCheckContext> {
+public:
     void HandleImpl(TypeCheckContext& ctx);
 };
 
 class CheckMemberTypes : public Handler<CheckMemberTypes, TypeCheckContext> {
 public:
-    explicit CheckMemberTypes()
+    explicit CheckMemberTypes(InteropType interopType) : interopType(interopType)
     {
     }
     void HandleImpl(TypeCheckContext& ctx);
@@ -68,9 +68,16 @@ private:
     void CheckPropTypes(AST::PropDecl& pd, TypeCheckContext& ctx);
     void CheckVarTypes(AST::VarDecl& vd, TypeCheckContext& ctx);
     std::string GetDeclInteropName();
+
+    InteropType interopType;
 };
 
 class CheckTopLevelFuncTypes : public Handler<CheckTopLevelFuncTypes, TypeCheckContext> {
+public:
+    void HandleImpl(TypeCheckContext& ctx);
+};
+
+class CheckForeignName : public Handler<CheckForeignName, TypeCheckContext> {
 public:
     void HandleImpl(TypeCheckContext& ctx);
 };

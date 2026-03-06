@@ -412,12 +412,12 @@ OwnedPtr<RefType> CreateRefType(const std::string& refName, std::vector<Ptr<Type
     return ret;
 }
 
-OwnedPtr<RefType> CreateRefType(InheritableDecl& typeDecl)
+OwnedPtr<RefType> CreateRefType(InheritableDecl& typeDecl, Ptr<Ty> instantTy)
 {
     auto ret = MakeOwned<RefType>();
     ret->ref.identifier = typeDecl.identifier;
     ret->ref.target = &typeDecl;
-    ret->ty = typeDecl.ty;
+    ret->ty = instantTy ? instantTy : typeDecl.ty;
     ret->EnableAttr(Attribute::COMPILER_ADD);
     return ret;
 }

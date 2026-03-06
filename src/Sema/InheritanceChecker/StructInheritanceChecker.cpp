@@ -36,6 +36,7 @@
 #include "TypeCheckUtil.h"
 #include "TypeCheckerImpl.h"
 #include "NativeFFI/Java/TypeCheck/InheritanceChecker.h"
+#include "NativeFFI/ObjC/Utils/OCStructInheritanceCheckerImpl.h"
 #include "CJMP/MPTypeCheckerImpl.h"
 
 using namespace Cangjie;
@@ -938,7 +939,7 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
     // Do not check unimplemented function for:
     // 1. Foreign struct.
     // 2. Mirror struct.
-    if (structDecl.TestAttr(Attribute::FOREIGN) || structDecl.TestAnyAttr(Attribute::OBJ_C_MIRROR)) {
+    if (structDecl.TestAttr(Attribute::FOREIGN) || structDecl.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER)) {
         return;
     }
     std::string prefix = structDecl.astKind == ASTKind::EXTEND_DECL ? "extend " : "";
@@ -1495,6 +1496,7 @@ void StructInheritanceChecker::CheckNativeFFI(
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (checkingDecls.size() > 0 && checkingDecls.back()) {
         Interop::Java::CheckForeignName(diag, typeManager, parent, child, *checkingDecls.back());
+        Interop::ObjC::CheckForeignAnnotations(diag, typeManager, parent, child, *checkingDecls.back());
     }
 #endif
 }

@@ -25,6 +25,7 @@
 #include "NativeFFI/Java/BeforeTypeCheck/GenerateJavaMirror.h"
 #include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
 #include "NativeFFI/ObjC/BeforeTypeCheck/Desugar.h"
+#include "NativeFFI/ObjC/Utils/InteropLibBridge.h"
 #include "Plugin/PluginCustomAnnoChecker.h"
 #include "TypeCheckUtil.h"
 
@@ -1663,9 +1664,7 @@ void TypeChecker::TypeCheckerImpl::CheckJavaInteropLibImport(Decl& decl)
 
 void TypeChecker::TypeCheckerImpl::CheckObjCInteropLibImport(Decl& decl)
 {
-    constexpr auto INTEROPLIB_OBJ_C_PACKAGE_NAME = "interoplib.objc";
-    auto interopPackage = importManager.GetPackageDecl(INTEROPLIB_OBJ_C_PACKAGE_NAME);
-    if (!interopPackage) {
+    if (!Interop::ObjC::InteropLibBridge::IsInteropLibAccessible(importManager)) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_interoplib_must_be_imported, decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }

@@ -27,6 +27,26 @@ public:
     }
 
     /**
+     * Gets ForwarderMutex declaration.
+     */
+    Ptr<AST::TypeAliasDecl> GetForwarderMutexDecl();
+    /**
+     * Gets ForwarderMutex semantic type (std.sync.Mutex).
+     */
+    Ptr<AST::Ty> GetForwarderMutexTy();
+    /**
+     * Gets the constructor decl of ForwarderMutex.
+     */
+    Ptr<AST::FuncDecl> GetMutexConstructor();
+    /**
+     * Gets the lock decl of ForwarderMutex.
+     */
+    Ptr<AST::FuncDecl> GetMutexLock();
+    /**
+     * Gets the unlock decl of ForwarderMutex.
+     */
+    Ptr<AST::FuncDecl> GetMutexUnlock();
+    /**
      * Gets NativeObjCId declaration.
      * id or Instance Method Pointer type.
      */
@@ -44,10 +64,22 @@ public:
     Ptr<AST::TypeAliasDecl> GetNativeObjCSelDecl();
 
     /**
+     * Gets NativeObjCClass declaration.
+     * objc_class*.
+     */
+    Ptr<AST::TypeAliasDecl> GetNativeObjCClassDecl();
+
+    Ptr<AST::Ty> GetNativeObjCClassTy();
+
+    /**
      * Gets NativeObjCSuperPtr (CPointer<NativeObjCSuper>) declaration.
      * objc_super*.
      */
     Ptr<AST::TypeAliasDecl> GetNativeObjCSuperPtrDecl();
+
+    Ptr<AST::Ty> GetNativeObjCSuperPtrTy();
+
+    Ptr<AST::FuncDecl> GetGetSuperClassDecl();
 
     /**
      * Gets RegistryId declaration.
@@ -62,10 +94,13 @@ public:
 
     /**
      * Gets ObjCUnreachableCodeException declaration.
-     * An exception that has to be used to mark an unreachable code (e.g instantiation @ObjCImpl objects from Cangjie
-     * side).
+     * An exception that has to be used to mark an unreachable code (e.g call static method on @ObjCMirror interface wrapper).
      */
     Ptr<AST::ClassDecl> GetObjCUnreachableCodeExceptionDecl();
+
+    Ptr<AST::ClassDecl> GetObjCOptionalMethodUnimplementedExceptionDecl();
+
+    Ptr<AST::ClassDecl> GetObjCStaticMethodCallOnIntefaceExceptionDecl();
 
     Ptr<AST::FuncDecl> GetGetFromRegistryByNativeHandleDecl();
 
@@ -93,31 +128,70 @@ public:
 
     Ptr<AST::FuncDecl> GetGetClassDecl();
 
-    /**
-     * Gets ObjCRuntime declaration.
-     * This struct exports interface of an Objective-C runtime.
-     */
-    Ptr<AST::StructDecl> GetObjCRuntimeDecl();
+    Ptr<AST::FuncDecl> GetWithMethodEnvDecl();
 
-    OwnedPtr<AST::MemberAccess> CreateObjCRuntimeMsgSendExpr();
+    Ptr<AST::FuncDecl> GetWithMethodEnvObjDecl();
 
-    OwnedPtr<AST::MemberAccess> CreateObjCRuntimeReleaseExpr();
+    Ptr<AST::FuncDecl> GetObjCMsgSendDecl();
+
+    Ptr<AST::FuncDecl> GetObjCMsgSendSuperDecl();
+
+    Ptr<AST::FuncDecl> GetObjCReleaseDecl();
+
+    Ptr<AST::FuncDecl> GetObjCRespondsToSelectorDecl();
+
+    Ptr<AST::FuncDecl> GetGetProtocolDecl();
+
+    Ptr<AST::FuncDecl> GetObjCRetainDecl();
+
+    Ptr<AST::FuncDecl> GetObjCAutoReleaseDecl();
+
+    Ptr<AST::FuncDecl> GetWithObjCSuperDecl();
 
     /**
      * Get objc.lang.ObjCPointer declaration
     */
     Ptr<AST::StructDecl> GetObjCPointerDecl();
+    Ptr<AST::FuncDecl> GetObjCPointerConstructor();
+    Ptr<AST::VarDecl> GetObjCPointerPointerField();
+
+    /**
+     * Get objc.lang.ObjCFunc declaration
+    */
+    Ptr<AST::StructDecl> GetObjCFuncDecl();
+    Ptr<AST::FuncDecl> GetObjCFuncConstructor();
+    Ptr<AST::FuncDecl> GetObjCFuncFPointerAccessor();
+
+    /**
+     * Get objc.lang.ObjCBlock declaration
+    */
+    Ptr<AST::ClassDecl> GetObjCBlockDecl();
+    Ptr<AST::FuncDecl> GetObjCBlockConstructorFromObjC();
+    Ptr<AST::FuncDecl> GetObjCBlockConstructorFromCangjie();
+    Ptr<AST::FuncDecl> GetObjCBlockAbiPointerAccessor();
+    Ptr<AST::FuncDecl> GetObjCBlockFPointerAccessor();
+    /**
+    * Get interoplib.objc.NativeBlockABI declaration
+    */
+    Ptr<AST::StructDecl> GetNativeBlockABIDecl();
+    Ptr<AST::StructDecl> GetCangjieBlockABIDecl();
+
+    Ptr<AST::FuncDecl> GetObjCStoreLambdaAsBlockDecl();
+    Ptr<AST::FuncDecl> GetObjCGetLambdaFromBlockDecl();
+
+    Ptr<AST::FuncDecl> GetObjectGetClassDecl();
+    bool IsInteropLibAccessible() const;
+    static bool IsInteropLibAccessible(ImportManager& importManager);
 
 private:
-    OwnedPtr<AST::RefExpr> CreateObjCRuntimeRefExpr();
+    static constexpr auto INTEROPLIB_PACKAGE_NAME = "interoplib.objc";
 
     template <AST::ASTKind K = AST::ASTKind::DECL> auto GetInteropLibDecl(const std::string& ident)
     {
-        const auto interoplibObjCPackageName = "interoplib.objc";
-        auto decl = importManager.GetImportedDecl(interoplibObjCPackageName, ident);
+        auto decl = importManager.GetImportedDecl(INTEROPLIB_PACKAGE_NAME, ident);
         if (!decl) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_member_not_imported, DEFAULT_POSITION,
-                interoplibObjCPackageName + std::string(".") + ident);
+                INTEROPLIB_PACKAGE_NAME + std::string(".") + ident);
             return Ptr(AST::As<K>(nullptr));
         }
 
@@ -127,8 +201,7 @@ private:
 
     template <AST::ASTKind K = AST::ASTKind::DECL> auto GetObjCLangDecl(const std::string& ident)
     {
-        const auto objcLangPackageName = "objc.lang";
-        auto decl = importManager.GetImportedDecl(objcLangPackageName, ident);
+        auto decl = importManager.GetImportedDecl(OBJ_C_LANG_PACKAGE_IDENT, ident);
         if (!decl) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_member_not_imported, DEFAULT_POSITION, ident);
             return Ptr(AST::As<K>(nullptr));

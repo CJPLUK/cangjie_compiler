@@ -7,26 +7,21 @@
 /**
  * @file
  *
- * This file implements check that Objective-C mirror subtype declaration has at most one supertype (except an Object).
+ * This file implements check that interop with Objective-C declaration doesn't inheritant an interface.
  */
 
 #include "Handlers.h"
+#include "cangjie/AST/Match.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
 
-void CheckMultipleInherit::HandleImpl(TypeCheckContext& ctx)
+void CheckInheritanceInterface::HandleImpl(TypeCheckContext& ctx)
 {
-    auto superTypesCount = 0;
     auto& inheritableDecl = dynamic_cast<InheritableDecl&>(ctx.target);
     for (auto& parent : inheritableDecl.inheritedTypes) {
-        if (parent->ty && parent->ty->IsObject()) {
-            continue;
-        }
-
-        superTypesCount++;
-        if (superTypesCount > 1) {
-            ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_subtype_cannot_multiple_inherit, *parent);
+        if (parent->ty && parent->ty->IsInterface()) {
+            ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_cjmapping_inheritance_interface_not_supported, *parent);
             inheritableDecl.EnableAttr(Attribute::IS_BROKEN);
             return;
         }

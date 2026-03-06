@@ -57,7 +57,7 @@ OwnedPtr<RefExpr> CreateRefExpr(Decl& vd);
 OwnedPtr<RefExpr> CreateRefExpr(Decl& vd, const Node& pos);
 /** Create RefType node */
 OwnedPtr<RefType> CreateRefType(const std::string& refName, std::vector<Ptr<Type>> args = {});
-OwnedPtr<RefType> CreateRefType(InheritableDecl& typeDecl);
+OwnedPtr<RefType> CreateRefType(InheritableDecl& typeDecl, Ptr<Ty> instantTy = nullptr);
 /** Create MemberAccess node with given target sema. */
 OwnedPtr<MemberAccess> CreateMemberAccess(OwnedPtr<Expr> expr, Decl& field);
 OwnedPtr<MemberAccess> CreateMemberAccess(OwnedPtr<Expr> expr, const std::string& field);

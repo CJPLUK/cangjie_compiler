@@ -523,7 +523,11 @@ enum class AnnotationKind {
     JAVA_HAS_DEFAULT,
     OBJ_C_MIRROR,
     OBJ_C_IMPL,
+    OBJ_C_INIT, // Indicate a method as Objective-C init.
+    OBJ_C_OPTIONAL,
     FOREIGN_NAME,
+    FOREIGN_GETTER_NAME,
+    FOREIGN_SETTER_NAME,
     ATTRIBUTE,
     /**
      * NOTE: 'OVERFLOW' is a macro in early versions of glibc (VERSION < 2.27).
@@ -1720,7 +1724,7 @@ struct Expr : Node {
 
     /** Used to mark sugar kind which is desugared before typecheck.
      * Also used to mark desugared call expr like `Token(xxx)`
-     */
+    */
     enum class SugarKind {
         QUEST,
         IF_LET,      // if-let Expression

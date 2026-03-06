@@ -357,6 +357,8 @@ OwnedPtr<Annotation> ParserImpl::ParseAnnotation()
             ParseAnnotationArguments(*annotation);
             break;
         }
+        case AnnotationKind::FOREIGN_GETTER_NAME:
+        case AnnotationKind::FOREIGN_SETTER_NAME:
         case AnnotationKind::FOREIGN_NAME: {
             ParseAnnotationArguments(*annotation);
             break;
