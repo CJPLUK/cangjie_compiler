@@ -26,10 +26,8 @@
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
-#include "cangjie/Basic/Position.h"
 #include "cangjie/Parse/Parser.h"
 #include "cangjie/Utils/CastingTemplate.h"
-#include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/SafePointer.h"
 #include <algorithm>
 #include <unordered_set>

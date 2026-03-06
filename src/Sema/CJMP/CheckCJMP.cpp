@@ -17,7 +17,6 @@
 #include "Diags.h"
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/AttributePack.h"
-#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Walker.h"
@@ -29,7 +28,6 @@
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include <algorithm>
-#include <optional>
 
 using namespace Cangjie;
 using namespace AST;
@@ -866,13 +864,28 @@ bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl
     return true;
 }
 
-static size_t GenericsCount(const Decl& decl)
+namespace {
+size_t GenericsCount(const Decl& decl)
 {
+    if (!decl.TestAttr(Attribute::GENERIC)) { // fast path
+        return 0;
+    }
     auto generic = decl.GetGeneric();
     if (!generic) {
         return 0;
     }
     return generic->typeParameters.size();
+}
+
+bool IsConstructor(const FuncDecl& func)
+{
+    return func.TestAttr(Attribute::CONSTRUCTOR);
+}
+
+bool IsPrimaryConstructor(const FuncDecl& func)
+{
+    return func.TestAttr(Attribute::PRIMARY_CONSTRUCTOR);
+}
 }
 
 bool MPTypeCheckerImpl::IsCJMPDeclMatchable(Decl& lhsDecl, Decl& rhsDecl) const
@@ -924,74 +937,20 @@ bool MPTypeCheckerImpl::MatchCJMPFunction(FuncDecl& specificFunc, FuncDecl& comm
         return false;
     }
 
-    bool isGenericFuncMatch = false;
-    TypeSubst genericTyMap;
-    MapCJMPGenericTypeArgs(genericTyMap, commonFunc, specificFunc);
-    if (!genericTyMap.empty()) {
-        auto newCommonFuncTy = StaticCast<FuncTy*>(typeManager.GetInstantiatedTy(commonFunc.ty, genericTyMap));
-        auto specificFuncTy = StaticCast<FuncTy*>(specificFunc.ty);
-        if (typeManager.IsFuncTySubType(*specificFuncTy, *newCommonFuncTy)) {
-            isGenericFuncMatch = true;
-        }
-    }
-    if (!isGenericFuncMatch && !typeManager.IsFuncDeclSubType(specificFunc, commonFunc)) {
+    if (!MatchCJMPFunctionParameters(specificFunc, commonFunc)) {
         return false;
-    }
-    auto& commonParams = commonFunc.funcBody->paramLists[0]->params;
-    auto& specificParams = specificFunc.funcBody->paramLists[0]->params;
-    for (size_t i = 0; i < commonFunc.funcBody->paramLists[0]->params.size(); i++) {
-        if (commonParams[i]->isNamedParam != specificParams[i]->isNamedParam) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_different_parameter, *specificParams[i]);
-            return false;
-        }
-        if (commonParams[i]->isNamedParam && specificParams[i]->isNamedParam) {
-            if (commonParams[i]->identifier.GetRawText() != specificParams[i]->identifier.GetRawText()) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_different_parameter, *specificParams[i]);
-                return false;
-            }
-        }
-
-        // Check default value consistency: default values should be on either common or specific side, not both
-        bool commonHasDefault = commonParams[i]->TestAttr(AST::Attribute::HAS_INITIAL);
-        bool specificHasDefault = specificParams[i]->TestAttr(AST::Attribute::HAS_INITIAL);
-
-        if (commonHasDefault && specificHasDefault) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_parameter_default_value_both_sides,
-                *specificParams[i]);
-            return false;
-        }
-
-        // desugar specific default value, desugarDecl export all the time, assignment only export const value
-        if (commonParams[i]->desugarDecl && !specificParams[i]->desugarDecl) {
-            specificParams[i]->assignment = ASTCloner::Clone(commonParams[i]->assignment.get());
-            specificParams[i]->desugarDecl = ASTCloner::Clone(commonParams[i]->desugarDecl.get());
-            specificParams[i]->desugarDecl->outerDecl = specificFunc.outerDecl;
-            specificParams[i]->EnableAttr(Attribute::HAS_INITIAL);
-        }
     }
 
     // For init or primary constructor
-    if (specificFunc.TestAttr(AST::Attribute::CONSTRUCTOR) || commonFunc.TestAttr(AST::Attribute::CONSTRUCTOR)) {
-        if (!specificFunc.TestAttr(AST::Attribute::PRIMARY_CONSTRUCTOR) &&
-            commonFunc.TestAttr(AST::Attribute::PRIMARY_CONSTRUCTOR)) {
+    if (IsConstructor(specificFunc) || IsConstructor(commonFunc)) {
+        if (!IsPrimaryConstructor(specificFunc) && IsPrimaryConstructor(commonFunc)) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_init_common_primary_constructor, commonFunc);
             return false;
         }
-        for (size_t i = 0; i < specificParams.size(); ++i) {
-            if (commonParams[i]->isMemberParam && !specificParams[i]->isMemberParam) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_primary_unmatched_var_decl, *specificParams[i]);
-                return false;
-            }
-        }
     }
 
-    if (GenericsCount(commonFunc) != GenericsCount(specificFunc)) {
-        diag.Diagnose(
-            specificFunc, DiagKind::sema_generic_member_type_argument_different, specificFunc.identifier.Val());
-        return false;
-    }
-
-    CheckCommonSpecificGenericMatch(specificFunc, commonFunc);
+    // NOTE: function return types, annotations, parameter kinds are not part of the matching logic
+    // and handled at post type check validation
 
     return TrySetSpecificImpl(specificFunc, commonFunc, "function");
 }
@@ -1288,10 +1247,19 @@ void MPTypeCheckerImpl::MatchSpecificWithCommon(Package& pkg)
         MatchCJMPDecls(commonDecls, specificDecls);
     }
 
+    // both propagations are performed after the matching
+    // and this is important, otherwise propagation errors would lead to
+    // sema_not_matched errors that is usually confusing
+    // also we almost never match declarations based on annotations
+    // or default arguments so reporting sema_not_matching is misleading
     for (auto common : commonDecls) {
         auto specific = common->specificImplementation;
         if (specific) {
             PropagateCJMPDeclAnnotations(*common, *specific);
+            if (auto commonFunc = DynamicCast<FuncDecl>(common); commonFunc) {
+                auto specificFunc = StaticCast<FuncDecl>(specific);
+                PropagateDefaultArguments(*commonFunc, *specificFunc);
+            }
         }
     }
 }
