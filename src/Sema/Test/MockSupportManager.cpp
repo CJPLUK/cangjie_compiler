@@ -215,11 +215,6 @@ void MockSupportManager::PrepareDecls(DeclsToPrepare&& decls)
             PrepareStaticDecl(*wrapperDecl);
             generatedMockDecls.emplace_back(std::move(wrapperDecl));
         } else {
-            if (decl->outerDecl &&
-                (decl->outerDecl->TestAttr(Attribute::GENERIC) || decl->outerDecl->genericDecl)) {
-                continue;
-            }
-
             PrepareStaticDecl(*decl);
 
             if (auto instantiatedDecls = mockUtils->TryGetInstantiatedDecls(*decl)) {
@@ -441,33 +436,15 @@ void MockSupportManager::PrepareStaticDecl(Decl& decl)
     noneCtor->curFile = decl.curFile;
     noneCtor->ty = optionFuncTy;
 
-    Ptr<VarDecl> varDecl = nullptr;
-    if (funcDecl->genericDecl) {
-        auto& genericDecl = *funcDecl->genericDecl;
-        if (auto it = genericMockVarsDecls.find(&genericDecl); it != genericMockVarsDecls.end()) {
-            // The var was already generated, but not yet written to file
-            varDecl = it->second;
-        } else {
-            varDecl = As<ASTKind::VAR_DECL>(
-                mockUtils->FindMockGlobalDecl(genericDecl, mockUtils->Mangle(genericDecl)));
-        }
-
-        CJC_ASSERT(varDecl);
-    } else {
-        auto varMangledName = mockUtils->Mangle(decl);
-        auto newVarDecl = CreateVarDecl(varMangledName + MockUtils::mockAccessorSuffix, std::move(noneCtor), nullptr);
-        newVarDecl->curFile = decl.curFile;
-        newVarDecl->begin = decl.begin;
-        newVarDecl->end = decl.end;
-        newVarDecl->isVar = true;
-        newVarDecl->EnableAttr(Attribute::PUBLIC);
-        newVarDecl->EnableAttr(Attribute::GLOBAL);
-        newVarDecl->fullPackageName = decl.fullPackageName;
-
-        varDecl = newVarDecl.get();
-        generatedMockDecls.emplace_back(std::move(newVarDecl));
-        genericMockVarsDecls.emplace(&decl, varDecl);
-    }
+    auto varMangledName = mockUtils->Mangle(decl);
+    auto varDecl = CreateVarDecl(varMangledName + MockUtils::mockAccessorSuffix, std::move(noneCtor), nullptr);
+    varDecl->curFile = decl.curFile;
+    varDecl->begin = decl.begin;
+    varDecl->end = decl.end;
+    varDecl->isVar = true;
+    varDecl->EnableAttr(Attribute::PUBLIC);
+    varDecl->EnableAttr(Attribute::GLOBAL);
+    varDecl->fullPackageName = decl.fullPackageName;
 
     auto varDeclRef = CreateRefExpr(*varDecl);
     varDeclRef->ty = optionFuncTy;
@@ -501,6 +478,7 @@ void MockSupportManager::PrepareStaticDecl(Decl& decl)
     std::rotate(body->body.rbegin(), body->body.rbegin() + 1, body->body.rend());
 
     decl.EnableAttr(Attribute::MOCK_SUPPORTED);
+    generatedMockDecls.emplace_back(std::move(varDecl));
 }
 
 void MockSupportManager::GenerateVarDeclAccessors(VarDecl& fieldDecl, AccessorKind getterKind, AccessorKind setterKind)
@@ -1258,7 +1236,6 @@ void MockSupportManager::WriteGeneratedMockDecls()
         }
     }
     generatedMockDecls.clear();
-    genericMockVarsDecls.clear();
 }
 
 bool MockSupportManager::IsMemberAccessOnThis(const MemberAccess& memberAccess) const
