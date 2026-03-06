@@ -21,14 +21,28 @@ struct MemberSignature {
     Ptr<AST::Decl> decl = nullptr;
     Ptr<AST::Ty> ty = nullptr;
     Ptr<AST::Ty> structTy = nullptr;
-    Ptr<AST::ExtendDecl> extendDecl = nullptr; // If the member is a member of another visible extension, it points to the
-                                          // extension declaration. Otherwise, it is null.
+    /*
+     * If the member is a member of another visible extension, it points to the extension declaration.
+     * Otherwise, it is null.
+     */
+    Ptr<AST::ExtendDecl> extendDecl = nullptr;
     std::vector<std::unordered_set<Ptr<AST::Ty>>> upperBounds;
-    std::unordered_set<Ptr<const AST::Ty>> inconsistentTypes; // List of the corresponding types came from super-types which
-                                                         // are inconsistent
-    bool shouldBeImplemented = false;                    // True: if this member has multiple default implementation.
-    bool replaceOther = false;                           // True: if this member override others.
-    bool isInheritedInterface = false; // True: if current member is implementing inherited interface decl.
+    /*
+     * List of the corresponding types came from super-types which are inconsistent.
+     */
+    std::unordered_set<Ptr<const AST::Ty>> inconsistentTypes;
+    /*
+     * True: if this member has multiple default implementation.
+     */
+    bool shouldBeImplemented = false;
+    /*
+     * True: if this member override others.
+     */
+    bool replaceOther = false;
+    /*
+     * True: if current member is implementing inherited interface decl.
+     */
+    bool isInheritedInterface = false;
 };
 
 using MemberMap = std::multimap<std::string, MemberSignature>;

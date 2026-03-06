@@ -322,7 +322,7 @@ void TypeChecker::TypeCheckerImpl::ParsePackageConfigFile(
                                 if (member->symbol &&
                                     ((!decl->symbol->isNeedExposedToInterop &&
                                          element == (decl->symbol->name + "." + member->symbol->name)) ||
-                                        decl->symbol->isNeedExposedToInterop)) {
+                                         decl->symbol->isNeedExposedToInterop)) {
                                     member->symbol->isNeedExposedToInterop = true;
                                     isMemberExposed = true;
                                 }

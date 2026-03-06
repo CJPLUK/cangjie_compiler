@@ -456,13 +456,12 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateJavaImplConstructor(FuncDecl& sam
     auto& block = ctor->funcBody->body;
 
     block->body.erase(std::remove_if(block->body.begin(), block->body.end(),
-                          [](auto& node) {
-                              if (auto call = As<ASTKind::CALL_EXPR>(node.get())) {
-                                  return IsSuperConstructorCall(*call);
-                              }
-                              return false;
-                          }),
-        block->body.end());
+        [](auto& node) {
+            if (auto call = As<ASTKind::CALL_EXPR>(node.get())) {
+                return IsSuperConstructorCall(*call);
+            }
+            return false;
+        }), block->body.end());
 
     block->body.insert(block->body.begin(), std::move(superCall));
     ctor->funcBody->ty = ctorTy;

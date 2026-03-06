@@ -499,7 +499,8 @@ DestructedJavaClassName DestructJavaClassName(const ClassLikeDecl& decl)
     if (ind == std::string::npos) {
         return {.packageName = std::nullopt,
             .topLevelClassName = parts[0],
-            .fullClassName = StringJoin(parts.begin(), parts.end(), ".")};
+            .fullClassName = StringJoin(parts.begin(), parts.end(), ".")
+        };
     }
     auto package = parts[0].substr(0, ind);
     parts[0] = parts[0].substr(ind + 1);
@@ -815,8 +816,8 @@ bool IsCJMapping(const Ty& ty)
     // currently only support struct type, enum type, class type.
     if (auto structTy = DynamicCast<StructTy*>(&ty)) {
         return structTy->decl && IsCJMapping(*structTy->decl);
-    } 
-    
+    }
+
     if (auto enumTy = DynamicCast<EnumTy*>(&ty)) {
         return enumTy->decl && IsCJMapping(*enumTy->decl);
     }
@@ -852,16 +853,18 @@ const Ptr<ClassDecl> GetSyntheticClass(const ImportManager& importManager, const
 std::string ReplaceClassName(std::string& classTypeSignature, std::string newSegment)
 {
     bool hasSemicolon = (!classTypeSignature.empty() && classTypeSignature.back() == ';');
-    
-    std::string base = hasSemicolon ? classTypeSignature.substr(0, classTypeSignature.length() - 1) : classTypeSignature;
-    
+
+    std::string base = hasSemicolon
+        ? classTypeSignature.substr(0, classTypeSignature.length() - 1)
+        : classTypeSignature;
+
     size_t lastSlash = classTypeSignature.rfind('/');
     if (lastSlash != std::string::npos) {
         base = base.substr(0, lastSlash + 1) + newSegment;
     } else {
         base = newSegment;
     }
-    
+
     return hasSemicolon ? base + ";" : base;
 }
 

@@ -909,13 +909,13 @@ void StructInheritanceChecker::DiagnoseForInheritedInterfaces(
 
 /**
  * Diagnoses unimplemented interface members and abstract methods in structs/classes.
- * 
+ *
  * This method identifies members that should be implemented but are not, according to inheritance rules.
- * 
+ *
  * CHECK EXCLUSIONS (skips checking for):
  * 1. Foreign structs (marked with FOREIGN attribute)
  * 2. Mirror structs (marked with OBJ_C_MIRROR attribute)
- * 
+ *
  * MEMBER EXCLUSIONS (members that are skipped):
  * 1. Non-inheritable members (non-properties, non-functions)
  * 2. Members defined in extend declarations
@@ -924,13 +924,13 @@ void StructInheritanceChecker::DiagnoseForInheritedInterfaces(
  * 5. Members defined in foreign types (member.decl->outerDecl has FOREIGN attribute)
  * 6. Abstract members from abstract classes in extend declarations
  * 7. Abstract members from interfaces inherited by extend declarations
- * 
+ *
  * UNIMPLEMENTED MEMBER DETECTION RULES:
  * - An abstract member is unimplemented if:
  *   * The member has ABSTRACT attribute
  *   * The containing type is NOT abstract AND NOT an interface
  *   * The member's outerDecl is the struct being checked
- * 
+ *
  * @param members Map of all members in the struct
  * @param structDecl The struct/class/interface/extend being checked
  */

@@ -407,7 +407,6 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     auto callResRef = CreateRefExpr(*methodCallRes);
     CopyBasicInfo(methodCallRes.get(), callResRef.get());
 
-
     OwnedPtr<Expr> retCallExpr = nullptr;
     // cjmapping interface return param support lambda.
     if (fun.funcBody->retType->ty->kind == TypeKind::TYPE_FUNC &&
@@ -430,7 +429,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     // Return type has to be specified, so it's safe to use it below
     fun.funcBody->body = CreateBlock(std::move(blockNodes), fun.funcBody->retType->ty);
     fun.funcBody->ty = TypeManager::GetNothingTy();
-    if(fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
+    if (fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
         fun.funcBody->parentClassLike = &mirror;
     }
     if (IsSynthetic(mirror)) {
