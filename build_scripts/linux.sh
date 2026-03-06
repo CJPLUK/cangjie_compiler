@@ -18,7 +18,7 @@ echo $WORKSPACE
 #
 cd $WORKSPACE/cangjie_compiler;
 [ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
-python3 build.py build -t release --no-tests;
+python3 build.py build -t release --no-tests --build-cjdb;
 python3 build.py install;
 
 source output/envsetup.sh
@@ -29,7 +29,7 @@ cd $WORKSPACE/cangjie_runtime/runtime;
 [ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
 python3 build.py build -t release -v ${CANGJIE_VERSION};
 python3 build.py install;
-cp -R $WORKSPACE/cangjie_runtime/runtime/output/common/darwin_release_${ARCH}/{lib,runtime} $WORKSPACE/cangjie_compiler/output;
+cp -R $WORKSPACE/cangjie_runtime/runtime/output/common/linux_release_${ARCH}/{lib,runtime} $WORKSPACE/cangjie_compiler/output;
 
 # STD
 cd $WORKSPACE/cangjie_runtime/stdlib;
@@ -43,14 +43,14 @@ cd $WORKSPACE/cangjie_stdx;
 [ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
 python3 build.py build -t release --include=$WORKSPACE/cangjie_compiler/include
 python3 build.py install;
-export CANGJIE_STDX_PATH=$WORKSPACE/cangjie_stdx/target/darwin_${ARCH}_cjnative/static/stdx;
+export CANGJIE_STDX_PATH=$WORKSPACE/cangjie_stdx/target/linux_${ARCH}_cjnative/static/stdx;
 
 # tools
 #
 # cjpm
 cd $WORKSPACE/cangjie_tools/cjpm/build;
 [ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
-python3 build.py build -t release --set-rpath @loader_path/../../runtime/lib/darwin_${ARCH}_cjnative;
+python3 build.py build -t release --set-rpath \$ORIGIN/../../runtime/lib/linux_${ARCH}_cjnative;
 python3 build.py install;
 # cjfmt
 cd $WORKSPACE/cangjie_tools/cjfmt/build;
@@ -78,7 +78,7 @@ cd $WORKSPACE/software;
 cp -R $WORKSPACE/cangjie_compiler/output cangjie;
 
 # 删除 ast-support.a
-rm -rf cangjie/lib/darwin_${ARCH}_cjnative/libcangjie-ast-support.a
+rm -rf cangjie/lib/linux_${ARCH}_cjnative/libcangjie-ast-support.a
 
 # 组织文件
 cp $WORKSPACE/cangjie_tools/cjpm/dist/cjpm cangjie/tools/bin/cjpm;
@@ -93,12 +93,12 @@ cp $WORKSPACE/cangjie_tools/cangjie-language-server/output/bin/LSPServer cangjie
 # Then copy over stdx artifacts
 cp -r $WORKSPACE/cangjie_stdx/target cangjie/stdx
 echo 'export CANGJIE_STDX_PATH=$CANGJIE_HOME/stdx' >> cangjie/envsetup.sh
-cp cangjie/stdx/darwin_${ARCH}_cjnative/dynamic/stdx/*.dylib cangjie/runtime/lib/darwin_${ARCH}_cjnative/
-cp cangjie/stdx/darwin_${ARCH}_cjnative/dynamic/stdx/libstdx.syntaxFFI.a cangjie/runtime/lib/darwin_${ARCH}_cjnative/; # Maybe this should go here? libstdx.syntaxFFI.a is the only .a in that directory...
-cp cangjie/stdx/darwin_${ARCH}_cjnative/static/stdx/*.a cangjie/lib/darwin_${ARCH}_cjnative/
-mkdir cangjie/modules/darwin_${ARCH}_cjnative/stdx/;
-cp cangjie/stdx/darwin_${ARCH}_cjnative/dynamic/stdx/*.cjo cangjie/modules/darwin_${ARCH}_cjnative/stdx/;
-cp cangjie/stdx/darwin_${ARCH}_cjnative/dynamic/stdx/stdx.cjo cangjie/modules/darwin_${ARCH}_cjnative/;
+cp cangjie/stdx/linux_${ARCH}_cjnative/dynamic/stdx/*.so cangjie/runtime/lib/linux_${ARCH}_cjnative/
+cp cangjie/stdx/linux_${ARCH}_cjnative/dynamic/stdx/libstdx.syntaxFFI.a cangjie/runtime/lib/linux_${ARCH}_cjnative/; # Maybe this should go here? libstdx.syntaxFFI.a is the only .a in that directory...
+cp cangjie/stdx/linux_${ARCH}_cjnative/static/stdx/*.a cangjie/lib/linux_${ARCH}_cjnative/
+mkdir cangjie/modules/linux_${ARCH}_cjnative/stdx/;
+cp cangjie/stdx/linux_${ARCH}_cjnative/dynamic/stdx/*.cjo cangjie/modules/linux_${ARCH}_cjnative/stdx/;
+cp cangjie/stdx/linux_${ARCH}_cjnative/dynamic/stdx/stdx.cjo cangjie/modules/linux_${ARCH}_cjnative/;
 
 # 打包和设置权限
 chmod -R 750 cangjie
