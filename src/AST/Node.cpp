@@ -1039,6 +1039,22 @@ bool Decl::IsCommonMatchedWithSpecific() const
 }
 
 /**
+ * For a generic declaration finds generic parameters and returns them
+ * @return the number of generic parameters or 0 if not applicable.
+ */
+size_t Decl::GetGenericsCount() const
+{
+    if (!TestAttr(Attribute::GENERIC)) { // fast path
+        return 0;
+    }
+    auto genericNode = GetGeneric();
+    if (!genericNode) {
+        return 0;
+    }
+    return genericNode->typeParameters.size();
+}
+
+/**
  * For debug, get the original Position of the node if it is from MacroCall in curfile, curPos otherwise.
  */
 Position Node::GetDebugPos(const Position& curPos) const

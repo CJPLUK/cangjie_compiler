@@ -25,21 +25,12 @@ using namespace Cangjie;
 using namespace AST;
 
 namespace {
+/*
+ * Checks whether the parameter is a named parameter with default argument.
+ */
 bool HasDefaultArgument(Ptr<FuncParam> param)
 {
     return param->isNamedParam && param->TestAttr(Attribute::HAS_INITIAL);
-}
-
-size_t GenericsCount(const Decl& decl)
-{
-    if (!decl.TestAttr(Attribute::GENERIC)) { // fast path
-        return 0;
-    }
-    auto generic = decl.GetGeneric();
-    if (!generic) {
-        return 0;
-    }
-    return generic->typeParameters.size();
 }
 
 /**
@@ -136,8 +127,8 @@ bool MPTypeCheckerImpl::MatchCJMPFunctionParameters(AST::FuncDecl& specificFunc,
     CJC_ASSERT_WITH_MSG(commonFunc.funcBody, "common function must have a body");
     CJC_ASSERT_WITH_MSG(specificFunc.funcBody, "specific function must have a body");
 
-    auto commonGenericsCount = GenericsCount(commonFunc);
-    auto specificGenericsCount = GenericsCount(specificFunc);
+    auto commonGenericsCount = commonFunc.GetGenericsCount();
+    auto specificGenericsCount = specificFunc.GetGenericsCount();
 
     if (commonGenericsCount != specificGenericsCount) {
         diag.Diagnose(
@@ -158,6 +149,28 @@ bool MPTypeCheckerImpl::MatchCJMPFunctionParameters(AST::FuncDecl& specificFunc,
     });
 }
 
+/**
+ * @brief Checks whether generic function signatures match between common and specific functions in CJMP.
+ *
+ * This function validates that the generic type parameters of a specific function implementation
+ * are compatible with the corresponding generic function declaration in the common code. It performs
+ * type mapping and subtype checking to ensure the specific implementation correctly conforms to the
+ * common declaration.
+ *
+ * The matching process involves:
+ * 1. Mapping generic type arguments from the common function to the specific function
+ * 2. Instantiating the common function type with the mapped type substitutions
+ * 3. Checking if the specific function type is a subtype of the instantiated common function type
+ *
+ * @param specificFunc The specific function declaration to validate
+ * @param commonFunc The common function declaration to match against
+ *
+ * @return true if the generic function signatures match, false otherwise
+ *
+ * @note This function is called from MatchCJMPFunctionParameters when both functions have generic parameters
+ * @see MapCJMPGenericTypeArgs for the type mapping logic
+ * @see TypeManager::IsFuncTySubType for the subtype checking logic
+ */
 bool MPTypeCheckerImpl::MatchCJMPFunctionGenerics(AST::FuncDecl& specificFunc, AST::FuncDecl& commonFunc)
 {
     bool isGenericFuncMatch = true;
