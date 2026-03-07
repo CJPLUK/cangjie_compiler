@@ -27,7 +27,6 @@ enum class ExprKind : uint8_t;
 namespace CodeGen {
 class IRBuilder2;
 
-llvm::Value* GenerateOverflowBinaryExpression(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr);
 llvm::Value* GenerateOverflowWrappingArithmeticOp(IRBuilder2& irBuilder, const CHIR::ExprKind& kind,
     const CHIR::Type* ty, const std::vector<CGValue*>& argGenValues);
 llvm::Value* GenerateOverflow(IRBuilder2& irBuilder, const OverflowStrategy& strategy, const CHIR::ExprKind& kind,

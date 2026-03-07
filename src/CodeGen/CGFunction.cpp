@@ -10,6 +10,7 @@
 #include "Base/CGTypes/CGFunctionType.h"
 #include "CGModule.h"
 #include "IRBuilder.h"
+#include "LICMOptimizer.h"
 #include "Utils/BlockScopeImpl.h"
 #include "Utils/CGCommonDef.h"
 #include "Utils/CGUtils.h"
@@ -191,6 +192,7 @@ void CGFunction::Opt() const
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     EraseReplaceableAlloca(cgMod, *function);
     AddZeroInitForStructWithRefField(cgMod, *function);
+    LICMOptimizer(cgMod, *this).Run();
 #endif
 }
 

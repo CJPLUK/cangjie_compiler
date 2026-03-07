@@ -37,11 +37,19 @@ llvm::MDTuple* GenObjTyMetaForVirtualCall(IRBuilder2& irBuilder, const CHIR::Typ
     }
     return llvm::MDTuple::get(llvmCtx, objTyMeta);
 }
+
+bool VirtualCallCanBeHoisted(IRBuilder2& irBuilder, const CHIRCallExpr& callExprWrapper)
+{
+    if (irBuilder.GetCGContext().GetCompileOptions().optimizationLevel < GlobalOptions::OptimizationLevel::O2) {
+        return false;
+    }
+    return callExprWrapper.GetThisType(false)->IsGeneric();
+}
 } // namespace
-llvm::Value* CodeGen::GenerateInvoke(IRBuilder2& irBuilder, const CHIRInvokeWrapper& invoke)
+
+llvm::Value* CodeGen::GenerateInvoke(IRBuilder2& irBuilder, CHIRInvokeWrapper invoke)
 {
     irBuilder.SetCHIRExpr(&invoke);
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     auto& cgMod = irBuilder.GetCGModule();
     auto objVal = cgMod | invoke.GetObject();
     std::vector<CGValue*> argsVal;
@@ -55,6 +63,13 @@ llvm::Value* CodeGen::GenerateInvoke(IRBuilder2& irBuilder, const CHIRInvokeWrap
     auto objType = DeRef(*invoke.GetObject()->GetType());
     llvm::Value* funcPtr = nullptr;
     if (!objType->IsAutoEnv()) {
+        if (VirtualCallCanBeHoisted(irBuilder, invoke)) {
+            auto [prepForVirtualCallBB] =
+                Vec2Tuple<1>(irBuilder.CreateAndInsertBasicBlocks({GenNameForBB("prepForVirtualCall.bb")}));
+            invoke.SetPrepForVirtualCallBB(prepForVirtualCallBB);
+            irBuilder.CreateBr(prepForVirtualCallBB);
+            irBuilder.SetInsertPoint(prepForVirtualCallBB);
+        }
         auto ti = irBuilder.GetTypeInfoFromObject(objVal->GetRawValue());
         auto vtableOffset = invoke.GetVirtualMethodOffset();
         auto idxOfVFunc = irBuilder.getInt64(vtableOffset);
@@ -75,6 +90,14 @@ llvm::Value* CodeGen::GenerateInvoke(IRBuilder2& irBuilder, const CHIRInvokeWrap
         if (introType->GetTypeArgs().size() <= 1) {
             auto objTyMeta = GenObjTyMetaForVirtualCall(irBuilder, *introType);
             llvm::cast<llvm::Instruction>(funcPtr)->setMetadata("objType", objTyMeta);
+        }
+        if (auto prepForVirtualCallBB = invoke.GetPrepForVirtualCallBB(); prepForVirtualCallBB) {
+            cgCtx.AddVirtualCallInfo4LICM(irBuilder.GetInsertCGFunction(),
+                {prepForVirtualCallBB, funcPtr, invoke.GetThisType(false), introType, vtableOffset});
+            auto [prepForVirtualCallEndBB] =
+                Vec2Tuple<1>(irBuilder.CreateAndInsertBasicBlocks({GenNameForBB("prepForVirtualCall.end")}));
+            irBuilder.CreateBr(prepForVirtualCallEndBB);
+            irBuilder.SetInsertPoint(prepForVirtualCallEndBB);
         }
     } else {
         auto i8PtrTy = irBuilder.getInt8PtrTy();
@@ -111,24 +134,29 @@ llvm::Value* CodeGen::GenerateInvoke(IRBuilder2& irBuilder, const CHIRInvokeWrap
         irBuilder.SetInsertPoint(handleEndBB);
     }
     return result;
-#endif
 }
 
-llvm::Value* CodeGen::GenerateInvokeStatic(IRBuilder2& irBuilder, const CHIRInvokeStaticWrapper& invokeStatic)
+llvm::Value* CodeGen::GenerateInvokeStatic(IRBuilder2& irBuilder, CHIRInvokeStaticWrapper invokeStatic)
 {
     irBuilder.SetCHIRExpr(&invokeStatic);
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     auto& cgMod = irBuilder.GetCGModule();
     std::vector<CGValue*> argsVal{};
     for (auto arg : invokeStatic.GetArgs()) {
         (void)argsVal.emplace_back(cgMod | arg);
     }
 
-    llvm::Value* ti = **(cgMod | invokeStatic.GetRTTIValue());
+    auto& cgCtx = cgMod.GetCGContext();
     llvm::Value* funcPtr = nullptr;
+    if (VirtualCallCanBeHoisted(irBuilder, invokeStatic)) {
+        auto [prepForVirtualCallBB] =
+            Vec2Tuple<1>(irBuilder.CreateAndInsertBasicBlocks({GenNameForBB("prepForVirtualCall.bb")}));
+        invokeStatic.SetPrepForVirtualCallBB(prepForVirtualCallBB);
+        irBuilder.CreateBr(prepForVirtualCallBB);
+        irBuilder.SetInsertPoint(prepForVirtualCallBB);
+    }
+    llvm::Value* ti = **(cgMod | invokeStatic.GetRTTIValue());
     auto vtableOffset = invokeStatic.GetVirtualMethodOffset();
     auto idxOfVFunc = irBuilder.getInt64(vtableOffset);
-    auto& cgCtx = cgMod.GetCGContext();
     auto introType = StaticCast<const CHIR::ClassType*>(invokeStatic.GetOuterType(cgCtx.GetCHIRBuilder()));
     if (introType->GetClassDef()->IsInterface()) {
         auto introTi = irBuilder.CreateTypeInfo(introType);
@@ -147,11 +175,18 @@ llvm::Value* CodeGen::GenerateInvokeStatic(IRBuilder2& irBuilder, const CHIRInvo
         auto objTyMeta = GenObjTyMetaForVirtualCall(irBuilder, *introType);
         llvm::cast<llvm::Instruction>(funcPtr)->setMetadata("objType", objTyMeta);
     }
+    if (auto prepForVirtualCallBB = invokeStatic.GetPrepForVirtualCallBB(); prepForVirtualCallBB) {
+        cgCtx.AddVirtualCallInfo4LICM(irBuilder.GetInsertCGFunction(),
+            {prepForVirtualCallBB, funcPtr, invokeStatic.GetThisType(false), introType, vtableOffset});
+        auto [prepForVirtualCallEndBB] =
+            Vec2Tuple<1>(irBuilder.CreateAndInsertBasicBlocks({GenNameForBB("prepForVirtualCall.end")}));
+        irBuilder.CreateBr(prepForVirtualCallEndBB);
+        irBuilder.SetInsertPoint(prepForVirtualCallEndBB);
+    }
 
     auto funcType = invokeStatic.GetMethodType();
     auto concreteFuncType = static_cast<CGFunctionType*>(CGType::GetOrCreate(
         cgMod, funcType, CGType::TypeExtraInfo{0, true, true, false, invokeStatic.GetInstantiatedTypeArgs()}));
     funcPtr = irBuilder.CreateBitCast(funcPtr, concreteFuncType->GetLLVMFunctionType()->getPointerTo());
     return irBuilder.CreateCallOrInvoke(*concreteFuncType, funcPtr, argsVal, false, ti);
-#endif
 }

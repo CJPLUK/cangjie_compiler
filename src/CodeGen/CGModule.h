@@ -370,6 +370,7 @@ public:
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     static void EraseReplaceableAlloca(const CGModule& cgModule, llvm::Function& function);
     static void AddZeroInitForStructWithRefField(CGModule& cgModule, llvm::Function& function);
+    static void LICM4GetMethodOuterTI(CGModule& cgMod, llvm::Function& function);
 #endif
 
 private:
