@@ -99,7 +99,7 @@ const std::unordered_map<Environment, std::string> ENVIRONMENT_STRING_MAP = {
     {Environment::OHOS, "ohos"},
     {Environment::GNU, "gnu"},
     {Environment::ANDROID, "android"},
-    {Environment::SIMULATOR, "simulator"}, 
+    {Environment::SIMULATOR, "simulator"},
     {Environment::NOT_AVAILABLE, ""},
 };
 
@@ -605,15 +605,6 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     }},
     { Options::ID::PACKAGE_COMPILE, OPTION_TRUE_ACTION(opts.compilePackage = true) },
     { Options::ID::NO_PRELUDE, OPTION_TRUE_ACTION(opts.implicitPrelude = false) },
-    { Options::ID::USE_INTEROP_CJ_PACKAGE_CONFIG_RPATH, [](GlobalOptions& opts, const OptionArgInstance& arg) {
-        // Not allowed to be empty.
-        if (arg.value.empty()) {
-            Errorf("'%s' requires a non-empty value.\n", arg.name.c_str());
-            return false;
-        }
-        opts.interopCJPackageConfigPath = arg.value;
-        return true;
-    }},
     { Options::ID::INT_OVERFLOW_MODE, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         CJC_ASSERT(ValidOverflowStrategy(arg.value));
         if (!ValidOverflowStrategy(arg.value)) { return false; }
@@ -851,17 +842,6 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
             opts.outputMode = GlobalOptions::OutputMode::SHARED_LIB;
 #endif
-        return true;
-    }},
-     { Options::ID::ENABLE_INTEROP_CJMAPPING, [](GlobalOptions& opts, const OptionArgInstance& arg) {
-        if (arg.value.empty()) {
-            return false;
-        }
-        if (INTEROP_LANGUAGE_MAP.count(arg.value) == 0) {
-            return false;
-        }
-        opts.targetInteropLanguage = INTEROP_LANGUAGE_MAP.at(arg.value);
-        opts.enableInteropCJMapping = true;
         return true;
     }},
     // ---------- OUTPUT CONTROL OPTIONS ----------
