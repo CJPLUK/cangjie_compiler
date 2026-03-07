@@ -931,8 +931,8 @@ bool MPTypeCheckerImpl::MatchCJMPFunction(FuncDecl& specificFunc, FuncDecl& comm
         }
 
         // Check default value consistency: default values should be on either common or specific side, not both
-        bool commonHasDefault = commonParams[i]->assignment != nullptr;
-        bool specificHasDefault = specificParams[i]->assignment != nullptr;
+        bool commonHasDefault = commonParams[i]->TestAttr(AST::Attribute::HAS_INITIAL);
+        bool specificHasDefault = specificParams[i]->TestAttr(AST::Attribute::HAS_INITIAL);
 
         if (commonHasDefault && specificHasDefault) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_parameter_default_value_both_sides,
