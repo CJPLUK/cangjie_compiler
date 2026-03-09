@@ -56,6 +56,37 @@ struct CallBaseToReplaceInfo {
     {
     }
 };
+
+struct VirtualCallInfo4LICM {
+    llvm::BasicBlock* prepForVirtualCallBB = nullptr;
+    llvm::Value* lookupVirtualInst = nullptr;
+    llvm::Value* getOuterTypeInst = nullptr;
+
+    const CHIR::Type* thisType = nullptr;
+    const CHIR::ClassType* outerType = nullptr;
+    std::size_t virtualMethodOffset = 0;
+
+    VirtualCallInfo4LICM(llvm::BasicBlock* prepForVirtualCallBB, llvm::Value* lookupVirtualInst,
+        const CHIR::Type* thisType, const CHIR::ClassType* outerType, std::size_t virtualMethodOffset)
+        : prepForVirtualCallBB(prepForVirtualCallBB),
+          lookupVirtualInst(lookupVirtualInst),
+          thisType(thisType),
+          outerType(outerType),
+          virtualMethodOffset(virtualMethodOffset)
+    {
+    }
+
+    void SetLookupVirtualInst(llvm::Value* inst)
+    {
+        lookupVirtualInst = inst;
+    }
+
+    void SetGetOuterTypeInst(llvm::Value* inst)
+    {
+        getOuterTypeInst = inst;
+    }
+};
+
 class CGContext {
     friend class CGModule;
     friend class CGType;
@@ -174,6 +205,47 @@ public:
     const std::vector<CallBaseToReplaceInfo>& GetCallBasesToReplace() const
     {
         return callBasesToReplace;
+    }
+
+    void AddVirtualCallInfo4LICM(const CGFunction* cgfunc, const VirtualCallInfo4LICM& info)
+    {
+        // ensure there's an entry for this function
+        auto &vec = virtualCallInfo4LICMMap[cgfunc];
+        // avoid duplicates based on prepForVirtualCallBB
+        auto it = std::find_if(vec.rbegin(), vec.rend(),
+            [&](const VirtualCallInfo4LICM &v) { return v.prepForVirtualCallBB == info.prepForVirtualCallBB; });
+        if (it == vec.rend()) {
+            vec.emplace_back(info);
+        }
+    }
+
+    void SetGetOuterTypeInst(
+        const CGFunction* cgfunc, llvm::BasicBlock* prepForVirtualCallBB, llvm::Value* getOuterTypeInst)
+    {
+        auto foundCGFunc = virtualCallInfo4LICMMap.find(cgfunc);
+        if (foundCGFunc == virtualCallInfo4LICMMap.end()) {
+            return;
+        }
+
+        auto &vec = foundCGFunc->second;
+        auto it = std::find_if(vec.rbegin(), vec.rend(),
+            [&](const VirtualCallInfo4LICM &v) { return v.prepForVirtualCallBB == prepForVirtualCallBB; });
+        if (it == vec.rend()) {
+            return;
+        }
+
+        it->SetGetOuterTypeInst(getOuterTypeInst);
+    }
+
+    const std::vector<VirtualCallInfo4LICM>& GetVirtualCallInfo4LICM(const CGFunction* cgfunc) const
+    {
+        auto foundCGFunc = virtualCallInfo4LICMMap.find(cgfunc);
+        if (foundCGFunc == virtualCallInfo4LICMMap.end()) {
+            static std::vector<VirtualCallInfo4LICM> emptyMap;
+            return emptyMap;
+        } else {
+            return foundCGFunc->second;
+        }
     }
 
     void AddDebugLocOfRetExpr(llvm::Function* func, CHIR::DebugLocation debugLoc)
@@ -388,6 +460,7 @@ private:
     std::vector<std::string> reflectGeneratedStaticGINames;
     std::vector<std::pair<llvm::CallBase*, llvm::ReturnInst*>> callBasesToInline;
     std::vector<CallBaseToReplaceInfo> callBasesToReplace;
+    std::map<const CGFunction*, std::vector<VirtualCallInfo4LICM>> virtualCallInfo4LICMMap;
 #endif
     // Key: the generic type's srcCodeIdentifier
     // Value: {upperbounds vector1, upperbounds vector2, ...}
