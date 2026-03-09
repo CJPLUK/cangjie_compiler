@@ -52,6 +52,7 @@ enum class CGIntrinsicKind {
     NET,
     FFI_JAVA,
     INTEROP,
+    GET_JSLAMBDA_ADDR,
     VARRAY,
     RUNTIME,
     EXCEPTION_CATCH,

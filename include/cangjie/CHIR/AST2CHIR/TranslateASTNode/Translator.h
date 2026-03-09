@@ -1181,7 +1181,8 @@ const static std::unordered_map<std::string, const std::unordered_map<std::strin
     {RUNTIME_PACKAGE_NAME, runtimeIntrinsicMap},
     {REFLECT_PACKAGE_NAME, reflectIntrinsicMap},
     {MATH_PACKAGE_NAME, mathIntrinsicMap},
-    {INTEROP_PACKAGE_NAME, interOpIntrinsicMap}
+    {INTEROP_PACKAGE_NAME, interOpIntrinsicMap},
+    {"ohos.ark_interop", ohosArkInteropIntrinsicMap}
 };
 
 // Below are instrinsics without a source-level declaration, their delcaration should be dinamically generated

@@ -996,6 +996,7 @@ enum IntrinsicKind: uint16 {
   CREATE_EXPORT_HANDLE,
   GET_EXPORTED_REF,
   REMOVE_EXPORTED_REF,
+  GET_JSLAMBDA_ADDR,
   // ============================ cjnative only end =================
 
   // Syscall

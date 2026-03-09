@@ -1550,7 +1550,7 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
         .args = applyArgs,
         .instTypeArgs = instTyArgs,
         .thisType = thisTy}, entry);
-
+    callSrcFunc->SetDebugLocation(srcFunc.GetDebugLocation());
     auto applyRes = TypeCastOrBoxIfNeeded(
         *callSrcFunc->GetResult(), *newFuncRetType, builder, *entry, INVALID_LOCATION);
 
@@ -1616,7 +1616,7 @@ void ClosureConversion::CreateInstOverrideMethodInAutoEnvImplDef(ClassDef& autoE
         .args = applyArgs,
         .instTypeArgs = instTyArgs,
         .thisType = thisTy}, entry);
-
+    callSrcFunc->SetDebugLocation(srcFunc.GetDebugLocation());
     // store return value and exit
     CreateAndAppendExpression<Store>(
         builder, builder.GetType<UnitType>(), callSrcFunc->GetResult(), retVal->GetResult(), entry);

@@ -263,6 +263,7 @@ static const std::string CROSS_ACCESS_BARRIER_NAME = "CrossAccessBarrier";
 static const std::string CREATE_EXPORT_HANDLE_NAME = "CreateExportHandle";
 static const std::string GET_EXPORTED_REF_NAME = "GetExportedRef";
 static const std::string REMOVE_EXPORTED_REF_NAME = "RemoveExportedRef";
+static const std::string GET_JSLAMBDA_ADDR_NAME = "GetJSLambdaAddr";
 // ============================ cjnative only end ==============================
 
 /**
@@ -454,6 +455,7 @@ enum IntrinsicKind : uint16_t {
     CREATE_EXPORT_HANDLE,
     GET_EXPORTED_REF,
     REMOVE_EXPORTED_REF,
+    GET_JSLAMBDA_ADDR,
     // ============================ cjnative only end =================
 
     // Syscall
@@ -759,6 +761,10 @@ static const std::unordered_map<std::string, IntrinsicKind> interOpIntrinsicMap 
     {CREATE_EXPORT_HANDLE_NAME, CREATE_EXPORT_HANDLE},
     {GET_EXPORTED_REF_NAME, GET_EXPORTED_REF},
     {REMOVE_EXPORTED_REF_NAME, REMOVE_EXPORTED_REF}
+};
+
+static const std::unordered_map<std::string, IntrinsicKind> ohosArkInteropIntrinsicMap = {
+    {"getJSLambdaAddr", GET_JSLAMBDA_ADDR}
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> cjnativeSyncIntrinsicMap = {
