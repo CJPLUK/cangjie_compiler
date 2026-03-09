@@ -18,10 +18,10 @@ echo $WORKSPACE
 #
 cd $WORKSPACE/cangjie_compiler;
 [ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
-python3 build.py build -t release --no-tests --build-cjdb;
+python3 build.py build -t release --no-tests;
 python3 build.py install;
 
-source output/envsetup.sh
+. output/envsetup.sh
 cjc -v
 
 # Runtime
@@ -102,5 +102,5 @@ cp cangjie/stdx/linux_${ARCH}_cjnative/dynamic/stdx/stdx.cjo cangjie/modules/lin
 
 # 打包和设置权限
 chmod -R 750 cangjie
-gtar --format=gnu -zcvf cangjie-sdk-${SDK_NAME}-${CANGJIE_VERSION}.tar.gz cangjie;
+tar zcvf cangjie-sdk-${SDK_NAME}-${CANGJIE_VERSION}.tar.gz cangjie;
 chmod 550 cangjie-sdk-${SDK_NAME}-${CANGJIE_VERSION}.tar.gz;
