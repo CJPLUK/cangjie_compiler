@@ -35,9 +35,30 @@ void LICMOptimizer::MoveLoopInvariant4GetMethodOuterTI()
         return;
     }
 
+    // Build a set of live BasicBlocks to avoid quadratic lookups
+    auto& bbList = cgFunc.GetRawFunction()->getBasicBlockList();
+    std::unordered_set<llvm::BasicBlock*> bbSet;
+    bbSet.reserve(std::distance(bbList.begin(), bbList.end()));
+    for (auto& bb : bbList) {
+        if (bb.getName().startswith("prepForVirtualCall.bb")) {
+            bbSet.insert(&bb);
+        }
+    }
+    // Filter out the basicBlocks that may be deleted
+    std::vector<VirtualCallInfo4LICM> filteredInfo;
+    filteredInfo.reserve(virtualCallInfo4LICMMap.size());
+    for (const auto& info : virtualCallInfo4LICMMap) {
+        if (bbSet.count(info.prepForVirtualCallBB)) {
+            filteredInfo.emplace_back(info);
+        }
+    }
+    if (filteredInfo.empty()) {
+        return;
+    }
+
     IRBuilder2 irBuilder(cgMod);
     irBuilder.SetInsertCGFunction(cgFunc);
-    for (const auto& virtualCallInfo4LICM : virtualCallInfo4LICMMap) {
+    for (const auto& virtualCallInfo4LICM : filteredInfo) {
         auto prepForVirtualCallEndBB = virtualCallInfo4LICM.prepForVirtualCallBB->getUniqueSuccessor();
         CJC_NULLPTR_CHECK(prepForVirtualCallEndBB);
         if (!prepForVirtualCallEndBB) {
