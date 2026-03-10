@@ -520,8 +520,10 @@ ArrayOperationKind GetArrayOperationKind(Decl& decl)
     if (auto funcDecl = As<ASTKind::FUNC_DECL>(&decl); funcDecl && funcDecl->identifier == "[]") {
         auto paramsNumber = funcDecl->funcBody->paramLists[0]->params.size();
         if (paramsNumber == 1) {
+            // Array "get" has one parameter: index.
             return ArrayOperationKind::GET;
         } else if (paramsNumber == 2) {
+            // Array "set" has two parameters: index and value to be set.
             return ArrayOperationKind::SET;
         }
     }
@@ -549,7 +551,8 @@ std::string GetJavaPackage(const Decl& decl)
             continue;
         }
 
-        CJC_ASSERT(anno->args.size() < 2);
+        // @JavaMirror or @JavaImpl annotations could accept optional string literal argument with fully-qualified name.
+        CJC_ASSERT(anno->args.size() < 2 && "@JavaMirror or @JavaImpl could accept maximum one argument");
         if (anno->args.empty()) {
             break;
         }
@@ -575,7 +578,7 @@ void MangleJNIName(std::string& name)
     size_t start_pos = 0;
     while ((start_pos = name.find("_", start_pos)) != std::string::npos) {
         name.replace(start_pos, 1, "_1");
-        start_pos += 2;
+        start_pos += 2; // Continue after inserted "_1" substring (2 characters).
     }
 
     std::replace(name.begin(), name.end(), '.', '_');

@@ -667,7 +667,7 @@ private:
     OwnedPtr<CallExpr> CreateGetCJLambdaCallExpr(OwnedPtr<RefExpr> callResRef, Ptr<Ty> ty, const Decl& outerDecl);
 
     /**
-     * generate java interfacefunctional call() method's native function decl.
+     * generate java interface functional call() method's native function decl.
      */
     OwnedPtr<Decl> GenerateCallImplNativeMethod(File& file, LambdaPattern& lambdaPattern);
     Ptr<FuncTy> GetLambdaFuncTy(LambdaPattern& lambdaPattern);

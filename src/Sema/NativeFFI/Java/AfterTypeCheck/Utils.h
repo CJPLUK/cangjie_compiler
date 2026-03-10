@@ -243,8 +243,7 @@ std::vector<OwnedPtr<Ret>> Nodes(OwnedPtr<Args>&&... args)
     return nodes;
 }
 
-namespace {
-
+namespace Details {
 template <typename T>
 void WrapArg(std::vector<OwnedPtr<FuncArg>>* funcArgs, OwnedPtr<T>&& e)
 {
@@ -255,8 +254,7 @@ void WrapArg(std::vector<OwnedPtr<FuncArg>>* funcArgs, OwnedPtr<T>&& e)
         funcArgs->push_back(CreateFuncArg(std::forward<OwnedPtr<T>>(e)));
     }
 }
-
-}
+} // namespace Details
 
 template <typename... Args>
 OwnedPtr<CallExpr> CreateCall(Ptr<FuncDecl> fd, Ptr<File> curFile, OwnedPtr<Args>&&... args)
@@ -267,7 +265,7 @@ OwnedPtr<CallExpr> CreateCall(Ptr<FuncDecl> fd, Ptr<File> curFile, OwnedPtr<Args
 
     std::vector<OwnedPtr<FuncArg>> funcArgs;
 
-    (WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
+    (Details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
     auto funcTy = StaticCast<FuncTy*>(fd->ty);
 

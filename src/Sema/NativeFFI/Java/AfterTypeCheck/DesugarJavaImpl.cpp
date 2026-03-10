@@ -19,7 +19,7 @@ using namespace Cangjie::Native::FFI;
 
 namespace {
 // Some helper functions.
-inline Ptr<CallExpr> TryGetSuperCall(const FuncDecl& ctor)
+Ptr<CallExpr> TryGetSuperCall(const FuncDecl& ctor)
 {
     if (!ctor.funcBody) {
         return nullptr;
@@ -39,7 +39,7 @@ inline Ptr<CallExpr> TryGetSuperCall(const FuncDecl& ctor)
     return nullptr;
 }
 
-inline Ptr<FuncTy> GetNativeFuncTy(const std::vector<OwnedPtr<FuncParam>>& params,
+Ptr<FuncTy> GetNativeFuncTy(const std::vector<OwnedPtr<FuncParam>>& params,
     const std::function<Ptr<Ty>(const FuncParam&)>& toJni, Ptr<Ty> jniRet, TypeManager& typeManager)
 {
     std::vector<Ptr<Ty>> funcTyParams;

@@ -314,24 +314,26 @@ void TypeChecker::TypeCheckerImpl::ParsePackageConfigFile(
                 if (pkg->interopCJApiStrategy == InteropCJStrategy::NONE) {
                     bool isMemberExposed = false;
                     for (const auto& element : pkg->interopCJIncludedApis) {
-                        if (decl->symbol) {
-                            if (element == decl->symbol->name) {
-                                decl->symbol->isNeedExposedToInterop = true;
+                        if (!decl->symbol) {
+                            continue;
+                        }
+                        if (element == decl->symbol->name) {
+                            decl->symbol->isNeedExposedToInterop = true;
+                        }
+                        for (auto& member : decl->GetMemberDecls()) {
+                            if (!member->symbol) {
+                                continue;
                             }
-                            for (auto& member : decl->GetMemberDecls()) {
-                                if (member->symbol &&
-                                    ((!decl->symbol->isNeedExposedToInterop &&
-                                         element == (decl->symbol->name + "." + member->symbol->name)) ||
-                                         decl->symbol->isNeedExposedToInterop)) {
+                            if (decl->symbol->isNeedExposedToInterop ||
+                                element == (decl->symbol->name + "." + member->symbol->name)) {
                                     member->symbol->isNeedExposedToInterop = true;
                                     isMemberExposed = true;
-                                }
-                                // For default constructor function exposed because of part of
-                                // memberfunction need exposed.
-                                if (isMemberExposed && member->TestAttr(Attribute::CONSTRUCTOR) &&
-                                    !member->symbol->isNeedExposedToInterop) {
+                            }
+                            // For default constructor function exposed because of part of
+                            // memberfunction need exposed.
+                            if (isMemberExposed && member->TestAttr(Attribute::CONSTRUCTOR) &&
+                                !member->symbol->isNeedExposedToInterop) {
                                     member->symbol->isNeedExposedToInterop = true;
-                                }
                             }
                         }
                     }
@@ -342,16 +344,19 @@ void TypeChecker::TypeCheckerImpl::ParsePackageConfigFile(
                 // For hiddened symbol
                 if (pkg->interopCJApiStrategy == InteropCJStrategy::FULL) {
                     for (const auto& element : pkg->interopCJExcludedApis) {
-                        if (decl->symbol) {
-                            if (element == decl->symbol->name) {
-                                decl->symbol->isNeedExposedToInterop = false;
+                        if (!decl->symbol) {
+                            continue;
+                        }
+                        if (element == decl->symbol->name) {
+                            decl->symbol->isNeedExposedToInterop = false;
+                        }
+                        for (auto& member : decl->GetMemberDecls()) {
+                            if (!member->symbol) {
+                                continue;
                             }
-                            for (auto& member : decl->GetMemberDecls()) {
-                                if (member->symbol &&
-                                    (!decl->symbol->isNeedExposedToInterop &&
-                                        (element == (decl->symbol->name + "." + member->symbol->name)))) {
+                            if (!decl->symbol->isNeedExposedToInterop &&
+                                (element == (decl->symbol->name + "." + member->symbol->name))) {
                                     member->symbol->isNeedExposedToInterop = false;
-                                }
                             }
                         }
                     }
