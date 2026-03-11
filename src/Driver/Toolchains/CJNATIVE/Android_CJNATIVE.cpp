@@ -136,7 +136,7 @@ void Android_CJNATIVE::GenerateLinkOptions(Tool& tool)
     tool.AppendArg(LINUX_CJNATIVE_LINK_OPTIONS);
     tool.AppendArg("-lclang_rt.builtins-" + driverOptions.target.ArchToString() + "-android");
     tool.AppendArg("-ldl");
-    tool.AppendArg("-z", "max-page-size=4096");
+    tool.AppendArg("-z", "max-page-size=16384");
 }
 
 void Android_CJNATIVE::HandleSanitizerDependencies(Tool& tool)
