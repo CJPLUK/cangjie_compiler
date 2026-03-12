@@ -74,6 +74,7 @@ void JavaDesugarManager::InsertArrayJavaEntitySet(ClassDecl& decl)
             continue;
         }
         if (funcDecl && funcDecl->identifier == "[]" && funcDecl->funcBody->paramLists[0]->params.size() == 2) {
+            // Array "set" call requires 2 parameters: index and value to be set
             setOperationDecl = As<ASTKind::FUNC_DECL>(member);
             break;
         }
@@ -407,7 +408,6 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     auto callResRef = CreateRefExpr(*methodCallRes);
     CopyBasicInfo(methodCallRes.get(), callResRef.get());
 
-
     OwnedPtr<Expr> retCallExpr = nullptr;
     // cjmapping interface return param support lambda.
     if (fun.funcBody->retType->ty->kind == TypeKind::TYPE_FUNC &&
@@ -430,7 +430,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     // Return type has to be specified, so it's safe to use it below
     fun.funcBody->body = CreateBlock(std::move(blockNodes), fun.funcBody->retType->ty);
     fun.funcBody->ty = TypeManager::GetNothingTy();
-    if(fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
+    if (fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
         fun.funcBody->parentClassLike = &mirror;
     }
     if (IsSynthetic(mirror)) {
@@ -676,8 +676,10 @@ void JavaDesugarManager::ReplaceCallsWithArrayJavaEntitySet(File& file)
 
         auto funcDecl = callExpr->resolvedFunction;
         if (!funcDecl || !funcDecl->outerDecl || !IsJArray(*funcDecl->outerDecl) ||
-            funcDecl->identifier != "[]" || callExpr->args.size() != 2
+            funcDecl->identifier != "[]" || callExpr->args.size() != 2 // index and value
         ) {
+            // Only calls to correct array "set" should be desugared.
+            // For example, do not desugar if arguments count is wrong (in case difference from index and value)
             return VisitAction::WALK_CHILDREN;
         }
 

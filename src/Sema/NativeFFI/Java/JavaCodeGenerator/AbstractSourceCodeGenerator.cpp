@@ -41,11 +41,4 @@ void AbstractSourceCodeGenerator::AddWithIndent(const std::string& indent, const
     res += s;
     res += "\n";
 }
-
-const std::string AbstractSourceCodeGenerator::TAB = "    ";
-const std::string AbstractSourceCodeGenerator::TAB2 =
-    AbstractSourceCodeGenerator::TAB + AbstractSourceCodeGenerator::TAB;
-const std::string AbstractSourceCodeGenerator::TAB3 =
-    AbstractSourceCodeGenerator::TAB2 + AbstractSourceCodeGenerator::TAB;
-
 } // namespace Cangjie::Interop

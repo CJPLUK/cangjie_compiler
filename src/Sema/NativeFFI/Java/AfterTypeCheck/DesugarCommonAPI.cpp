@@ -168,8 +168,8 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(
     CJC_ASSERT_WITH_MSG(!sampleMethod.funcBody->paramLists.empty(), "paramLists cannot be empty");
     for (auto& arg : sampleMethod.funcBody->paramLists[0]->params) {
         if (!FillMethodParamsByArg(params, methodCallArgs, sampleMethod, arg, jniEnvPtrParam,
-                GetGenericInstTy(genericConfig, arg->ty, typeManager))) {
-            return nullptr;
+            GetGenericInstTy(genericConfig, arg->ty, typeManager))) {
+                return nullptr;
         }
     }
     OwnedPtr<MemberAccess> methodAccess;
@@ -374,8 +374,8 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeInitCjObjectFunc(FuncDecl& ctor
         }
 
         if (!FillMethodParamsByArg(params, ctorCallArgs, ctor, arg, jniEnvPtrParam,
-                GetGenericInstTy(genericConfig, arg->ty, typeManager))) {
-            return nullptr;
+            GetGenericInstTy(genericConfig, arg->ty, typeManager))) {
+                return nullptr;
         }
     }
 

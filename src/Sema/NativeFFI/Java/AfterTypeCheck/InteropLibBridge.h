@@ -419,7 +419,8 @@ public:
     /**
      * JavaObjectController<T>(javaEntity, className)
      */
-    OwnedPtr<CallExpr> CreateJavaObjectControllerCall(OwnedPtr<Expr> javaEntity, OwnedPtr<Expr> className, ClassDecl& classDecl);
+    OwnedPtr<CallExpr> CreateJavaObjectControllerCall(OwnedPtr<Expr> javaEntity, OwnedPtr<Expr> className,
+        ClassDecl& classDecl);
 
     /**
      * Java_CFFI_newJavaArray(env, signature, [args])
@@ -636,9 +637,12 @@ public:
         std::function<OwnedPtr<Expr>(TypeKind, Ptr<Ty>)> selector
     );
 
-    OwnedPtr<CallExpr> CreateGetJavaLambdaObjectCall(OwnedPtr<RefExpr> refExpr, std::string classSign, Ptr<File> curFile);
-    OwnedPtr<CallExpr> CreateGetJavaLambdaEntityCall(OwnedPtr<RefExpr> refExpr, std::string classSign, Ptr<File> curFile);
-    OwnedPtr<CallExpr> CreateGetJavaLambdaCall(Ptr<FuncDecl> fd, OwnedPtr<RefExpr> refExpr, std::string classSign, Ptr<File> curFile);
+    OwnedPtr<CallExpr> CreateGetJavaLambdaObjectCall(OwnedPtr<RefExpr> refExpr, std::string classSign,
+        Ptr<File> curFile);
+    OwnedPtr<CallExpr> CreateGetJavaLambdaEntityCall(OwnedPtr<RefExpr> refExpr, std::string classSign,
+        Ptr<File> curFile);
+    OwnedPtr<CallExpr> CreateGetJavaLambdaCall(Ptr<FuncDecl> fd, OwnedPtr<RefExpr> refExpr, std::string classSign,
+        Ptr<File> curFile);
 
     bool IsInteropLibAccessible() const;
     void CheckInteropLibVersion();

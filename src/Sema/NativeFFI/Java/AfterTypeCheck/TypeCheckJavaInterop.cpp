@@ -33,7 +33,7 @@ enum class Position { OUT, IN, BOTH };
 /*
  * Checks if [ty] is direct or indirect child of @JavaMirror-annotated decl.
  */
-inline bool IsJavaMirrorSubtype(const Ty& ty)
+bool IsJavaMirrorSubtype(const Ty& ty)
 {
     if (auto classTy = DynamicCast<ClassTy*>(&ty);
         classTy && classTy->GetSuperClassTy() && !classTy->GetSuperClassTy()->IsObject()) {
@@ -82,7 +82,7 @@ struct JavaInteropTypeChecker {
      * - Some built-in supported types
      * - String type in return position in Mirror class
      */
-    inline bool IsSupported(const Ty& ty, Position pos)
+    bool IsSupported(const Ty& ty, Position pos)
     {
         auto areJavaMirrorTypes = [this](const std::vector<Ptr<Ty>>& typeArgs, Position pos) {
             return std::all_of(
@@ -138,7 +138,7 @@ struct JavaInteropTypeChecker {
      * supported built-in type
      * direct or indirect successor of @JavaMirror-annotated decl (with already enabled JAVA_MIRROR_SUBTYPE attribute)
      */
-    inline bool IsJavaCompatible(const Ty& ty, Position pos = Position::BOTH)
+    bool IsJavaCompatible(const Ty& ty, Position pos = Position::BOTH)
     {
         if (IsSupported(ty, pos)) {
             if (auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
@@ -158,7 +158,7 @@ struct JavaInteropTypeChecker {
         return false;
     }
 
-    inline void CheckJavaCompatibleParamTypes(FuncDecl& fdecl, DiagKindRefactor errkind)
+    void CheckJavaCompatibleParamTypes(FuncDecl& fdecl, DiagKindRefactor errkind)
     {
         if (!fdecl.funcBody) {
             return;
@@ -176,7 +176,7 @@ struct JavaInteropTypeChecker {
         }
     }
 
-    inline void CheckJavaMirrorMethodTypes(FuncDecl& fd)
+    void CheckJavaMirrorMethodTypes(FuncDecl& fd)
     {
         if (fd.funcBody && fd.funcBody->retType && !IsJavaCompatible(*fd.funcBody->retType->ty, Position::OUT) &&
             (!IsJArray(*fd.outerDecl) || !fd.funcBody->retType->ty->IsGeneric())) {
@@ -200,7 +200,7 @@ struct JavaInteropTypeChecker {
         CheckJavaCompatibleParamTypes(ctor, DiagKindRefactor::sema_java_mirror_ctor_arg_must_be_java_mirror);
     }
 
-    inline void CheckJavaMirrorPropType(PropDecl& prop)
+    void CheckJavaMirrorPropType(PropDecl& prop)
     {
         if (!IsJavaCompatible(*prop.ty)) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_prop_must_be_java_mirror, *prop.type);
@@ -208,7 +208,7 @@ struct JavaInteropTypeChecker {
         }
     }
 
-    inline void CheckJavaCompatibleDeclSignature(ClassLikeDecl& decl)
+    void CheckJavaCompatibleDeclSignature(ClassLikeDecl& decl)
     {
         for (auto& member : decl.GetMemberDecls()) {
             switch (member->astKind) {
@@ -231,7 +231,7 @@ struct JavaInteropTypeChecker {
         }
     }
 
-    inline void CheckCJMappingMethodTypes(FuncDecl& fd)
+    void CheckCJMappingMethodTypes(FuncDecl& fd)
     {
         if (fd.funcBody && fd.funcBody->retType &&
             (fd.funcBody->retType->ty->IsCoreOptionType() ||
@@ -252,7 +252,7 @@ struct JavaInteropTypeChecker {
         CheckCJMappingCompatibleParamTypes(fd);
     }
 
-    inline void CheckCJMappingCompatibleParamTypes(FuncDecl& fdecl)
+    void CheckCJMappingCompatibleParamTypes(FuncDecl& fdecl)
     {
         if (!fdecl.funcBody) {
             return;

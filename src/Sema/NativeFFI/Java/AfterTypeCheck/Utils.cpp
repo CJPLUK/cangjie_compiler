@@ -499,7 +499,8 @@ DestructedJavaClassName DestructJavaClassName(const ClassLikeDecl& decl)
     if (ind == std::string::npos) {
         return {.packageName = std::nullopt,
             .topLevelClassName = parts[0],
-            .fullClassName = StringJoin(parts.begin(), parts.end(), ".")};
+            .fullClassName = StringJoin(parts.begin(), parts.end(), ".")
+        };
     }
     auto package = parts[0].substr(0, ind);
     parts[0] = parts[0].substr(ind + 1);
@@ -519,8 +520,10 @@ ArrayOperationKind GetArrayOperationKind(Decl& decl)
     if (auto funcDecl = As<ASTKind::FUNC_DECL>(&decl); funcDecl && funcDecl->identifier == "[]") {
         auto paramsNumber = funcDecl->funcBody->paramLists[0]->params.size();
         if (paramsNumber == 1) {
+            // Array "get" has one parameter: index.
             return ArrayOperationKind::GET;
         } else if (paramsNumber == 2) {
+            // Array "set" has two parameters: index and value to be set.
             return ArrayOperationKind::SET;
         }
     }
@@ -548,7 +551,8 @@ std::string GetJavaPackage(const Decl& decl)
             continue;
         }
 
-        CJC_ASSERT(anno->args.size() < 2);
+        // @JavaMirror or @JavaImpl annotations could accept optional string literal argument with fully-qualified name.
+        CJC_ASSERT(anno->args.size() < 2 && "@JavaMirror or @JavaImpl could accept maximum one argument");
         if (anno->args.empty()) {
             break;
         }
@@ -574,7 +578,7 @@ void MangleJNIName(std::string& name)
     size_t start_pos = 0;
     while ((start_pos = name.find("_", start_pos)) != std::string::npos) {
         name.replace(start_pos, 1, "_1");
-        start_pos += 2;
+        start_pos += 2; // Continue after inserted "_1" substring (2 characters).
     }
 
     std::replace(name.begin(), name.end(), '.', '_');
@@ -815,8 +819,8 @@ bool IsCJMapping(const Ty& ty)
     // currently only support struct type, enum type, class type.
     if (auto structTy = DynamicCast<StructTy*>(&ty)) {
         return structTy->decl && IsCJMapping(*structTy->decl);
-    } 
-    
+    }
+
     if (auto enumTy = DynamicCast<EnumTy*>(&ty)) {
         return enumTy->decl && IsCJMapping(*enumTy->decl);
     }
@@ -852,16 +856,18 @@ const Ptr<ClassDecl> GetSyntheticClass(const ImportManager& importManager, const
 std::string ReplaceClassName(std::string& classTypeSignature, std::string newSegment)
 {
     bool hasSemicolon = (!classTypeSignature.empty() && classTypeSignature.back() == ';');
-    
-    std::string base = hasSemicolon ? classTypeSignature.substr(0, classTypeSignature.length() - 1) : classTypeSignature;
-    
+
+    std::string base = hasSemicolon
+        ? classTypeSignature.substr(0, classTypeSignature.length() - 1)
+        : classTypeSignature;
+
     size_t lastSlash = classTypeSignature.rfind('/');
     if (lastSlash != std::string::npos) {
         base = base.substr(0, lastSlash + 1) + newSegment;
     } else {
         base = newSegment;
     }
-    
+
     return hasSemicolon ? base + ";" : base;
 }
 

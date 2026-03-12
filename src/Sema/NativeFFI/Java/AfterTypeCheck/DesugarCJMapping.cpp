@@ -61,10 +61,10 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateCJMappingNativeDetachCjObjectFunc(Cla
     FuncParam* jniEnvPtrParam = nullptr;
     OwnedPtr<Expr> selfParamRef;
     GenerateFuncParamsForNativeDeleteCjObject(fwdDecl, params, jniEnvPtrParam, selfParamRef);
-    constexpr int SELF_REF_INDEX = 2;
-    constexpr int OBJ_REF_INDEX = 1;
+    constexpr int selfRefIndex = 2;
+    constexpr int objRefIndex = 1;
     OwnedPtr<Expr> envParamRef = WithinFile(CreateRefExpr(*jniEnvPtrParam), fwdDecl.curFile);
-    OwnedPtr<Expr> objParamRef = WithinFile(CreateRefExpr(*params[OBJ_REF_INDEX]), fwdDecl.curFile);
+    OwnedPtr<Expr> objParamRef = WithinFile(CreateRefExpr(*params[objRefIndex]), fwdDecl.curFile);
 
     auto javaEntityCall = lib.CreateJavaEntityJobjectCall(std::move(objParamRef));
     auto reg = lib.CreateGetFromRegistryCall(std::move(envParamRef), std::move(selfParamRef), fwdDecl.ty);
@@ -75,9 +75,9 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateCJMappingNativeDetachCjObjectFunc(Cla
     auto funcAccess = CreateMemberAccess(std::move(varAccess), *detachCjObjectFd);
 
     std::vector<OwnedPtr<FuncArg>> args;
-    OwnedPtr<Expr> selfParamRefTmp = WithinFile(CreateRefExpr(*params[SELF_REF_INDEX]), fwdDecl.curFile);
+    OwnedPtr<Expr> selfParamRefTmp = WithinFile(CreateRefExpr(*params[selfRefIndex]), fwdDecl.curFile);
     OwnedPtr<Expr> envParamRefTmp = WithinFile(CreateRefExpr(*jniEnvPtrParam), fwdDecl.curFile);
-    OwnedPtr<Expr> objParamRefTmp = WithinFile(CreateRefExpr(*params[OBJ_REF_INDEX]), fwdDecl.curFile);
+    OwnedPtr<Expr> objParamRefTmp = WithinFile(CreateRefExpr(*params[objRefIndex]), fwdDecl.curFile);
     args.push_back(CreateFuncArg(std::move(envParamRefTmp)));
     args.push_back(CreateFuncArg(std::move(objParamRefTmp)));
     args.push_back(CreateFuncArg(std::move(selfParamRefTmp)));
