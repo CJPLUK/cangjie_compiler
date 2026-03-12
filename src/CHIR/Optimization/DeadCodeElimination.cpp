@@ -101,16 +101,6 @@ std::string GetFuncIdent(const Func& func)
     return func.GetSrcCodeIdentifier();
 }
 
-bool ShouldSkipUselessFuncElimination(const Package& package, const Cangjie::GlobalOptions& opts)
-{
-    if (opts.optimizationLevel < Cangjie::GlobalOptions::OptimizationLevel::O2 || 
-        opts.enableCoverage || opts.enIncrementalCompilation ||
-        package.GetName() == Cangjie::REFLECT_PACKAGE_NAME) {
-        return true;
-    }
-    return false;
-}
-
 void ClearRemovedFuncParamDftValHostFunc(Package& package)
 {
     for (auto func : package.GetGlobalFuncs()) {
@@ -179,9 +169,6 @@ std::string DeadCodeElimination::GetLiteralFromExprKind(const ExprKind& kind) co
 
 void DeadCodeElimination::UselessFuncElimination(Package& package, const GlobalOptions& opts)
 {
-    if (ShouldSkipUselessFuncElimination(package, opts)) {
-        return;
-    }
     auto allFuncs = package.GetGlobalFuncs();
     auto usingReflectPackage = ReflectPackageIsUsed(curPkg);
     std::vector<Func*> funcsToBeRemoved;

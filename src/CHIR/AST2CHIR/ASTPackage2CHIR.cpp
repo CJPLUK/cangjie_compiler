@@ -1034,50 +1034,41 @@ static void SetCustomTypeDefAttr(CustomTypeDef& def, const AST::Decl& decl)
 void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
 {
     CJC_ASSERT(decl.IsNominalDecl());
-    CustomTypeDef* customTypeDef = nullptr;
     auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), decl.begin, decl.end);
     auto& identifier = decl.identifier.Val();
     auto& mangledName = decl.mangledName;
     auto& pkgName = decl.genericDecl ? decl.genericDecl->fullPackageName : decl.fullPackageName;
     AST::Decl* uniqueDecl = nullptr;
+    CustomTypeDef* customTypeDef = TryGetDeserialized<CustomTypeDef>(decl);
+    if (customTypeDef != nullptr) {
+        customTypeDef->SetDebugLocation(loc);
+    }
     switch (decl.astKind) {
         case AST::ASTKind::CLASS_DECL:
         case AST::ASTKind::INTERFACE_DECL:
-            customTypeDef = TryGetDeserialized<ClassDef>(decl);
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateClass(
                     loc, identifier, mangledName, pkgName, decl.astKind == AST::ASTKind::CLASS_DECL, isImported);
-            } else {
-                customTypeDef->SetDebugLocation(loc);
             }
             uniqueDecl = StaticCast<AST::ClassLikeTy*>(decl.ty)->commonDecl;
             break;
         case AST::ASTKind::STRUCT_DECL:
-            customTypeDef = TryGetDeserialized<StructDef>(decl);
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateStruct(loc, identifier, mangledName, pkgName, isImported);
-            } else {
-                customTypeDef->SetDebugLocation(loc);
             }
             uniqueDecl = StaticCast<AST::StructTy*>(decl.ty)->decl;
             break;
         case AST::ASTKind::ENUM_DECL:
-            customTypeDef = TryGetDeserialized<EnumDef>(decl);
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateEnum(
                     loc, identifier, mangledName, pkgName, isImported, StaticCast<AST::EnumDecl>(decl).hasEllipsis);
-            } else {
-                customTypeDef->SetDebugLocation(loc);
             }
             uniqueDecl = StaticCast<AST::EnumTy*>(decl.ty)->decl;
             break;
         case AST::ASTKind::EXTEND_DECL: {
-            customTypeDef = TryGetDeserialized<ExtendDef>(decl);
             if (customTypeDef == nullptr) {
                 auto gts = GetGenericParamType(decl, chirType);
                 customTypeDef = builder.CreateExtend(loc, mangledName, pkgName, isImported, gts);
-            } else {
-                customTypeDef->SetDebugLocation(loc);
             }
             break;
         }
