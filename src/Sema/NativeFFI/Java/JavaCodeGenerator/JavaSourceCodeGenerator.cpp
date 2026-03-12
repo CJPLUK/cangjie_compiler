@@ -26,6 +26,7 @@ using TokenKind = Cangjie::TokenKind;
 
 constexpr auto JAVA_PACKAGE = "package";
 constexpr auto JAVA_PUBLIC = "public";
+constexpr auto JAVA_PROTECTED = "protected";
 constexpr auto JAVA_PRIVATE = "private";
 constexpr auto JAVA_DEFAULT = "default";
 constexpr auto JAVA_NATIVE = "native";
@@ -676,6 +677,9 @@ std::string JavaSourceCodeGenerator::GenerateConstructorDecl(const FuncDecl& fun
     if (!isForCangjie && func.TestAttr(Attribute::PUBLIC)) {
         declaration += JAVA_PUBLIC;
         declaration += JAVA_WHITESPACE;
+    } else if (!isForCangjie && func.TestAttr(Attribute::PROTECTED)) {
+        declaration += JAVA_PROTECTED;
+        declaration += JAVA_WHITESPACE;
     } else if (isForCangjie) {
         declaration += JAVA_PRIVATE;
         declaration += JAVA_WHITESPACE;
@@ -898,7 +902,7 @@ void JavaSourceCodeGenerator::AddConstructors()
         if (!fd || fd->TestAttr(Attribute::PRIVATE) || !fd->TestAttr(Attribute::CONSTRUCTOR)) {
             continue;
         }
-        if (IsCJMapping(*decl) && !fd->TestAttr(Attribute::PUBLIC)) {
+        if (IsCJMapping(*decl) && !fd->TestAttr(Attribute::PUBLIC) && !fd->TestAttr(Attribute::PROTECTED)) {
             continue;
         }
         const auto& funcDecl = *fd;
@@ -1229,12 +1233,13 @@ void JavaSourceCodeGenerator::AddNativeInitCJObject(
 {
     auto name = GetMangledJniInitCjObjectFuncName(mangler, params, false);
     auto strParams = GenerateFuncParams(params, true);
+    auto modifier = GetMethodModifier(&fd);
 
     if (IsCJMappingOpenClass(fd)) {
         strParams = strParams.empty() ? "long overrideMask" : "long overrideMask, " + strParams;
     }
 
-    std::string signature = "public native long " + name + "(" + strParams + ");\n";
+    std::string signature = modifier + "native long " + name + "(" + strParams + ");\n";
     AddWithIndent(TAB, signature);
 }
 
