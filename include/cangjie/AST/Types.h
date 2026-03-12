@@ -293,6 +293,13 @@ struct Ty {
      * U: Sema.
      */
     bool HasPlaceholder() const;
+    /** Return whether a ty has alias ty.
+     * U: ImportManager.
+     */
+    bool HasAliasTy() const;
+    /** Return the upper bound of a primitive type.
+     * U: Sema.
+     */
     static Ptr<Ty> GetPrimitiveUpperBound(Ptr<Ty> ty);
     /** Return whether two tys has the same typeArgs number.
      * U: Sema.

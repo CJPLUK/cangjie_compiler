@@ -374,9 +374,12 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
         loader->LoadRefs();
     }
 
-    // Node's ty may reference TypeAliasTy from imported package, need to substitute them to real type.
-    // It must be done after all type references are loaded.
-    impl->SubstituteImportedTypeAliasTy(packages);
+    // For LSP, packages are only used to indexing, so no need to substitute TypeAliasTy.
+    if (!fromLsp) {
+        // Node's ty may reference TypeAliasTy from imported package, need to substitute them to real type.
+        // It must be done after all type references are loaded.
+        impl->SubstituteImportedTypeAliasTy(packages);
+    }
 }
 
 void CjoManager::LoadAllDeclsAndRefs() const
@@ -396,19 +399,30 @@ void CjoManager::LoadAllDeclsAndRefs() const
     }
 }
 
-void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package>>& srcPackages)
+void CjoManagerImpl::ReplaceTypeAliasInNode(Ptr<Node> node)
 {
     auto replaceAliasUseTy = [this](Ptr<Node> node) {
         if (node->astKind == ASTKind::TYPE_ALIAS_DECL) {
             return VisitAction::WALK_CHILDREN;
         }
-        if (node->IsDecl() || Is<FuncBody>(node)) {
-            node->ty = typeManager.SubstituteTypeAliasInTy(*node->ty);
-        } else if (auto type = DynamicCast<Type>(node); type && !Ty::IsInitialTy(type->aliasTy)) {
-            type->ty = typeManager.SubstituteTypeAliasInTy(*type->ty);
+        if (!Ty::IsTyCorrect(node->ty) || !node->ty->HasAliasTy()) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        Ptr<Ty> key = node->ty;
+        auto cacheIt = typeAliasCache.find(key);
+        if (cacheIt != typeAliasCache.end()) {
+            node->ty = cacheIt->second;
+        } else {
+            node->ty = typeManager.SubstituteTypeAliasInTy(*key);
+            typeAliasCache.emplace(key, node->ty);
         }
         return VisitAction::WALK_CHILDREN;
     };
+    Walker(node, replaceAliasUseTy).Walk();
+}
+
+void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package>>& srcPackages)
+{
     for (auto& pkgName2PkgInfo : GetPackageNameMap()) {
         // For cjlint tool could have more than one src-package.
         bool isSrcPackage = Utils::In(srcPackages,
@@ -422,9 +436,10 @@ void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package
             if (isSrcPackage && !file->TestAttr(Attribute::FROM_COMMON_PART)) {
                 continue;
             }
-            Walker(file.get(), replaceAliasUseTy).Walk();
+            ReplaceTypeAliasInNode(file.get());
         }
     }
+    typeAliasCache.clear();
 }
 
 std::vector<OwnedPtr<ASTLoader>>& CjoManagerImpl::GetCommonPartCjos(
@@ -469,7 +484,11 @@ std::unordered_set<std::string> CjoManager::LoadCachedPackage(const AST::Package
     if (loader == nullptr) {
         return {};
     }
-    return loader->LoadCachedTypeForPackage(pkg, mangledName2DeclMap);
+    auto ret = loader->LoadCachedTypeForPackage(pkg, mangledName2DeclMap);
+    for (auto& file : pkg.files) {
+        impl->ReplaceTypeAliasInNode(file.get());
+    }
+    return ret;
 }
 
 void CjoManager::AddSourcePackage(AST::Package& pkg) const
