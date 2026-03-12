@@ -1203,7 +1203,6 @@ bool ToCHIR::Run()
         UpdateEffectMapToString(effectMap, strEffectMap);
     }
 
-    UpdatePosOfMacroExpandNode();
     EraseDebugExpr();
     CFFIFuncWrapper();
     RecordCHIRExprNum("CHIR stage");
@@ -1219,52 +1218,6 @@ bool ToCHIR::Run()
         CHIRSerializer::Serialize(*chirPkg, tempFileInfo.filePath, Phase::OPT);
     }
     return true;
-}
-
-namespace {
-Cangjie::Position ConvertCHIRPos2ASTPos(unsigned int fileId, const Position& pos)
-{
-    return Cangjie::Position{fileId, static_cast<int>(pos.line), static_cast<int>(pos.column)};
-}
-Position ConvertASTPos2CHIRPos(const Cangjie::Position& pos)
-{
-    return Position{static_cast<unsigned int>(pos.line), static_cast<unsigned int>(pos.column)};
-}
-} // namespace
-
-void ToCHIR::UpdatePosOfMacroExpandNode()
-{
-    if (!opts.enableCompileDebug && !opts.displayLineInfo) {
-        return;
-    }
-    Utils::ProfileRecorder recorder("CHIR", "UpdatePosOfMacroExpandNode");
-    for (auto& func : chirPkg->GetGlobalFuncs()) {
-        bool isCommonFunctionWithoutBody = func->TestAttr(Attribute::SKIP_ANALYSIS);
-        if (isCommonFunctionWithoutBody) {
-            continue; // Nothing to visit
-        }
-        Visitor::Visit(*func, [this](Expression& expression) {
-            auto& pos = expression.GetDebugLocation();
-            if (pos.IsInvalidMacroPos()) {
-                return VisitResult::CONTINUE;
-            }
-            auto begin = ConvertCHIRPos2ASTPos(pos.GetFileID(), pos.GetBeginPos());
-            auto key = static_cast<uint64_t>(begin.Hash64());
-            const auto it = std::as_const(diag.posRange2MacroCallMap).lower_bound(key);
-            if (it == diag.posRange2MacroCallMap.cend()) {
-                // means this expression is not from macro expanded ast node.
-                return VisitResult::CONTINUE;
-            }
-            if (auto macrocall = it->second; macrocall) {
-                auto modifiedPos = pos;
-                modifiedPos.SetBeginPos(ConvertASTPos2CHIRPos(macrocall->GetDebugPos(begin)));
-                auto end = ConvertCHIRPos2ASTPos(pos.GetFileID(), pos.GetEndPos());
-                modifiedPos.SetEndPos(ConvertASTPos2CHIRPos(macrocall->GetDebugPos(end)));
-                expression.SetDebugLocation(modifiedPos);
-            }
-            return VisitResult::CONTINUE;
-        });
-    }
 }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND

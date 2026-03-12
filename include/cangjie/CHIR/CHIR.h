@@ -163,7 +163,6 @@ private:
     DevirtualizationInfo CollectDevirtualizationInfo();
     bool RunConstantEvaluation();
     bool RunIRChecker(const Phase& phase);
-    void UpdatePosOfMacroExpandNode();
     void RecordCodeInfoAtTheBegin();
     void RecordCodeInfoAtTheEnd();
     void RecordCHIRExprNum(const std::string& suffix);
