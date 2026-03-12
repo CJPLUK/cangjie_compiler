@@ -181,8 +181,21 @@ void MinGW_CJNATIVE::HandleLibrarySearchPaths(Tool& tool, const std::string& can
 
 void MinGW_CJNATIVE::GenerateLinkOptions(Tool& tool)
 {
-    tool.AppendArg("-l:libcangjie-runtime.dll");
-    tool.AppendArg("-lclang_rt-builtins");
+    if (driverOptions.linkStatic) {
+        tool.AppendArg("-l:libcangjie-runtime.a");
+        tool.AppendArg("-l:libcangjie-thread.a");
+        tool.AppendArg("-l:libboundscheck-static.a");
+        tool.AppendArg("-l:libc++.a");
+        tool.AppendArg("-lclang_rt-builtins");
+        tool.AppendArg("-lunwind");
+        tool.AppendArg("-lws2_32");
+        tool.AppendArg("-ldbghelp");
+        tool.AppendArg("-lshlwapi");
+    } else {
+        tool.AppendArg("-l:libcangjie-runtime.dll");
+        tool.AppendArg("-lclang_rt-builtins");
+        tool.AppendArg("-lboundscheck");
+    }
     tool.AppendArg(MINGW_CJNATIVE_LINK_OPTIONS);
 }
 

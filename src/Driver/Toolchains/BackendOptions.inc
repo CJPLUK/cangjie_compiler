@@ -36,7 +36,6 @@ CJNATIVE_STATIC_LINK_BASIC_OPTIONS("-lc")
 
 #ifdef CJNATIVE_WINDOWS_BASIC_OPTIONS
 #ifndef _MSC_VER
-CJNATIVE_WINDOWS_BASIC_OPTIONS("-lboundscheck")
 CJNATIVE_WINDOWS_BASIC_OPTIONS("-lm")
 // libssp is used when stack protector related options is on, such as -fstack-protector-all.
 // When linking statically, libssp_nonshared.a should be linked against first, then libssp.a.

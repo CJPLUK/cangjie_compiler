@@ -311,13 +311,27 @@ bool DriverOptions::CheckSanitizerRPath() const
 
 bool DriverOptions::CheckStaticOption()
 {
-    if (linkStatic && (target.os != Triple::OSType::LINUX || target.env == Triple::Environment::OHOS)) {
-        linkStatic = false;
-        Warningln("'--static' option has only effect on Linux targets.");
+    if ((target.os == Triple::OSType::LINUX && target.env != Triple::Environment::OHOS)
+        || target.os == Triple::OSType::DARWIN
+        || target.os == Triple::OSType::WINDOWS
+        || target.os == Triple::OSType::IOS) {
+        if (linkStatic && (outputMode != OutputMode::EXECUTABLE)) {
+            linkStatic = false;
+            DiagnosticEngine diag;
+            diag.DiagnoseRefactor(DiagKindRefactor::driver_warning_unusable_static, DEFAULT_POSITION);
+        }
+        if (linkStaticStd.has_value() && !linkStaticStd.value() && linkStatic) {
+            DiagnosticEngine diag;
+            diag.DiagnoseRefactor(DiagKindRefactor::driver_static_dystd_conflict, DEFAULT_POSITION);
+            return false;
+        }
+        return true;
     }
-    if (linkStatic && (outputMode != OutputMode::EXECUTABLE)) {
+    if (linkStatic) {
         linkStatic = false;
-        Warningln("'--static' option is only effective when compiling executables.");
+        std::string tripleString = target.ToFullTripleString();
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_warning_no_support_static, DEFAULT_POSITION, tripleString);
     }
     return true;
 }

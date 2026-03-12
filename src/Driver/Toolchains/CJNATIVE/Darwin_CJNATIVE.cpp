@@ -70,10 +70,17 @@ TempFileInfo Darwin_CJNATIVE::GenerateLinkingTool(const std::vector<TempFileInfo
 
 void Darwin_CJNATIVE::GenerateLinkOptions(Tool& tool)
 {
-    for (auto& option : DARWIN_CJNATIVE_LINK_OPTIONS) {
-        tool.AppendArg(option);
-    }
     auto cangjieLibPath =
         FileUtil::JoinPath(FileUtil::JoinPath(driver.cangjieHome, "lib"), driverOptions.GetCangjieLibTargetPathName());
+    if (driverOptions.linkStatic) {
+        tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libcangjie-runtime.a"));
+        tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libcangjie-thread.a"));
+        tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libboundscheck-static.a"));
+        tool.AppendArg("-lc++");
+    } else {
+        tool.AppendArg("-lcangjie-runtime");
+        tool.AppendArg("-lboundscheck");
+    }
+    tool.AppendArg("-lSystem");
     tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libclang_rt.osx.a"));
 }

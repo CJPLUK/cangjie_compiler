@@ -34,9 +34,10 @@ WARNING(driver_warning_not_object_file, DRIVER_ARG, "Not a .o file: '%s' ('%s').
 WARNING(driver_warning_argument_unused, DRIVER_ARG, "the arg '%s' may be unused")
 WARNING(driver_warning_path_close_to_length_limit, DRIVER_ARG, "the path length for %s is close to the system limit (%s characters). The compilation has a possibility to fail.")
 WARNING(driver_invalid_compile_target, DRIVER_ARG, "--compile-target only takes effect when --output-type=obj, this option will be ignored in other scenarios")
-
+WARNING(driver_warning_unusable_static, DRIVER_ARG, "'--static' option is only effective when compiling executables.")
 // warning of --static-std is not supported for ohos
 WARNING(driver_static_std_for_ohos, DRIVER_ARG, "Statically link packages of the std module is not supported for OHOS")
+WARNING(driver_warning_no_support_static, DRIVER_ARG, "'--static' option is not supported when targeting '%s'.")
 
 // driver & option errors
 ERROR(driver_require_package_directory, "expected one package path to build")
@@ -55,6 +56,7 @@ ERROR(driver_path_exceeds_length_limit, "the path length for %s exceeds the syst
 ERROR(driver_unsupported_target_cpu, "cpu type '%s' is not supported for the current target")
 ERROR(driver_require_chir_directory, "expected one chir path to build")
 ERROR(driver_require_experimental, "compilation with input object files is currently experimental and requires the --experimental flag to be enabled")
+ERROR(driver_static_dystd_conflict, "options --static and --dy-std are mutually exclusive")
 
 
 // condition compilation arg error and warnings
