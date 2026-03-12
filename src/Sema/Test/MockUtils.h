@@ -40,8 +40,10 @@ enum class AccessorKind : uint8_t {
 class MockUtils {
 public:
     explicit MockUtils(
-        ImportManager& importManager, TypeManager& typeManager, BaseMangler& mangler, GenericInstantiationManager* gim);
+        ImportManager& importManager, TypeManager& typeManager, BaseMangler& mangler);
     static bool IsMockAccessor(const AST::Decl& decl);
+
+    void LoadStdDecls();
 
     template <typename T> static OwnedPtr<T> CreateType(const Ptr<AST::Ty> ty)
     {
@@ -142,18 +144,17 @@ public:
 private:
     ImportManager& importManager;
     TypeManager& typeManager;
-    GenericInstantiationManager* gim {nullptr};
     BaseMangler& mangler;
 
     Ptr<AST::FuncDecl> getTypeForTypeParamDecl = nullptr;
     Ptr<AST::FuncDecl> isSubtypeTypesDecl = nullptr;
-    Ptr<AST::StructDecl> arrayDecl;
-    Ptr<AST::StructDecl> stringDecl;
-    Ptr<AST::EnumDecl> optionDecl;
-    Ptr<AST::InheritableDecl> toStringDecl;
-    Ptr<AST::ClassDecl> objectDecl;
-    Ptr<AST::FuncDecl> zeroValueDecl;
-    Ptr<AST::ClassDecl> exceptionClassDecl;
+    Ptr<AST::StructDecl> arrayDecl = nullptr;
+    Ptr<AST::StructDecl> stringDecl = nullptr;
+    Ptr<AST::EnumDecl> optionDecl = nullptr;
+    Ptr<AST::InheritableDecl> toStringDecl = nullptr;
+    Ptr<AST::ClassDecl> objectDecl = nullptr;
+    Ptr<AST::FuncDecl> zeroValueDecl = nullptr;
+    Ptr<AST::ClassDecl> exceptionClassDecl = nullptr;
 
     static bool IsMockAccessorRequired(const AST::Decl& decl);
     static AccessorKind ComputeAccessorKind(const AST::FuncDecl& accessorDecl);
@@ -202,9 +203,6 @@ private:
 
         return decl;
     }
-
-    // Type instantiation helpers
-    std::optional<std::unordered_set<Ptr<AST::Decl>>> TryGetInstantiatedDecls(AST::Decl& decl) const;
 
     /**
      * Extracts outer decl if it's class/interfacr/struct decl

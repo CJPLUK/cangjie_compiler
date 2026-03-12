@@ -125,30 +125,28 @@ bool IsDeclAccessible(const Package& currentPackage, const Decl& decl)
 MockManager::MockManager(ImportManager& importManager, TypeManager& typeManager, const Ptr<MockUtils> mockUtils)
     : typeManager(typeManager),
       importManager(importManager),
-      mockUtils(mockUtils),
-
-      // Core used declarations
-      objectDecl(importManager.GetCoreDecl<ClassDecl>(OBJECT_NAME)),
-
-      // Mocking specific used declarations
-      callHandlerDecl(GetDeclFromMockPackage<InterfaceDecl>(importManager, CALL_HANDLER_INTERFACE_NAME)),
-      mockedInterfaceDecl(GetDeclFromMockPackage<InterfaceDecl>(importManager, MOCKED_INTERFACE_NAME)),
-      parameterInfoDecl(GetDeclFromMockPackage<StructDecl>(importManager, PARAMETER_INFO_STRUCT_NAME)),
-      declIdDecl(GetDeclFromMockPackage<StructDecl>(importManager, DECL_ID_STRUCT_NAME)),
-      funcInfoDecl(GetDeclFromMockPackage<StructDecl>(importManager, FUNC_INFO_STRUCT_NAME)),
-      callDecl(GetDeclFromMockPackage<StructDecl>(importManager, CALL_STRUCT_NAME)),
-      onCallEnumDecl(GetDeclFromMockPackage<EnumDecl>(importManager, ON_CALL_ENUM_NAME)),
-      declKindEnumDecl(GetDeclFromMockPackage<EnumDecl>(importManager, DECL_KIND_ENUM_NAME)),
-      hasDefaultValueForStubDecl(
-        GetDeclFromMockPackage<InterfaceDecl>(importManager, HAS_DEFAULT_VALUE_FOR_STUB_INTERFACE_NAME)),
-      noDefaultValueForMockException(
-        GetDeclFromMockPackage<ClassDecl>(importManager, NO_DEFAULT_VALUE_FOR_MOCK_EXCEPTION_NAME)),
-      mockReturnValueTypeMismatchException(
-        GetDeclFromMockPackage<ClassDecl>(importManager, MOCK_RETURN_VALUE_TYPE_MISMATCH_EXCEPTION_NAME)),
-      requireMockObject(
-        GetDeclFromMockPackage<FuncDecl>(importManager, REQUIRE_MOCK_OBJ_NAME)),
-      mockZeroValueDecl(GetDeclFromMockPackage<StructDecl>(importManager, MOCK_ZERO_VALUE_NAME))
+      mockUtils(mockUtils)
 {}
+
+void MockManager::LoadMockLibDecls()
+{
+    callHandlerDecl = GetDeclFromMockPackage<InterfaceDecl>(importManager, CALL_HANDLER_INTERFACE_NAME);
+    mockedInterfaceDecl = GetDeclFromMockPackage<InterfaceDecl>(importManager, MOCKED_INTERFACE_NAME);
+    parameterInfoDecl = GetDeclFromMockPackage<StructDecl>(importManager, PARAMETER_INFO_STRUCT_NAME);
+    declIdDecl = GetDeclFromMockPackage<StructDecl>(importManager, DECL_ID_STRUCT_NAME);
+    funcInfoDecl = GetDeclFromMockPackage<StructDecl>(importManager, FUNC_INFO_STRUCT_NAME);
+    callDecl = GetDeclFromMockPackage<StructDecl>(importManager, CALL_STRUCT_NAME);
+    onCallEnumDecl = GetDeclFromMockPackage<EnumDecl>(importManager, ON_CALL_ENUM_NAME);
+    declKindEnumDecl = GetDeclFromMockPackage<EnumDecl>(importManager, DECL_KIND_ENUM_NAME);
+    hasDefaultValueForStubDecl =
+        GetDeclFromMockPackage<InterfaceDecl>(importManager, HAS_DEFAULT_VALUE_FOR_STUB_INTERFACE_NAME);
+    noDefaultValueForMockException =
+        GetDeclFromMockPackage<ClassDecl>(importManager, NO_DEFAULT_VALUE_FOR_MOCK_EXCEPTION_NAME);
+    mockReturnValueTypeMismatchException =
+        GetDeclFromMockPackage<ClassDecl>(importManager, MOCK_RETURN_VALUE_TYPE_MISMATCH_EXCEPTION_NAME);
+    requireMockObject = GetDeclFromMockPackage<FuncDecl>(importManager, REQUIRE_MOCK_OBJ_NAME);
+    mockZeroValueDecl = GetDeclFromMockPackage<StructDecl>(importManager, MOCK_ZERO_VALUE_NAME);
+}
 
 bool MockManager::IsMockClass(const Decl& decl)
 {
@@ -163,8 +161,8 @@ void MockManager::AddObjectSuperTypeIfNeeded(
     }
     auto objectRef = MakeOwned<RefType>();
     objectRef->ref.identifier = OBJECT_NAME;
-    objectRef->ref.target = objectDecl;
-    objectRef->ty = objectDecl->ty;
+    objectRef->ref.target = mockUtils->objectDecl;
+    objectRef->ty = mockUtils->objectDecl->ty;
     mockedDecl.inheritedTypes.insert(mockedDecl.inheritedTypes.begin(), std::move(objectRef));
 }
 
@@ -1051,12 +1049,12 @@ OwnedPtr<CallExpr> MockManager::CreateCallInfo(
     OwnedPtr<RefExpr> objRef)
 {
     OwnedPtr<Expr> instanceExpr;
-    auto optionObjectTy = typeManager.GetEnumTy(*mockUtils->optionDecl, { objectDecl->ty });
+    auto optionObjectTy = typeManager.GetEnumTy(*mockUtils->optionDecl, {mockUtils->objectDecl->ty});
     if (objRef) {
         auto someInstanceDecl = Sema::Desugar::AfterTypeCheck::LookupEnumMember(
             mockUtils->optionDecl, OPTION_VALUE_CTOR);
         auto someInstanceRef = CreateRefExpr(*someInstanceDecl);
-        someInstanceRef->ty = typeManager.GetFunctionTy({objectDecl->ty}, optionObjectTy);
+        someInstanceRef->ty = typeManager.GetFunctionTy({mockUtils->objectDecl->ty}, optionObjectTy);
 
         std::vector<OwnedPtr<FuncArg>> someInstancCallArgs {};
         someInstancCallArgs.emplace_back(CreateFuncArg(std::move(objRef)));

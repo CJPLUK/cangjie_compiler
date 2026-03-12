@@ -71,6 +71,16 @@ TestManager::TestManager(
       mockCompatible(mockCompatibleIfNeeded || mockMode == MockMode::ON),
       exportForTest(compilationOptions.exportForTest)
 {
+    if (!mockCompatible) {
+        return;
+    }
+
+    mockUtils = new MockUtils(importManager, typeManager, ctx->mangler);
+    mockSupportManager = MakeOwned<MockSupportManager>(typeManager, mockUtils);
+
+    if (mockCompatible && testEnabled) {
+        mockManager = MakeOwned<MockManager>(importManager, typeManager, mockUtils);
+    }
 }
 
 void TestManager::ReportDoesntSupportMocking(
@@ -809,6 +819,14 @@ void TestManager::PrepareToMock(AST::Package& pkg)
         return;
     }
 
+    // FIXME: Load decls lazy
+    if (mockUtils) {
+        mockUtils->LoadStdDecls();
+    }
+    if (mockManager) {
+        mockManager->LoadMockLibDecls();
+    }
+
     if (mockMode == MockMode::ON || (mockCompatibleIfNeeded && IsThereMockUsage(pkg))) {
         ctx->PrepareManglerContext(&pkg);
 
@@ -827,20 +845,6 @@ void TestManager::PrepareToMock(AST::Package& pkg)
         CheckIfNoMockSupportDependencies(pkg);
     }
     HandleEnsurePreparedToMock(pkg);
-}
-
-void TestManager::Init(GenericInstantiationManager* instantiationManager)
-{
-    if (!mockCompatible) {
-        return;
-    }
-
-    mockUtils = new MockUtils(importManager, typeManager, ctx->mangler, instantiationManager);
-    mockSupportManager = MakeOwned<MockSupportManager>(typeManager, mockUtils);
-
-    if (mockCompatible && testEnabled) {
-        mockManager = MakeOwned<MockManager>(importManager, typeManager, mockUtils);
-    }
 }
 
 TestManager::~TestManager()

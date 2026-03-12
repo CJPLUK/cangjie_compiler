@@ -216,12 +216,6 @@ void MockSupportManager::PrepareDecls(DeclsToPrepare&& decls)
             generatedMockDecls.emplace_back(std::move(wrapperDecl));
         } else {
             PrepareStaticDecl(*decl);
-
-            if (auto instantiatedDecls = mockUtils->TryGetInstantiatedDecls(*decl)) {
-                for (auto& iDecl : *instantiatedDecls) {
-                    PrepareStaticDecl(*iDecl);
-                }
-            }
         }
     }
 }
@@ -761,11 +755,6 @@ void MockSupportManager::GenerateAccessors(Decl& decl)
             generatedMockDecls.emplace_back(GeneratePropAccessor(*propDecl));
         } else if (auto methodDecl = As<ASTKind::FUNC_DECL>(member.get()); methodDecl) {
             generatedMockDecls.emplace_back(GenerateFuncAccessor(*RawStaticCast<FuncDecl*>(methodDecl)));
-            if (auto instantiatedDecls = mockUtils->TryGetInstantiatedDecls(*methodDecl)) {
-                for (auto& instantiatedDecl : *instantiatedDecls) {
-                    generatedMockDecls.emplace_back(GenerateFuncAccessor(*RawStaticCast<FuncDecl*>(instantiatedDecl)));
-                }
-            }
         } else if (auto fieldDecl = As<ASTKind::VAR_DECL>(member.get()); fieldDecl) {
             GenerateVarDeclAccessors(*fieldDecl, AccessorKind::FIELD_GETTER, AccessorKind::FIELD_SETTER);
         }
@@ -1595,8 +1584,8 @@ Ptr<Expr> MockSupportManager::ReplaceMemberAccessWithAccessor(MemberAccess& memb
     }
 
     if (auto funcDecl = As<ASTKind::FUNC_DECL>(memberAccess.target); funcDecl && funcDecl->propDecl) {
-        auto propDeclToMock = As<ASTKind::PROP_DECL>(
-            mockUtils->FindAccessorForMemberAccess(baseTy, funcDecl->propDecl, AccessorKind::METHOD));
+        auto propDeclToMock = As<ASTKind::PROP_DECL>(mockUtils->FindAccessorForMemberAccess(
+            memberAccess.baseExpr->ty, funcDecl->propDecl, AccessorKind::METHOD));
         if (!propDeclToMock) {
             return nullptr;
         }

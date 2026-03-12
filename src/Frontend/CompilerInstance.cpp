@@ -594,7 +594,6 @@ bool CompilerInstance::PerformGenericInstantiation()
     if (gim == nullptr) {
         gim = new GenericInstantiationManager(*this);
         CJC_NULLPTR_CHECK(gim);
-        testManager->Init(gim);
     }
     if (!invocation.globalOptions.enIncrementalCompilation) {
         Utils::ProfileRecorder::Start("Generic Instantiation", "ResetGenericInstantiationStage");

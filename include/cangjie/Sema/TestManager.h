@@ -43,7 +43,6 @@ public:
     static bool IsDeclOpenToMock(const AST::Decl& decl);
     static bool IsDeclGeneratedForTest(const AST::Decl& decl);
     static bool IsMockAccessor(const AST::Decl& decl);
-    void Init(GenericInstantiationManager* instantiationManager);
     ~TestManager();
 
     void PrepareToMock(AST::Package& pkg);
@@ -58,9 +57,7 @@ private:
     MockMode mockMode;
     const bool mockCompatibleIfNeeded;
     const bool mockCompatible;
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     const bool exportForTest;
-#endif
     OwnedPtr<MockManager> mockManager {nullptr};
     OwnedPtr<MockSupportManager> mockSupportManager {nullptr};
     Ptr<MockUtils> mockUtils {nullptr};

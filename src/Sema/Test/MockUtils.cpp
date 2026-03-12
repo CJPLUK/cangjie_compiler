@@ -40,33 +40,26 @@ static constexpr std::string_view ZERO_VALUE_INTRINSIC_NAME = "zeroValue";
 
 } // namespace
 
-MockUtils::MockUtils(
-    ImportManager& importManager, TypeManager& typeManager, BaseMangler& mangler, GenericInstantiationManager* gim)
-    : importManager(importManager),
-      typeManager(typeManager),
-      gim(gim),
-      mangler(mangler),
-      arrayDecl(importManager.GetCoreDecl<StructDecl>(STD_LIB_ARRAY)),
-      stringDecl(importManager.GetCoreDecl<StructDecl>(STD_LIB_STRING)),
-      optionDecl(importManager.GetCoreDecl<EnumDecl>(STD_LIB_OPTION)),
-      toStringDecl(importManager.GetCoreDecl<InheritableDecl>(TOSTRING_NAME)),
-      objectDecl(importManager.GetCoreDecl<ClassDecl>(OBJECT_NAME)),
-      zeroValueDecl(importManager.GetCoreDecl<FuncDecl>(std::string(ZERO_VALUE_INTRINSIC_NAME))),
-      exceptionClassDecl(importManager.GetCoreDecl<ClassDecl>(CLASS_EXCEPTION))
-{}
+MockUtils::MockUtils(ImportManager& importManager, TypeManager& typeManager, BaseMangler& mangler)
+    : importManager(importManager), typeManager(typeManager), mangler(mangler)
+{
+}
+
+void MockUtils::LoadStdDecls()
+{
+    arrayDecl = importManager.GetCoreDecl<StructDecl>(STD_LIB_ARRAY);
+    stringDecl = importManager.GetCoreDecl<StructDecl>(STD_LIB_STRING);
+    optionDecl = importManager.GetCoreDecl<EnumDecl>(STD_LIB_OPTION);
+    toStringDecl = importManager.GetCoreDecl<InheritableDecl>(TOSTRING_NAME);
+    objectDecl = importManager.GetCoreDecl<ClassDecl>(OBJECT_NAME);
+    zeroValueDecl = importManager.GetCoreDecl<FuncDecl>(std::string(ZERO_VALUE_INTRINSIC_NAME));
+    exceptionClassDecl = importManager.GetCoreDecl<ClassDecl>(CLASS_EXCEPTION);
+}
 
 std::string MockUtils::mockAccessorSuffix = MOCKED_ACCESSOR_SUFFIX;
 std::string MockUtils::spyObjVarName = "spiedObjectRef";
 std::string MockUtils::spyCallMarkerVarName = "shouldReturnZeroForSpy";
 std::string MockUtils::defaultAccessorSuffix = "$Buddy";
-
-std::optional<std::unordered_set<Ptr<Decl>>> MockUtils::TryGetInstantiatedDecls(Decl& decl) const
-{
-    if (!decl.TestAttr(AST::Attribute::GENERIC) && !decl.ty->HasGeneric()) {
-        return std::nullopt;
-    }
-    return gim->impl->GetInstantiatedDecls(decl);
-}
 
 std::string MockUtils::Mangle(const Decl& decl) const
 {
