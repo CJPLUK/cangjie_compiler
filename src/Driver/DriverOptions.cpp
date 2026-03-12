@@ -317,7 +317,8 @@ bool DriverOptions::CheckStaticOption()
         || target.os == Triple::OSType::IOS) {
         if (linkStatic && (outputMode != OutputMode::EXECUTABLE)) {
             linkStatic = false;
-            Warningln("'--static' option is only effective when compiling executables.");
+            DiagnosticEngine diag;
+            diag.DiagnoseRefactor(DiagKindRefactor::driver_warning_unusable_static, DEFAULT_POSITION);
         }
         if (linkStaticStd.has_value() && !linkStaticStd.value() && linkStatic) {
             DiagnosticEngine diag;
@@ -329,7 +330,8 @@ bool DriverOptions::CheckStaticOption()
     if (linkStatic) {
         linkStatic = false;
         std::string tripleString = target.ToFullTripleString();
-        Warningln("'--static' option is not supported when targeting %s.\n", tripleString.c_str());
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_warning_no_support_static, DEFAULT_POSITION, tripleString);
     }
     
     return true;
