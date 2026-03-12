@@ -53,6 +53,7 @@ void CGContext::Clear()
     callBasesToInline.clear();
     callBasesToReplace.clear();
     debugLocOfRetExpr.clear();
+    virtualCallInfo4LICMMap.clear();
 #endif
 }
 
