@@ -22,18 +22,23 @@ using namespace Cangjie::AST;
 
 namespace {
 // Macro decl's param limit num.
-const static int8_t G_LIMITED_PARAM_NUM = 2;
+constexpr int8_t G_LIMITED_PARAM_NUM = 2;
 // Valid decl list after macro expand decl.
 const static std::vector<ASTKind> G_VALID_DECL_LIST = {ASTKind::FUNC_DECL, ASTKind::STRUCT_DECL, ASTKind::CLASS_DECL,
     ASTKind::MAIN_DECL, ASTKind::VAR_DECL, ASTKind::ENUM_DECL, ASTKind::INTERFACE_DECL, ASTKind::EXTEND_DECL,
     ASTKind::PROP_DECL, ASTKind::PRIMARY_CTOR_DECL, ASTKind::VAR_WITH_PATTERN_DECL, ASTKind::MACRO_EXPAND_DECL,
     ASTKind::FUNC_PARAM, ASTKind::MACRO_EXPAND_PARAM};
-// Info when parse macro invocation, included matched paren, diag info.
-const static std::unordered_map<TokenKind, TokenKind> G_PARSE_MACRO_INFO = {
-    {TokenKind::LPAREN, TokenKind::RPAREN},
-    {TokenKind::LSQUARE, TokenKind::RSQUARE},
-};
-// Exprs that connected By Comma.
+TokenKind LookupMatchingCloseBracket(TokenKind left)
+{
+    if (left == TokenKind::LPAREN) {
+        return TokenKind::RPAREN;
+    }
+    if (left == TokenKind::LSQUARE) {
+        return TokenKind::RSQUARE;
+    }
+    return TokenKind::ILLEGAL;
+}
+// Exprs connected by ','
 const static std::vector<ASTKind> G_EXPRS_CONNECTED_BY_COMMA_LIST = {
     ASTKind::ARRAY_LIT, ASTKind::TUPLE_LIT, ASTKind::FUNC_ARG};
 } // namespace
@@ -336,12 +341,11 @@ bool ParserImpl::ParseMacroCallTokens(
 
 bool ParserImpl::ParseMacroCallTokens(TokenKind left, std::vector<Token>& tokens)
 {
-    auto info = G_PARSE_MACRO_INFO.find(left);
+    auto right = LookupMatchingCloseBracket(left);
     auto lSquarePos = lookahead.Begin();
-    if (info == G_PARSE_MACRO_INFO.end()) {
+    if (right == TokenKind::ILLEGAL) {
         return false;
     }
-    auto right = info->second;
     auto isAttr = right == TokenKind::RSQUARE;
 
     if (!ParseMacroCallTokens(left, right, tokens, isAttr)) {

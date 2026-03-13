@@ -18,6 +18,56 @@
 
 namespace Cangjie {
 using namespace AST;
+
+// Diag identifier handler lookup - static member function defined in this file
+ParserImpl::DiagIdentifierHandler ParserImpl::LookupDiagExpectedIdentifierHandler(AST::ASTKind kind)
+{
+    switch (kind) {
+        case AST::ASTKind::ENUM_DECL:
+            return &ParserImpl::DiagExpectedIdentifierEnumDecl;
+        case AST::ASTKind::GENERIC:
+            return &ParserImpl::DiagExpectedIdentifierGeneric;
+        case AST::ASTKind::GENERIC_CONSTRAINT:
+            return &ParserImpl::DiagExpectedIdentifierGenericConstraint;
+        case AST::ASTKind::IMPORT_CONTENT:
+            return &ParserImpl::DiagExpectedIdentifierImportContent;
+        case AST::ASTKind::IMPORT_SPEC:
+            return &ParserImpl::DiagExpectedIdentifierImportSpec;
+        case AST::ASTKind::PACKAGE_SPEC:
+            return &ParserImpl::DiagExpectedIdentifierPackageSpec;
+        case AST::ASTKind::PROP_DECL:
+            return &ParserImpl::DiagExpectedIdentifierPropDecl;
+        case AST::ASTKind::REF_TYPE:
+            return &ParserImpl::DiagExpectedIdentifierRefType;
+        case AST::ASTKind::FUNC_PARAM:
+            return &ParserImpl::DiagExpectedIdentifierFuncParam;
+        case AST::ASTKind::QUALIFIED_TYPE:
+            return &ParserImpl::DiagExpectedIdentifierQualifiedType;
+        case AST::ASTKind::MEMBER_ACCESS:
+            return &ParserImpl::DiagExpectedIdentifierMemberAccess;
+        case AST::ASTKind::MACRO_DECL:
+            return &ParserImpl::DiagExpectedIdentifierMacroDecl;
+        case AST::ASTKind::FUNC_BODY:
+            return &ParserImpl::DiagExpectedIdentifierFuncBody;
+        case AST::ASTKind::FUNC_DECL:
+            return &ParserImpl::DiagExpectedIdentifierFuncDecl;
+        case AST::ASTKind::CLASS_DECL:
+            return &ParserImpl::DiagExpectedIdentifierClassDecl;
+        case AST::ASTKind::INTERFACE_DECL:
+            return &ParserImpl::DiagExpectedIdentifierInterfaceDecl;
+        case AST::ASTKind::STRUCT_DECL:
+            return &ParserImpl::DiagExpectedIdentifierStructDecl;
+        case AST::ASTKind::TYPE_ALIAS_DECL:
+            return &ParserImpl::DiagExpectedIdentifierTypeAliasDecl;
+        case AST::ASTKind::MACRO_EXPAND_DECL:
+            return &ParserImpl::DiagExpectedIdentifierMacroExpandDecl;
+        case AST::ASTKind::MACRO_EXPAND_EXPR:
+            return &ParserImpl::DiagExpectedIdentifierMacroExpandExpr;
+        default:
+            return nullptr;
+    }
+}
+
 static inline bool IsKeyWord(const Token& t)
 {
     return ((t.kind >= TokenKind::INT8 && t.kind < TokenKind::IDENTIFIER) && t.kind != TokenKind::DOLLAR &&
@@ -730,28 +780,42 @@ void ParserImpl::DiagInvalidLeftHandExpr(const Expr& expr, const Token& tok)
     builder.AddHint(expr);
 }
 
-const std::unordered_map<TokenKind, std::string_view> NONE_ASSO_OP = {
-    {TokenKind::ASSIGN, "assignment"}, // Means assignment category, including '=', '**=', '*=' etc.
-    {TokenKind::RANGEOP, "range"},     // '..', '..='.
-    {TokenKind::EQUAL, "equality"},    // '==', '!='.
-    {TokenKind::LT, "comparison"}      // '<', '<=', '>', 'is', 'as' etc.
+namespace {
+struct NoneAssoOpEntry {
+    TokenKind kind;
+    std::string_view name;
 };
+constexpr NoneAssoOpEntry NONE_ASSO_OPS[] = {
+    {TokenKind::ASSIGN, "assignment"},
+    {TokenKind::RANGEOP, "range"},
+    {TokenKind::EQUAL, "equality"},
+    {TokenKind::LT, "comparison"},
+};
+} // namespace
 
 bool ParserImpl::IsNoneAssociative(const Token& tok) const
 {
-    return std::any_of(NONE_ASSO_OP.begin(), NONE_ASSO_OP.end(),
-        [&tok, this](auto& kind) { return Precedence(kind.first) == Precedence(tok.kind); });
+    uint8_t prec = Precedence(tok.kind);
+    for (const auto& op : NONE_ASSO_OPS) {
+        if (Precedence(op.kind) == prec) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void ParserImpl::DiagNoneAssociativeOp(const Token& preT, const Token& tok)
 {
-    auto iter = std::find_if(NONE_ASSO_OP.begin(), NONE_ASSO_OP.end(),
-        [&tok, this](auto& asso) { return Precedence(tok.kind) == Precedence(asso.first); });
-    CJC_ASSERT(iter != NONE_ASSO_OP.end());
-
-    auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_chained_none_associative, tok, std::string{iter->second});
-    builder.AddHint(preT);
+    uint8_t prec = Precedence(tok.kind);
+    for (const auto& op : NONE_ASSO_OPS) {
+        if (Precedence(op.kind) == prec) {
+            auto builder =
+                ParseDiagnoseRefactor(DiagKindRefactor::parse_chained_none_associative, tok, std::string{op.name});
+            builder.AddHint(preT);
+            return;
+        }
+    }
+    CJC_ASSERT(false);
 }
 
 void ParserImpl::DiagInvalidInheritType(const Type& type)
@@ -1463,8 +1527,8 @@ void ParserImpl::DiagUnexpectedTypeIn(
 
 void ParserImpl::DiagExpectedIdentifierWithNode(Ptr<AST::Node> node)
 {
-    if (auto iter = diagExpectedIdentifierMap.find(node->astKind); iter != diagExpectedIdentifierMap.end()) {
-        iter->second(this, node);
+    if (auto handler = LookupDiagExpectedIdentifierHandler(node->astKind)) {
+        (this->*handler)(node);
     } else {
         auto range = MakeRange(lastToken.Begin(), lastToken.End());
         DiagExpectedIdentifier(range);

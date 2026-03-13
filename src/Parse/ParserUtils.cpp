@@ -16,8 +16,34 @@
 #include "cangjie/Utils/Unicode.h"
 
 namespace Cangjie {
-const static std::unordered_map<TokenKind, TokenKind> MATCHING_OPENING_BRACKET_OF{{TokenKind::RCURL, TokenKind::LCURL},
-    {TokenKind::RSQUARE, TokenKind::LSQUARE}, {TokenKind::RPAREN, TokenKind::LPAREN}};
+namespace {
+TokenKind LookupMatchingOpenBracket(TokenKind kind)
+{
+    if (kind == TokenKind::RCURL) {
+        return TokenKind::LCURL;
+    }
+    if (kind == TokenKind::RSQUARE) {
+        return TokenKind::LSQUARE;
+    }
+    if (kind == TokenKind::RPAREN) {
+        return TokenKind::LPAREN;
+    }
+    return TokenKind::ILLEGAL;
+}
+} // namespace
+
+// Ambiguous combined tokens - static member function defined in this file
+const std::vector<std::tuple<TokenKind, std::vector<TokenKind>, std::string>>& ParserImpl::GetAmbiguousCombinedTokens()
+{
+    // Note that RSHIFT_ASSIGN should come before RSHIFT, because RSHIFT_ASSIGN contains RSHIFT.
+    static const std::vector<std::tuple<TokenKind, std::vector<TokenKind>, std::string>> vec = {
+        {TokenKind::COALESCING, {TokenKind::QUEST, TokenKind::QUEST}, "??"},
+        {TokenKind::RSHIFT_ASSIGN, {TokenKind::GT, TokenKind::GT, TokenKind::ASSIGN}, ">>="},
+        {TokenKind::RSHIFT, {TokenKind::GT, TokenKind::GT}, ">>"},
+        {TokenKind::GE, {TokenKind::GT, TokenKind::ASSIGN}, ">="},
+    };
+    return vec;
+}
 
 const std::vector<TokenKind>& GetTypeFirst()
 {
@@ -48,9 +74,9 @@ const Token& ParserImpl::Peek()
             lookahead.kind == TokenKind::LSQUARE) {
             bracketsStack.push_back(lookahead.kind);
         }
-        auto matchingBracket = MATCHING_OPENING_BRACKET_OF.find(lookahead.kind);
-        if (matchingBracket != MATCHING_OPENING_BRACKET_OF.end()) {
-            if (!bracketsStack.empty() && matchingBracket->second == bracketsStack.back()) {
+        TokenKind matchingBracket = LookupMatchingOpenBracket(lookahead.kind);
+        if (matchingBracket != TokenKind::ILLEGAL) {
+            if (!bracketsStack.empty() && matchingBracket == bracketsStack.back()) {
                 bracketsStack.pop_back();
             }
         }
@@ -203,7 +229,7 @@ void ParserImpl::SkipCombinator(const std::vector<TokenKind>& kinds)
 
 bool ParserImpl::SkipAmbiguousToken()
 {
-    for (const auto &[tar, comb, val] : ambiguoussCombinedTokens) {
+    for (const auto& [tar, comb, val] : GetAmbiguousCombinedTokens()) {
         if (SeeingCombinator(comb)) {
             size_t i = comb.size();
             while (i-- != 0) {
@@ -298,9 +324,9 @@ void ParserImpl::ParseZeroOrMoreWithSeparator(TokenKind separator,
 
 bool ParserImpl::CanMatchBracketInStack()
 {
-    auto matchingBracket = MATCHING_OPENING_BRACKET_OF.find(lookahead.kind);
-    if (matchingBracket != MATCHING_OPENING_BRACKET_OF.end()) {
-        auto it = std::find(bracketsStack.begin(), bracketsStack.end(), matchingBracket->second);
+    TokenKind matchingBracket = LookupMatchingOpenBracket(lookahead.kind);
+    if (matchingBracket != TokenKind::ILLEGAL) {
+        auto it = std::find(bracketsStack.begin(), bracketsStack.end(), matchingBracket);
         if (it == bracketsStack.end()) {
             return false;
         } else {

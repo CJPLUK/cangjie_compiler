@@ -42,10 +42,8 @@ bool ParserImpl::SeeingExprOperator()
     if (newlineSkipped && (token.kind == TokenKind::SUB || token.kind == TokenKind::QUEST)) {
         return false;
     }
-    for (auto& [k, _] : combinator) {
-        if (SeeingCombinator(k)) {
-            return true;
-        }
+    if (LookupSeenCombinator()) {
+        return true;
     }
     if (Precedence(token.kind) != INVALID_PRECEDENCE) {
         return true;
@@ -98,7 +96,9 @@ bool ParserImpl::TypesMaybeConfusedWithExprWithComma(const std::vector<Ptr<AST::
 bool ParserImpl::IsLegFollowForGenArgInExprWithComma(ExprKind ek)
 {
     CJC_ASSERT(IsExprFollowedComma(ek));
-    if (Seeing(exprsFollowedCommas.at(ek).second)) { return true; }
+    if (Seeing(LookupExprsFollowedCommas(ek)->second)) {
+        return true;
+    }
     if (newlineSkipped &&
         SeeingAny({TokenKind::LCURL, TokenKind::QUEST, TokenKind::LPAREN, TokenKind::LSQUARE, TokenKind::SUB})) {
         return false;
@@ -106,10 +106,8 @@ bool ParserImpl::IsLegFollowForGenArgInExprWithComma(ExprKind ek)
     if (SeeingAny({TokenKind::LPAREN, TokenKind::LSQUARE, TokenKind::COMMA, TokenKind::DOT, TokenKind::LCURL})) {
         return true;
     }
-    for (auto& [k, _] : combinator) {
-        if (SeeingCombinator(k)) {
-            return true;
-        }
+    if (LookupSeenCombinator()) {
+        return true;
     }
     auto token = Peek();
     if (Precedence(token.kind) != INVALID_PRECEDENCE) {
@@ -132,12 +130,9 @@ bool ParserImpl::IsNeedToCreateOptionalChain(TokenKind token, AST::Expr& expr) c
 Token ParserImpl::GetExprOperator()
 {
     auto token = Peek();
-    auto iter =
-        std::find_if(combinator.rbegin(), combinator.rend(), [this](auto& k) { return SeeingCombinator(k.first); });
-    if (iter != combinator.rend()) {
-        token.kind = iter->second.first;
-        std::string_view op{iter->second.second};
-        token.SetValuePos(std::string{op}, token.Begin(), token.Begin() + op.size());
+    if (auto* combInfo = LookupSeenCombinator()) {
+        token.kind = combInfo->kind;
+        token.SetValuePos(std::string{combInfo->value}, token.Begin(), token.Begin() + combInfo->value.size());
     }
     return token;
 }
@@ -145,10 +140,12 @@ Token ParserImpl::GetExprOperator()
 void ParserImpl::SkipExprOperator()
 {
     Peek();
-    auto iter =
-        std::find_if(combinator.rbegin(), combinator.rend(), [this](auto& k) { return SeeingCombinator(k.first); });
-    if (iter != combinator.rend()) {
-        SkipCombinator(iter->first);
+    if (auto* combInfo = LookupSeenCombinator()) {
+        // Skip the tokens that make up this combinator
+        size_t skipCount = combInfo->value.size(); // Each char is one token (e.g., ">>" = 2 tokens)
+        while (skipCount-- > 0) {
+            Next();
+        }
         return;
     }
     Next();
