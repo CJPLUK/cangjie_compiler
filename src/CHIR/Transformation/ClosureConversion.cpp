@@ -16,6 +16,7 @@
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 #include "cangjie/Mangle/CHIRTypeManglingUtils.h"
 #include "cangjie/Option/Option.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
 using namespace Cangjie::CHIR;
@@ -794,6 +795,7 @@ std::unordered_set<Func*> ClosureConversion::GetUselessLambda() const
 
 std::vector<Lambda*> ClosureConversion::CollectNestedFunctions()
 {
+    Utils::ProfileRecorder recorder("ClosureConversion", "CollectNestedFunctions");
     std::vector<Lambda*> nestedFuncs;
     Func* curOutFunc = nullptr;
     auto preVisit = [&nestedFuncs, &curOutFunc, this](Expression& e) {
@@ -1136,11 +1138,13 @@ ClassDef* ClosureConversion::GetOrCreateAutoEnvBaseDef(const FuncType& funcType)
 
 void ClosureConversion::InlineLambda(const std::vector<Lambda*>& funcs)
 {
+    Utils::ProfileRecorder recorder("ClosureConversion", "InlineLambda");
     LambdaInline(builder, opts).InlineLambda(funcs);
 }
 
 void ClosureConversion::ConvertNestedFunctions(const std::vector<Lambda*>& funcs)
 {
+    Utils::ProfileRecorder recorder("ClosureConversion", "ConvertNestedFunctions");
     for (auto func : funcs) {
         RecordDuplicateLambdaName(*func);
         if (func->GetFuncType()->IsCFunc()) {
@@ -1321,6 +1325,7 @@ void ClosureConversion::LiftGenericTypes()
 
 void ClosureConversion::LiftType()
 {
+    Utils::ProfileRecorder recorder("ClosureConversion", "LiftType");
     ConvertTypeFunc convertTypeToClosure = [this](Type& type) {
         return ConvertTypeToClosureType(type);
     };
@@ -2029,6 +2034,7 @@ ClassDef* ClosureConversion::GetOrCreateInstAutoEnvBaseDef(const FuncType& funcT
 
 void ClosureConversion::ConvertGlobalFunctions()
 {
+    Utils::ProfileRecorder recorder("ClosureConversion", "ConvertGlobalFunctions");
     for (auto func : package.GetGlobalFuncs()) {
         if (func->IsCFunc()) {
             continue; // never lift CFunc
@@ -2058,6 +2064,7 @@ void ClosureConversion::ConvertGlobalFunctions()
 
 void ClosureConversion::ConvertImportedFunctions()
 {
+    Utils::ProfileRecorder recorder("ClosureConversion", "ConvertImportedFunctions");
     for (auto ele : package.GetImportedVarAndFuncs()) {
         if (ele->IsImportedVar() || ele->GetType()->IsCFunc()) {
             continue;
@@ -2155,6 +2162,7 @@ void ClosureConversion::ConvertApplyWithExceptionToInvokeWithException(ApplyWith
 
 void ClosureConversion::ConvertExpressions()
 {
+    Utils::ProfileRecorder recorder("ClosureConversion", "ConvertExpressions");
     auto preVisit = [this](Expression& e) {
         if (ApplyNeedConvertToInvoke(e)) {
             ConvertApplyToInvoke(StaticCast<Apply&>(e));
@@ -2193,6 +2201,7 @@ void ClosureConversion::ConvertExpressions()
 
 void ClosureConversion::CreateVTableForAutoEnvDef()
 {
+    Utils::ProfileRecorder recorder("ClosureConversion", "CreateVTableForAutoEnvDef");
     auto insertDef =
         [](const std::unordered_map<std::string, ClassDef*>& candidateDefs, std::vector<CustomTypeDef*>& targetDefs) {
             for (const auto& it : candidateDefs) {
@@ -2205,7 +2214,7 @@ void ClosureConversion::CreateVTableForAutoEnvDef()
     insertDef(instAutoEnvWrapperDefs, defs);
     insertDef(autoEnvImplDefs, defs);
 
-    auto generator = GenerateVTable(package, defs, builder, opts);
+    auto generator = GenerateVTable(package, defs, builder, opts, "CreateVTableForAutoEnvDef");
     generator.CreateVTable();
     generator.SetSrcFuncType();
 }
@@ -2938,6 +2947,7 @@ void ClosureConversion::CastSpawnArgIfNeed(Spawn& e)
 
 void ClosureConversion::ModifyTypeMismatchInExpr()
 {
+    Utils::ProfileRecorder recorder("ClosureConversion", "ModifyTypeMismatchInExpr");
     auto preVisit = [this](Expression& e) {
         if (Is<Apply>(e)) {
             CastApplyArgAndRetIfNeed(StaticCast<Apply&>(e));

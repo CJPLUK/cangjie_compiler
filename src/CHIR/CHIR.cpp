@@ -36,6 +36,7 @@
 #include "cangjie/CHIR/Optimization/RedundantLoadElimination.h"
 #include "cangjie/CHIR/Transformation/ReplaceSrcCodeImportedVal.h"
 #include "cangjie/CHIR/Transformation/SanitizerCoverage.h"
+#include "cangjie/CHIR/Transformation/UpdateMemberVarPath.h"
 #include "cangjie/CHIR/Optimization/UnitUnify.h"
 #include "cangjie/CHIR/Optimization/UselessAllocateElimination.h"
 #include "cangjie/CHIR/Optimization/OptFuncRetType.h"
@@ -262,24 +263,22 @@ void ToCHIR::DoClosureConversion()
 
 void ToCHIR::UnreachableBlockReporter()
 {
-    Utils::ProfileRecorder recorder("CHIR", "UnreachableBlockWarningReporter");
+    Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBlockWarningReporter");
     auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.UnreachableBlockWarningReporter(*chirPkg, opts.GetJobs(), maybeUnreachable);
 }
 
 void ToCHIR::UnreachableBlockElimination()
 {
-    Utils::ProfileRecorder recorder("CHIR Opt", "UnreachableBlockElimination");
+    Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBlockElimination");
     auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.UnreachableBlockElimination(*chirPkg, opts.chirDebugOptimizer);
     DumpCHIRToFile("UnreachableBlockElimination");
-
-    RunMergingBlocks("CHIR Opt", "MergingBlockAfterUnreachableBlock");
 }
 
 void ToCHIR::NothingTypeExprElimination()
 {
-    Utils::ProfileRecorder recorder("CHIR Opt", "NothingTypeExprElimination");
+    Utils::ProfileRecorder recorder("RulesChecking", "NothingTypeExprElimination");
     auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.NothingTypeExprElimination(*chirPkg, opts.chirDebugOptimizer);
     DumpCHIRToFile("NothingTypeExprElimination");
@@ -287,7 +286,7 @@ void ToCHIR::NothingTypeExprElimination()
 
 void ToCHIR::UnreachableBranchReporter()
 {
-    Utils::ProfileRecorder recorder("CHIR Opt", "UnreachableBranchReporter");
+    Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBranchReporter");
     auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, pkg.fullPackageName);
     check.RunOnPackage(*chirPkg, opts.GetJobs());
 }
@@ -297,15 +296,19 @@ void ToCHIR::UselessExprElimination()
     if (!opts.IsCHIROptimizationLevelOverO2()) {
         return;
     }
-    Utils::ProfileRecorder recorder("CHIR Opt", "UselessExprElimination");
+    Utils::ProfileRecorder recorder("RulesChecking", "UselessExprElimination");
     auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.UselessExprElimination(*chirPkg, opts.chirDebugOptimizer);
     DumpCHIRToFile("UselessExprElimination");
 }
 
-void ToCHIR::UselessFuncElimination()
+void ToCHIR::UselessFuncElimination(const std::string& passName)
 {
-    Utils::ProfileRecorder recorder("CHIR Opt", "UselessFuncElimination");
+    if (!opts.IsCHIROptimizationLevelOverO2() || opts.enableCoverage || opts.enIncrementalCompilation ||
+        chirPkg->GetName() == Cangjie::REFLECT_PACKAGE_NAME) {
+        return;
+    }
+    Utils::ProfileRecorder recorder(passName, "UselessFuncElimination");
     auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.UselessFuncElimination(*chirPkg, opts);
     DumpCHIRToFile("UselessFuncElimination");
@@ -313,7 +316,7 @@ void ToCHIR::UselessFuncElimination()
 
 void ToCHIR::ReportUnusedCode()
 {
-    Utils::ProfileRecorder recorder("CHIR Opt", "ReportUnusedCode");
+    Utils::ProfileRecorder recorder("RulesChecking", "ReportUnusedCode");
     auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.ReportUnusedCode(*chirPkg, opts);
 }
@@ -412,7 +415,7 @@ void ToCHIR::FlatForInExpr()
 
 bool ToCHIR::RunVarInitChecking()
 {
-    Utils::ProfileRecorder recorder("CHIR Opt", "VarInitCheck");
+    Utils::ProfileRecorder recorder("RulesChecking", "VarInitCheck");
     auto vic = CHIR::VarInitCheck(&diag);
     vic.RunOnPackage(chirPkg, opts.GetJobs());
     return diag.GetErrorCount() == 0;
@@ -420,7 +423,7 @@ bool ToCHIR::RunVarInitChecking()
 
 bool ToCHIR::RunNativeFFIChecks()
 {
-    Utils::ProfileRecorder recorder("CHIR", "NativeFFIChecks");
+    Utils::ProfileRecorder recorder("RulesChecking", "NativeFFIChecks");
     auto checker = CHIR::NativeFFI::TypeCastCheck(diag);
     checker.RunOnPackage(*chirPkg, opts.GetJobs());
     return diag.GetErrorCount() == 0;
@@ -462,18 +465,18 @@ void ToCHIR::RunFunctionInline(DevirtualizationInfo& devirtInfo)
         pass.Run(*func);
     }
     MergeEffectMap(pass.GetEffectMap(), effectMap);
-    Utils::ProfileRecorder::Stop("CHIR Opt", "FunctionInline");
     DumpCHIRToFile("FunctionInline");
+    Utils::ProfileRecorder::Stop("CHIR Opt", "FunctionInline");
 
     RunMergingBlocks("CHIR Opt", "MergingBlockAfterInline");
 
     // do useless function elimination after inline
-    UselessFuncElimination();
+    UselessFuncElimination("CHIR Opt");
 }
 
 void ToCHIR::RunUnreachableMarkBlockRemoval()
 {
-    Utils::ProfileRecorder recorder("CHIR", "Clear Blocks Marked as Unreachable");
+    Utils::ProfileRecorder recorder("RulesChecking", "Clear Blocks Marked as Unreachable");
     auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.ClearUnreachableMarkBlock(*chirPkg);
     DumpCHIRToFile("ClearBlocksMarkAsUnreachable");
@@ -488,13 +491,13 @@ void ToCHIR::RunMergingBlocks(const std::string& firstName, const std::string& s
 
 void ToCHIR::RunConstantAnalysis()
 {
-    Utils::ProfileRecorder recorder("CHIR Opt", "Constant Analysis");
+    Utils::ProfileRecorder recorder("RulesChecking", "Constant Analysis");
     constAnalysisWrapper.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), &diag);
 }
 
 void ToCHIR::RunConstantPropagation()
 {
-    Utils::ProfileRecorder recorder("CHIR Opt", "Constant Propagation & Safety Check");
+    Utils::ProfileRecorder recorder("RulesChecking", "Constant Propagation & Safety Check");
     size_t threadNum = opts.GetJobs();
     DeadCodeElimination dce(builder, diag, *chirPkg);
     if (threadNum == 1) {
@@ -536,7 +539,7 @@ void ToCHIR::RunRangePropagation()
     if (!opts.IsCHIROptimizationLevelOverO2()) {
         return;
     }
-    Utils::ProfileRecorder recorder("CHIR Opt", "Range Propagation");
+    Utils::ProfileRecorder::Start("CHIR Opt", "Range Propagation");
     AnalysisWrapper<RangeAnalysis, RangeDomain> vra(builder);
     vra.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), &diag);
     size_t threadNum = opts.GetJobs();
@@ -573,6 +576,9 @@ void ToCHIR::RunRangePropagation()
         builder.GetChirContext().MergeTypes();
     }
     DumpCHIRToFile("RangePropagation");
+    Utils::ProfileRecorder::Stop("CHIR Opt", "Range Propagation");
+
+    RunMergingBlocks("CHIR Opt", "MergingBlockAfterRangeAnalysis");
 }
 
 void ToCHIR::RunArrayLambdaOpt()
@@ -620,14 +626,13 @@ void ToCHIR::RunUnitUnify()
 
 DevirtualizationInfo ToCHIR::CollectDevirtualizationInfo()
 {
+    Utils::ProfileRecorder recorder("CHIR Opt", "Collect Devirt Info");
     DevirtualizationInfo devirtInfo(chirPkg, opts);
     if (opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::FUNC_INLINING) ||
         (opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::DEVIRTUALIZATION) &&
          !opts.enIncrementalCompilation)) {
         // Collect all inheritance tree information.
-        Utils::ProfileRecorder::Start("CHIR Opt", "Collect Devirt Info");
         devirtInfo.CollectInfo();
-        Utils::ProfileRecorder::Stop("CHIR Opt", "Collect Devirt Info");
     }
     return devirtInfo;
 }
@@ -651,7 +656,6 @@ void ToCHIR::RunOptimizationPass()
     RedundantLoadElimination();
     RedundantGetOrThrowElimination();
     RunRangePropagation();
-    RunMergingBlocks("CHIR Opt", "MergingBlockAfterRangeAnalysis");
     UselessAllocateElimination();
     Devirtualization(devirtInfo);
     RunArrayLambdaOpt();
@@ -1105,9 +1109,10 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
 
 bool ToCHIR::RulesChecking()
 {
+    Utils::ProfileRecorder recorder("CHIR", "RulesChecking");
     UnreachableBlockReporter();
     RunUnreachableMarkBlockRemoval();
-    RunMergingBlocks("CHIR", "MergingBlock");
+    RunMergingBlocks("RulesChecking", "MergingBlock");
     NothingTypeExprElimination();
     RunConstantAnalysis();
     if (!RunVarInitChecking()) {
@@ -1119,18 +1124,15 @@ bool ToCHIR::RulesChecking()
     UnreachableBranchReporter();
     // this instantance of block elimination is to maintain dead code warnings
     UnreachableBlockElimination();
+    RunMergingBlocks("RulesChecking", "MergingBlockAfterUnreachableBlock");
     ReportUnusedCode();
-    UnreachableBlockElimination();
-    UselessFuncElimination();
+    UselessFuncElimination("RulesChecking");
     UselessExprElimination();
     // check some rules in constant propagation:
     // 1. Array and VArray out of bounds
     // 2. arithmetic operation overflow
     RunConstantPropagation();
-    if (diag.GetErrorCount() != 0) {
-        return false;
-    }
-    return true;
+    return diag.GetErrorCount() == 0;
 }
 
 bool ToCHIR::Run()
@@ -1303,127 +1305,31 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
 }
 #endif
 
-// var inst type, var offset
-std::pair<Type*, uint64_t> GetIndexByName(
-    const CustomType& baseType, const std::string& name, CHIRBuilder& builder)
-{
-    Type* memberVarInstType = nullptr;
-    std::unordered_map<const GenericType*, Type*> instMap;
-    baseType.GetInstMap(instMap, builder);
-    auto allMemberVars = baseType.GetCustomTypeDef()->GetAllInstanceVars();
-    uint64_t index = allMemberVars.size();
-    // be sure to use reverse order traversal
-    // because sub class and parent class may have private member vars with same name
-    for (auto it = allMemberVars.crbegin(); it != allMemberVars.crend(); ++it) {
-        --index;
-        if (it->name == name) {
-            memberVarInstType = ReplaceRawGenericArgType(*it->type, instMap, builder);
-            break;
-        }
-    }
-    CJC_NULLPTR_CHECK(memberVarInstType);
-    return {memberVarInstType, index};
-}
-
-std::vector<uint64_t> ChangeNameToPath(
-    CustomType& rootType, const std::vector<std::string>& names, CHIRBuilder& builder)
-{
-    std::vector<uint64_t> path;
-    CustomType* baseType = &rootType;
-    for (const auto& name : names) {
-        CJC_NULLPTR_CHECK(baseType);
-        auto res = GetIndexByName(*baseType, name, builder);
-        path.emplace_back(res.second);
-        baseType = DynamicCast<CustomType*>(res.first);
-    }
-    return path;
-}
-
-void UpdateToGetElementRef(GetElementByName& rawExpr, CHIRBuilder& builder)
-{
-    auto locationVal = rawExpr.GetLocation();
-    auto locationType = StaticCast<CustomType*>(locationVal->GetType()->StripAllRefs());
-    auto path = ChangeNameToPath(*locationType, rawExpr.GetNames(), builder);
-    auto loc = rawExpr.GetDebugLocation();
-    auto retType = rawExpr.GetResult()->GetType();
-    auto parentBlock = rawExpr.GetParentBlock();
-    auto newExpr = builder.CreateExpression<GetElementRef>(loc, retType, locationVal, path, parentBlock);
-    newExpr->SetAnnotation(rawExpr.MoveAnnotation());
-    newExpr->GetResult()->SetAnnotation(rawExpr.GetResult()->MoveAnnotation());
-    newExpr->GetResult()->AppendAttributeInfo(rawExpr.GetResult()->GetAttributeInfo());
-    rawExpr.ReplaceWith(*newExpr);
-}
-
-void UpdateToStoreElementRef(StoreElementByName& rawExpr, CHIRBuilder& builder)
-{
-    auto locationVal = rawExpr.GetLocation();
-    auto locationType = StaticCast<CustomType*>(locationVal->GetType()->StripAllRefs());
-    auto path = ChangeNameToPath(*locationType, rawExpr.GetNames(), builder);
-    auto value = rawExpr.GetValue();
-    auto loc = rawExpr.GetDebugLocation();
-    auto retType = rawExpr.GetResult()->GetType();
-    auto parentBlock = rawExpr.GetParentBlock();
-    auto newExpr = builder.CreateExpression<StoreElementRef>(loc, retType, value, locationVal, path, parentBlock);
-    newExpr->SetAnnotation(rawExpr.MoveAnnotation());
-    newExpr->GetResult()->SetAnnotation(rawExpr.GetResult()->MoveAnnotation());
-    newExpr->GetResult()->AppendAttributeInfo(rawExpr.GetResult()->GetAttributeInfo());
-    rawExpr.ReplaceWith(*newExpr);
-}
-
-void UpdateToField(FieldByName& rawExpr, CHIRBuilder& builder)
-{
-    auto locationVal = rawExpr.GetBase();
-    auto locationType = StaticCast<CustomType*>(locationVal->GetType()->StripAllRefs());
-    auto path = ChangeNameToPath(*locationType, rawExpr.GetNames(), builder);
-    auto loc = rawExpr.GetDebugLocation();
-    auto retType = rawExpr.GetResult()->GetType();
-    auto parentBlock = rawExpr.GetParentBlock();
-    auto newExpr = builder.CreateExpression<Field>(loc, retType, locationVal, path, parentBlock);
-    newExpr->SetAnnotation(rawExpr.MoveAnnotation());
-    newExpr->GetResult()->SetAnnotation(rawExpr.GetResult()->MoveAnnotation());
-    newExpr->GetResult()->AppendAttributeInfo(rawExpr.GetResult()->GetAttributeInfo());
-    rawExpr.ReplaceWith(*newExpr);
-}
-
-void ToCHIR::UpdateMemberVarPath()
-{
-    auto preVisit = [this](Expression& e) {
-        if (auto get = DynamicCast<GetElementByName*>(&e)) {
-            UpdateToGetElementRef(*get, builder);
-        } else if (auto store = DynamicCast<StoreElementByName*>(&e)) {
-            UpdateToStoreElementRef(*store, builder);
-        } else if (auto field = DynamicCast<FieldByName*>(&e)) {
-            UpdateToField(*field, builder);
-        }
-        return VisitResult::CONTINUE;
-    };
-    for (auto func : chirPkg->GetGlobalFuncs()) {
-        Visitor::Visit(*func, preVisit);
-    }
-}
-
 void ToCHIR::Canonicalization()
 {
     Utils::ProfileRecorder record("CHIR", "Canonicalization");
-    auto allDefs = chirPkg->GetAllCustomTypeDef();
-    // 1. create vtable
-    auto generator = GenerateVTable(*chirPkg, allDefs, builder, opts);
-    generator.CreateVTable();
-    generator.UpdateOperatorVirFunc();
-    generator.CreateVirtualFuncWrapper(kind, cachedInfo, curVirtFuncWrapDep, delVirtFuncWrapForIncr);
-    generator.SetSrcFuncType();
-    generator.CreateMutFuncWrapper();
-    DumpCHIRToFile("CreateVTable");
+    {
+        Utils::ProfileRecorder tempRecorder("Canonicalization", "GenerateVTable");
+        // 1. create vtable
+        auto allDefs = chirPkg->GetAllCustomTypeDef();
+        auto generator = GenerateVTable(*chirPkg, allDefs, builder, opts, "GenerateVTable");
+        generator.CreateVTable();
+        generator.UpdateOperatorVirFunc();
+        generator.CreateVirtualFuncWrapper(kind, cachedInfo, curVirtFuncWrapDep, delVirtFuncWrapForIncr);
+        generator.SetSrcFuncType();
+        generator.CreateMutFuncWrapper();
 
-    // 2. calculate virtual method offset and store it in Invoke/InvokeStatic
-    // 3. update callee of Apply, it may be replaced by mut wrapper func
-    generator.UpdateFuncCall();
+        // 2. calculate virtual method offset and store it in Invoke/InvokeStatic
+        // 3. update callee of Apply, it may be replaced by mut wrapper func
+        generator.UpdateFuncCall();
+        DumpCHIRToFile("CreateVTable");
+    }
 
     // 4. add has invited flag to class which has finalizer, in case of finalize before init
     MarkClassHasInited(builder).RunOnPackage(*chirPkg);
 
     // 5. update member var path, from name to offset
-    UpdateMemberVarPath();
+    UpdateMemberVarPath(*chirPkg, builder).Run();
 
     // 6. set mark on some functions that have no side effect
     NoSideEffectMarker(*chirPkg).Run();

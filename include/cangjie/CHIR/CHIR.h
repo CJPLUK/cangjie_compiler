@@ -139,7 +139,7 @@ private:
     void NothingTypeExprElimination();
     void UselessExprElimination();
     void UnreachableBranchReporter();
-    void UselessFuncElimination();
+    void UselessFuncElimination(const std::string& passName);
     void RedundantLoadElimination();
     void UselessAllocateElimination();
     void RunGetRefToArrayElemOpt();
@@ -175,7 +175,6 @@ private:
     void CFFIFuncWrapper();
     void ReplaceSrcCodeImportedValueWithSymbol();
     void Canonicalization();
-    void UpdateMemberVarPath();
 
     template <typename T>
     std::pair<Value*, Apply*> DoCFFIFuncWrapper(T& curFunc, bool isForeign, bool isExternal = true);

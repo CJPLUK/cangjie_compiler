@@ -9,6 +9,7 @@
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie::CHIR;
 
@@ -166,6 +167,7 @@ void MarkClassHasInited::RunOnPackage(const Package& package)
      *                                              }
      */
 
+    Utils::ProfileRecorder recorder("Canonicalization", "MarkClassHasInited");
     for (auto classDef : package.GetAllClassDef()) {
         if (classDef->GetFinalizer() == nullptr) {
             continue;
