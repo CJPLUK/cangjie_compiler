@@ -1,0 +1,15 @@
+services:
+  build-sdk:
+    image: swr.cn-north-4.myhuaweicloud.com/cj-docker/cangjie_ubuntu18_arm_kernel:v2.2
+    working_dir: /workspace
+    environment:
+      CANGJIE_VERSION: ${CANGJIE_VERSION:-unofficial}
+      SDK_NAME: ${SDK_NAME:-stdx}
+      BUILD_JOBS: ${BUILD_JOBS:-2}
+      STDLIB_BUILD_ARGS: ${STDLIB_BUILD_ARGS:--O0}
+      OPENSSL_ROOT_DIR: /opt/buildtools/openssl-3.0.9
+      CMAKE_PREFIX_PATH: /opt/buildtools/openssl-3.0.9
+    volumes:
+      - ./:/workspace
+    command: >-
+      bash -lc "bash build_scripts/linux.sh --jobs ${BUILD_JOBS}"
