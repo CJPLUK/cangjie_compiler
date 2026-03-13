@@ -1151,7 +1151,8 @@ flatbuffers::Offset<PackageFormat::Generic> ASTWriter::ASTWriterImpl::SaveGeneri
         constraint->ty = constraint->type->ty; // Sync ty to re-use 'PackNodeInfo'.
         auto info = PackNodeInfo(*constraint);
         auto vUppers = builder.CreateVector<FormattedIndex>(uppers);
-        constraints.emplace_back(PackageFormat::CreateConstraint(builder, &info.begin, &info.end, info.ty, vUppers));
+        constraints.emplace_back(PackageFormat::CreateConstraint(
+            builder, &info.begin, &info.end, info.ty, vUppers, constraint->isImplicitlyIntroduced));
     }
     auto vTypeParameters = builder.CreateVector<FormattedIndex>(typeParameters);
     auto vConstraints = builder.CreateVector<flatbuffers::Offset<PackageFormat::Constraint>>(constraints);

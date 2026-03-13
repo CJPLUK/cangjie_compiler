@@ -1465,6 +1465,7 @@ void TypeChecker::TypeCheckerImpl::AddAssumptionForType(ASTContext& ctx, const T
     if (!aliasedTypeTarget || !type.ty || type.ty->typeArgs.empty()) {
         return;
     }
+    size_t originalConstraintCount = generic.genericConstraints.size();
     MultiTypeSubst revTypeMapping;
     TyVarUB allAssumptionMap;
     GetRevTypeMapping(aliasedTypeTarget->ty->typeArgs, type.ty->typeArgs, revTypeMapping);
@@ -1472,6 +1473,9 @@ void TypeChecker::TypeCheckerImpl::AddAssumptionForType(ASTContext& ctx, const T
     AddUpperBoundOnTypeParameters(
         ctx, generic, *aliasedTypeTarget, revTypeMapping, allAssumptionMap, typeArgAppliedMap);
     CreateGenericConstraints(generic);
+    for (size_t i = originalConstraintCount; i < generic.genericConstraints.size(); ++i) {
+        generic.genericConstraints[i]->isImplicitlyIntroduced = true;
+    }
 }
 
 void TypeChecker::TypeCheckerImpl::PreCheckMacroRedefinition(const std::vector<Ptr<FuncDecl>>& funcs) const
