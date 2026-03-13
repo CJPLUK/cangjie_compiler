@@ -23,6 +23,46 @@ namespace {
 constexpr std::string_view ELLIPSIS("...");
 } // namespace
 
+ParserImpl::DeclHandler ParserImpl::LookupDeclHandler(TokenKind kind)
+{
+    static constexpr int firstKind = static_cast<int>(TokenKind::STRUCT);
+    static constexpr int lastKind = static_cast<int>(TokenKind::MAIN);
+    static constexpr int arraySize = lastKind - firstKind + 1;
+    // clang-format off
+    static const DeclHandler handlers[arraySize] = {
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseStructDecl),
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseEnumDecl),
+        nullptr, nullptr, nullptr, nullptr,
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseClassDecl),
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseInterfaceDecl),
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseFuncDecl),
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseMacroDecl),
+        nullptr, nullptr,
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseVarOrLet),
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseVarOrLet),
+        nullptr,
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseTypeAlias),
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseConstructor),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+        nullptr, nullptr, nullptr,
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseExtendDecl),
+        nullptr,
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParsePropDecl),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+        nullptr, nullptr,
+        reinterpret_cast<DeclHandler>(&ParserImpl::ParseMainDecl),
+    };
+    // clang-format on
+
+    int index = static_cast<int>(kind) - firstKind;
+    if (index < 0 || index >= arraySize) {
+        return nullptr;
+    }
+    return handlers[index];
+}
+
 OwnedPtr<Decl> ParserImpl::ParseDecl(ScopeKind scopeKind, std::set<Modifier> modifiers, PtrVector<Annotation> annos)
 {
     if (SeeingBuiltinAnnotation() && !modifiers.empty() && annos.empty()) {
@@ -45,9 +85,9 @@ OwnedPtr<Decl> ParserImpl::ParseDecl(ScopeKind scopeKind, std::set<Modifier> mod
     if (SeeingMacroCallDecl()) {
         return ParseMacroCall<MacroExpandDecl>(scopeKind, modifiers, std::move(annos));
     }
-
-    if (auto tokenKind = Peek().kind; declHandlerMap.count(tokenKind) != 0) {
-        auto ret = declHandlerMap[tokenKind](this, scopeKind, modifiers, std::move(annos));
+    auto tokenKind = Peek().kind;
+    if (auto handler = LookupDeclHandler(tokenKind)) {
+        auto ret = (this->*handler)(scopeKind, modifiers, std::move(annos));
         if (scopeKind == ScopeKind::TOPLEVEL) {
             ret->EnableAttr(Attribute::GLOBAL);
         }
@@ -1353,7 +1393,7 @@ void ParserImpl::CheckDeclarationInScope(ScopeKind sk, DefKind dk)
     if (sk == ScopeKind::UNKNOWN_SCOPE) {
         return;
     }
-    if (GetModifierRulesByDefKind(dk).count(sk) == 0) {
+    if (!HasScopeRules(dk, sk)) {
         if (!chainedAST.back()->TestAttr(Attribute::HAS_BROKEN)) {
             DiagUnexpectedDeclInScope(sk);
             chainedAST.back()->EnableAttr(Attribute::HAS_BROKEN);

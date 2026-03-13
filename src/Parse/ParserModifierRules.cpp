@@ -7,415 +7,633 @@
 /**
  * @file
  *
- * This file declares static maps of trustlist modifiers for definitions in different scope kind. SCOPE_MODIFIER_RULES
- * contains modifier trustlists defined under different scope kinds. The trustlist contains all allowed modifiers of the
- * current scope kind and modifiers that conflict with the modifier. XXX_YYY_MODIFIERS naming contains three parts. XXX
- * means scope kind. YYY means definition kind.
+ * This file declares static maps of trustlist modifiers for definitions in different scope kind.
+ * SCOPE_MODIFIER_RULES contains modifier trustlists defined under different scope kinds. The trustlist contains all
+ * allowed modifiers of the current scope kind and modifiers that conflict with the modifier. XXX_YYY_MODIFIERS naming
+ * contains three parts. XXX means scope kind. YYY means definition kind.
  */
-
 #include "ParserImpl.h"
 
 #include "cangjie/Parse/ParseModifiersRules.h"
 
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
+
 namespace {
 using namespace Cangjie;
-// TokenKind to Attribute Map.
-static const std::unordered_map<TokenKind, AST::Attribute> TK2ATTRMAP = {
-    {TokenKind::STATIC, AST::Attribute::STATIC},
-    {TokenKind::PUBLIC, AST::Attribute::PUBLIC},
-    {TokenKind::PRIVATE, AST::Attribute::PRIVATE},
-    {TokenKind::INTERNAL, AST::Attribute::INTERNAL},
-    {TokenKind::PROTECTED, AST::Attribute::PROTECTED},
-    {TokenKind::COMMON, AST::Attribute::COMMON},
-    {TokenKind::SPECIFIC, AST::Attribute::SPECIFIC},
-    {TokenKind::OVERRIDE, AST::Attribute::OVERRIDE},
-    {TokenKind::REDEF, AST::Attribute::REDEF},
-    {TokenKind::ABSTRACT, AST::Attribute::ABSTRACT},
-    {TokenKind::SEALED, AST::Attribute::SEALED},
-    {TokenKind::OPEN, AST::Attribute::OPEN},
-    {TokenKind::FOREIGN, AST::Attribute::FOREIGN},
-    {TokenKind::UNSAFE, AST::Attribute::UNSAFE},
-    {TokenKind::MUT, AST::Attribute::MUT},
-    {TokenKind::OPERATOR, AST::Attribute::OPERATOR},
-};
-} // namespace
 
-namespace Cangjie {
-std::optional<AST::Attribute> GetAttributeByModifier(TokenKind tokenKind)
-{
-    auto found = TK2ATTRMAP.find(tokenKind);
-    return found == TK2ATTRMAP.end() ? std::optional<AST::Attribute>{} : std::optional<AST::Attribute>{found->second};
-}
-
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> PACKAGE_MODIFIERS = {
-    {TokenKind::PUBLIC, {TokenKind::PROTECTED, TokenKind::INTERNAL}},
-    {TokenKind::PROTECTED, {TokenKind::PUBLIC, TokenKind::INTERNAL}},
-    {TokenKind::INTERNAL, {TokenKind::PUBLIC, TokenKind::PROTECTED}},
+struct ConflictRule {
+    TokenKind modifier;
+    const TokenKind* conflicts;
+    size_t conflictCount;
 };
 
-#define ACCESSIBLE_MODIFIERS \
-    {TokenKind::PUBLIC, {TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::PRIVATE}}, \
-    {TokenKind::PROTECTED, {TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PRIVATE}}, \
-    {TokenKind::INTERNAL, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::PRIVATE}}, \
-    {TokenKind::PRIVATE, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::INTERNAL}},
+// declare conflict rule with an array literal with its size, represented by var args
+#define CR(tk, ...) {tk, (const TokenKind[]){__VA_ARGS__}, sizeof((const TokenKind[]){__VA_ARGS__}) / sizeof(TokenKind)}
+#define CR_EMPTY(tk) {tk, nullptr, 0}
+// declare conflict rule with named array with its size
+#define CR_ARR(tk, arr) {tk, arr, ARRAY_SIZE(arr)}
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> TOPLEVEL_COMMON_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS
+const TokenKind ACCESS_PUBLIC[] = {TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED};
+const TokenKind ACCESS_PRIVATE[] = {TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED};
+const TokenKind ACCESS_INTERNAL[] = {TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::PROTECTED};
+const TokenKind ACCESS_PROTECTED[] = {TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL};
+const TokenKind COMMON_PLATFORM[] = {TokenKind::SPECIFIC};
+const TokenKind PLATFORM_COMMON[] = {TokenKind::COMMON};
+const TokenKind OVERRIDE_STATIC_REDEF[] = {TokenKind::STATIC, TokenKind::REDEF};
+const TokenKind MUT_STATIC[] = {TokenKind::STATIC};
+const TokenKind OPERATOR_STATIC[] = {TokenKind::STATIC};
+const TokenKind OPEN_STATIC_REDEF[] = {TokenKind::STATIC, TokenKind::REDEF};
+const TokenKind REDEF_OVERRIDE_OPEN_OPERATOR[] = {TokenKind::OVERRIDE, TokenKind::OPEN, TokenKind::OPERATOR};
+const TokenKind CONST_COMMON_PLATFORM[] = {TokenKind::COMMON, TokenKind::SPECIFIC};
+const TokenKind COMMON_CONST_PLATFORM[] = {TokenKind::CONST, TokenKind::SPECIFIC};
+const TokenKind PLATFORM_CONST_COMMON[] = {TokenKind::CONST, TokenKind::COMMON};
+const TokenKind STATIC_OVERRIDE[] = {TokenKind::OVERRIDE};
+const TokenKind OVERRIDE_STATIC_REDEF2[] = {TokenKind::STATIC, TokenKind::REDEF};
+const TokenKind REDEF_OVERRIDE[] = {TokenKind::OVERRIDE};
+const TokenKind STATIC_OVERRIDE_OPEN[] = {TokenKind::OVERRIDE, TokenKind::OPEN};
+const TokenKind REDEF_OVERRIDE_OPEN[] = {TokenKind::OVERRIDE, TokenKind::OPEN};
+const TokenKind PUBLIC_SEALED[] = {TokenKind::SEALED};
+const TokenKind ILLEGAL_ONLY[] = {TokenKind::ILLEGAL};
+
+const ConflictRule PACKAGE_MODIFIERS[] = {
+    CR(TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED),
+    CR(TokenKind::INTERNAL, TokenKind::PUBLIC, TokenKind::PROTECTED),
+    CR(TokenKind::PROTECTED, TokenKind::PUBLIC, TokenKind::INTERNAL),
 };
 
-#define ACCESSIBLE_MODIFIERS_TOPLEVEL                                                                            \
-    {TokenKind::PUBLIC, {TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::PRIVATE}},                        \
-    {TokenKind::PROTECTED, {TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PRIVATE}},                        \
-    {TokenKind::INTERNAL, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::PRIVATE}},                        \
-    {TokenKind::PRIVATE,                                                                                         \
-        {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::SPECIFIC, TokenKind::COMMON}}, \
-    {TokenKind::COMMON, {TokenKind::SPECIFIC, TokenKind::PRIVATE}},                                              \
-    {TokenKind::SPECIFIC, {TokenKind::COMMON, TokenKind::PRIVATE}}
-
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> TOPLEVEL_ENUM_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS_TOPLEVEL
+const ConflictRule TOPLEVEL_COMMON_MODIFIERS[] = {
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, ACCESS_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> CLASS_BODY_VARIABLE_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS
-    {TokenKind::STATIC, {}},
-    {TokenKind::CONST, {TokenKind::COMMON, TokenKind::SPECIFIC}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC, TokenKind::CONST}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON, TokenKind::CONST}},
+const ConflictRule TOPLEVEL_ENUM_MODIFIERS[] = {
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR(TokenKind::PRIVATE, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::COMMON,
+        TokenKind::SPECIFIC),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR(TokenKind::COMMON, TokenKind::PRIVATE, TokenKind::SPECIFIC),
+    CR(TokenKind::SPECIFIC, TokenKind::PRIVATE, TokenKind::COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> TOPLEVEL_STRUCT_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS_TOPLEVEL
+const ConflictRule CLASS_BODY_VARIABLE_MODIFIERS[] = {
+    CR_ARR(TokenKind::CONST, CONST_COMMON_PLATFORM),
+    CR_EMPTY(TokenKind::STATIC),
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, ACCESS_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR_ARR(TokenKind::COMMON, COMMON_CONST_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_CONST_COMMON),
 };
 
-#define ACCESSIBLE_MODIFIERS_WITH_FOREIGN \
-    {TokenKind::FOREIGN, {TokenKind::PUBLIC}}, \
-    {TokenKind::PUBLIC, {TokenKind::FOREIGN, TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::PRIVATE}}, \
-    {TokenKind::PROTECTED, {TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PRIVATE, TokenKind::SEALED}}, \
-    {TokenKind::INTERNAL, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::PRIVATE, TokenKind::SEALED}}, \
-    {TokenKind::PRIVATE, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::SEALED, \
-        TokenKind::COMMON, TokenKind::SPECIFIC}}, \
-    {TokenKind::SEALED, {TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::PRIVATE}},
-
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> TOPLEVEL_CLASS_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS_WITH_FOREIGN
-    {TokenKind::ABSTRACT, {}},
-    {TokenKind::OPEN, {}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC, TokenKind::PRIVATE}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON, TokenKind::PRIVATE}},
+const ConflictRule TOPLEVEL_STRUCT_MODIFIERS[] = {
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR(TokenKind::PRIVATE, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::COMMON,
+        TokenKind::SPECIFIC),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR(TokenKind::COMMON, TokenKind::PRIVATE, TokenKind::SPECIFIC),
+    CR(TokenKind::SPECIFIC, TokenKind::PRIVATE, TokenKind::COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> TOPLEVEL_INTERFACE_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS_WITH_FOREIGN
-    {TokenKind::OPEN, {}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC, TokenKind::PRIVATE}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON, TokenKind::PRIVATE}},
+const ConflictRule TOPLEVEL_CLASS_MODIFIERS[] = {
+    CR(TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::FOREIGN),
+    CR(TokenKind::PRIVATE, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::SEALED,
+        TokenKind::COMMON, TokenKind::SPECIFIC),
+    CR(TokenKind::INTERNAL, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::PROTECTED, TokenKind::SEALED),
+    CR(TokenKind::PROTECTED, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::SEALED),
+    CR_EMPTY(TokenKind::ABSTRACT),
+    CR(TokenKind::SEALED, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED),
+    CR_EMPTY(TokenKind::OPEN),
+    CR(TokenKind::FOREIGN, TokenKind::PUBLIC),
+    CR(TokenKind::COMMON, TokenKind::PRIVATE, TokenKind::SPECIFIC),
+    CR(TokenKind::SPECIFIC, TokenKind::PRIVATE, TokenKind::COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> TOPLEVEL_VARIABLE_MODIFIERS = {
-    {TokenKind::FOREIGN,
-        {TokenKind::UNSAFE, TokenKind::PUBLIC, TokenKind::CONST, TokenKind::SPECIFIC, TokenKind::COMMON}},
-    {TokenKind::PUBLIC, {TokenKind::FOREIGN, TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::PRIVATE}},
-    {TokenKind::PROTECTED, {TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PRIVATE}},
-    {TokenKind::INTERNAL, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::PRIVATE}},
-    {TokenKind::PRIVATE,
-        {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::SPECIFIC, TokenKind::COMMON}},
-    {TokenKind::CONST, {TokenKind::FOREIGN, TokenKind::SPECIFIC, TokenKind::COMMON}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC, TokenKind::PRIVATE, TokenKind::CONST, TokenKind::FOREIGN}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON, TokenKind::PRIVATE, TokenKind::CONST, TokenKind::FOREIGN}},
+const ConflictRule TOPLEVEL_INTERFACE_MODIFIERS[] = {
+    CR(TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::FOREIGN),
+    CR(TokenKind::PRIVATE, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::SEALED,
+        TokenKind::COMMON, TokenKind::SPECIFIC),
+    CR(TokenKind::INTERNAL, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::PROTECTED, TokenKind::SEALED),
+    CR(TokenKind::PROTECTED, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::SEALED),
+    CR(TokenKind::SEALED, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED),
+    CR_EMPTY(TokenKind::OPEN),
+    CR(TokenKind::FOREIGN, TokenKind::PUBLIC),
+    CR(TokenKind::COMMON, TokenKind::PRIVATE, TokenKind::SPECIFIC),
+    CR(TokenKind::SPECIFIC, TokenKind::PRIVATE, TokenKind::COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> TOPLEVEL_FUNCDECL_MODIFIERS = {
-    {TokenKind::FOREIGN,
-        {TokenKind::UNSAFE, TokenKind::PUBLIC, TokenKind::CONST, TokenKind::INTERNAL, TokenKind::PROTECTED,
-            TokenKind::PRIVATE, TokenKind::COMMON}},
-    {TokenKind::PUBLIC, {TokenKind::FOREIGN, TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::PRIVATE}},
-    {TokenKind::PROTECTED, {TokenKind::FOREIGN, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PRIVATE}},
-    {TokenKind::INTERNAL, {TokenKind::FOREIGN, TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::PRIVATE}},
-    {TokenKind::PRIVATE, {TokenKind::FOREIGN, TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::INTERNAL,
-        TokenKind::COMMON}},
-    {TokenKind::UNSAFE, {TokenKind::FOREIGN}},
-    {TokenKind::CONST, {TokenKind::FOREIGN, TokenKind::COMMON, TokenKind::SPECIFIC}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC, TokenKind::PRIVATE, TokenKind::FOREIGN, TokenKind::CONST}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON, TokenKind::PRIVATE, TokenKind::CONST}},
+const ConflictRule TOPLEVEL_VARIABLE_MODIFIERS[] = {
+    CR(TokenKind::CONST, TokenKind::FOREIGN, TokenKind::COMMON, TokenKind::SPECIFIC),
+    CR(TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::FOREIGN),
+    CR(TokenKind::PRIVATE, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::COMMON,
+        TokenKind::SPECIFIC),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR(TokenKind::FOREIGN, TokenKind::CONST, TokenKind::PUBLIC, TokenKind::UNSAFE, TokenKind::COMMON,
+        TokenKind::SPECIFIC),
+    CR(TokenKind::COMMON, TokenKind::CONST, TokenKind::PRIVATE, TokenKind::FOREIGN, TokenKind::SPECIFIC),
+    CR(TokenKind::SPECIFIC, TokenKind::CONST, TokenKind::PRIVATE, TokenKind::FOREIGN, TokenKind::COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> TOPLEVEL_MACRODECL_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS
+const ConflictRule TOPLEVEL_FUNCDECL_MODIFIERS[] = {
+    CR(TokenKind::CONST, TokenKind::FOREIGN, TokenKind::COMMON, TokenKind::SPECIFIC),
+    CR(TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::FOREIGN),
+    CR(TokenKind::PRIVATE, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::FOREIGN,
+        TokenKind::COMMON),
+    CR(TokenKind::INTERNAL, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::PROTECTED, TokenKind::FOREIGN),
+    CR(TokenKind::PROTECTED, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::FOREIGN),
+    CR(TokenKind::FOREIGN, TokenKind::CONST, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL,
+        TokenKind::PROTECTED, TokenKind::UNSAFE, TokenKind::COMMON),
+    CR(TokenKind::UNSAFE, TokenKind::FOREIGN),
+    CR(TokenKind::COMMON, TokenKind::CONST, TokenKind::PRIVATE, TokenKind::FOREIGN, TokenKind::SPECIFIC),
+    CR(TokenKind::SPECIFIC, TokenKind::CONST, TokenKind::PRIVATE, TokenKind::COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> TOPLEVEL_MAINDECL_MODIFIERS = {
-    {TokenKind::UNSAFE, {}},
+const ConflictRule TOPLEVEL_MACRODECL_MODIFIERS[] = {
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, ACCESS_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> CLASS_BODY_FUNCDECL_MODIFIERS = {
-    {TokenKind::PUBLIC, {TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::PRIVATE}},
-    {TokenKind::PROTECTED, {TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PRIVATE}},
-    {TokenKind::PRIVATE, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::OPEN}},
-    {TokenKind::INTERNAL, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::PRIVATE, TokenKind::OPEN}},
-    {TokenKind::STATIC, {TokenKind::OPEN, TokenKind::OVERRIDE, TokenKind::OPERATOR}},
-    {TokenKind::REDEF, {TokenKind::OPEN, TokenKind::OVERRIDE, TokenKind::OPERATOR}},
-    {TokenKind::OPEN, {TokenKind::STATIC, TokenKind::INTERNAL, TokenKind::PRIVATE, TokenKind::REDEF, TokenKind::CONST}},
-    {TokenKind::OVERRIDE, {TokenKind::STATIC, TokenKind::REDEF}},
-    {TokenKind::OPERATOR, {TokenKind::STATIC, TokenKind::REDEF}},
-    {TokenKind::UNSAFE, {}},
-    {TokenKind::CONST, {TokenKind::OPEN, TokenKind::COMMON, TokenKind::SPECIFIC}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC, TokenKind::CONST}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON, TokenKind::CONST}},
-    {TokenKind::ABSTRACT, {}}
+const ConflictRule TOPLEVEL_MAINDECL_MODIFIERS[] = {
+    CR_EMPTY(TokenKind::UNSAFE),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> INTERFACE_BODY_FUNCDECL_MODIFIERS = {
-    {TokenKind::STATIC, {TokenKind::OPERATOR, TokenKind::MUT, TokenKind::OVERRIDE, TokenKind::OPEN}},
-    {TokenKind::REDEF, {TokenKind::OPEN, TokenKind::OVERRIDE, TokenKind::OPERATOR}},
-    {TokenKind::OPERATOR, {TokenKind::STATIC}},
-    {TokenKind::MUT, {TokenKind::STATIC}},
-    {TokenKind::UNSAFE, {}},
-    {TokenKind::OVERRIDE, {TokenKind::STATIC, TokenKind::REDEF}},
-    {TokenKind::OPEN, {TokenKind::STATIC, TokenKind::REDEF}},
-    {TokenKind::CONST, {TokenKind::COMMON, TokenKind::SPECIFIC}},
-    {TokenKind::PUBLIC, {}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC, TokenKind::CONST}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON, TokenKind::CONST}}
+const ConflictRule CLASS_BODY_FUNCDECL_MODIFIERS[] = {
+    CR(TokenKind::CONST, TokenKind::OPEN, TokenKind::COMMON, TokenKind::SPECIFIC),
+    CR(TokenKind::STATIC, TokenKind::OVERRIDE, TokenKind::OPEN, TokenKind::OPERATOR),
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR(TokenKind::PRIVATE, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::OPEN),
+    CR(TokenKind::INTERNAL, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::PROTECTED, TokenKind::OPEN),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR_ARR(TokenKind::OVERRIDE, OVERRIDE_STATIC_REDEF),
+    CR_ARR(TokenKind::REDEF, REDEF_OVERRIDE_OPEN_OPERATOR),
+    CR_EMPTY(TokenKind::ABSTRACT),
+    CR(TokenKind::OPEN, TokenKind::CONST, TokenKind::STATIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::REDEF),
+    CR_EMPTY(TokenKind::UNSAFE),
+    CR_ARR(TokenKind::OPERATOR, OVERRIDE_STATIC_REDEF),
+    CR_ARR(TokenKind::COMMON, COMMON_CONST_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_CONST_COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> STRUCT_BODY_FUNCDECL_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS
-    {TokenKind::STATIC, {TokenKind::OPERATOR, TokenKind::MUT}},
-    {TokenKind::OPERATOR, {TokenKind::STATIC}},
-    {TokenKind::MUT, {TokenKind::STATIC, TokenKind::CONST}},
-    {TokenKind::UNSAFE, {}},
-    {TokenKind::OVERRIDE, {TokenKind::STATIC, TokenKind::REDEF}},
-    {TokenKind::REDEF, {TokenKind::OPEN, TokenKind::OVERRIDE, TokenKind::OPERATOR}},
-    {TokenKind::CONST, {TokenKind::MUT, TokenKind::COMMON, TokenKind::SPECIFIC}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC, TokenKind::CONST}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON, TokenKind::CONST}},
+const ConflictRule INTERFACE_BODY_FUNCDECL_MODIFIERS[] = {
+    CR_ARR(TokenKind::CONST, CONST_COMMON_PLATFORM),
+    CR(TokenKind::STATIC, TokenKind::OVERRIDE, TokenKind::OPEN, TokenKind::MUT, TokenKind::OPERATOR),
+    CR_EMPTY(TokenKind::PUBLIC),
+    CR_ARR(TokenKind::OVERRIDE, OVERRIDE_STATIC_REDEF),
+    CR_ARR(TokenKind::REDEF, REDEF_OVERRIDE_OPEN_OPERATOR),
+    CR_ARR(TokenKind::OPEN, OPEN_STATIC_REDEF),
+    CR_ARR(TokenKind::MUT, MUT_STATIC),
+    CR_EMPTY(TokenKind::UNSAFE),
+    CR_ARR(TokenKind::OPERATOR, OPERATOR_STATIC),
+    CR_ARR(TokenKind::COMMON, COMMON_CONST_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_CONST_COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> ENUM_BODY_FUNCDECL_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS
-    {TokenKind::STATIC, {TokenKind::OPERATOR}},
-    {TokenKind::OPERATOR, {TokenKind::STATIC}},
-    {TokenKind::UNSAFE, {}},
-    {TokenKind::OVERRIDE, {TokenKind::STATIC, TokenKind::REDEF}},
-    {TokenKind::REDEF, {TokenKind::OVERRIDE, TokenKind::OPERATOR}},
-    {TokenKind::CONST, {TokenKind::COMMON, TokenKind::SPECIFIC}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC, TokenKind::CONST}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON, TokenKind::CONST}}
+const ConflictRule STRUCT_BODY_FUNCDECL_MODIFIERS[] = {
+    CR(TokenKind::CONST, TokenKind::MUT, TokenKind::COMMON, TokenKind::SPECIFIC),
+    CR(TokenKind::STATIC, TokenKind::MUT, TokenKind::OPERATOR),
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, ACCESS_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR_ARR(TokenKind::OVERRIDE, OVERRIDE_STATIC_REDEF),
+    CR_ARR(TokenKind::REDEF, REDEF_OVERRIDE_OPEN_OPERATOR),
+    CR(TokenKind::MUT, TokenKind::CONST, TokenKind::STATIC),
+    CR_EMPTY(TokenKind::UNSAFE),
+    CR_ARR(TokenKind::OPERATOR, OPERATOR_STATIC),
+    CR_ARR(TokenKind::COMMON, COMMON_CONST_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_CONST_COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> FUNC_BODY_FUNCDECL_MODIFIERS = {
-    {TokenKind::UNSAFE, {}},
-    {TokenKind::CONST, {}},
+const ConflictRule ENUM_BODY_FUNCDECL_MODIFIERS[] = {
+    CR_ARR(TokenKind::CONST, CONST_COMMON_PLATFORM),
+    CR(TokenKind::STATIC, TokenKind::OPERATOR),
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, ACCESS_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR_ARR(TokenKind::OVERRIDE, OVERRIDE_STATIC_REDEF),
+    CR(TokenKind::REDEF, TokenKind::OVERRIDE, TokenKind::OPERATOR),
+    CR_EMPTY(TokenKind::UNSAFE),
+    CR(TokenKind::OPERATOR, TokenKind::STATIC),
+    CR_ARR(TokenKind::COMMON, COMMON_CONST_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_CONST_COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> STRUCT_BODY_VARIABLE_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS
-    {TokenKind::STATIC, {}},
-    {TokenKind::CONST, {}},
-    {TokenKind::CONST, {TokenKind::COMMON, TokenKind::SPECIFIC}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC, TokenKind::CONST}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON, TokenKind::CONST}}
+const ConflictRule FUNC_BODY_FUNCDECL_MODIFIERS[] = {
+    CR_EMPTY(TokenKind::CONST),
+    CR_EMPTY(TokenKind::UNSAFE),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> EXTEND_BODY_FUNCDECL_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS
-    {TokenKind::OPERATOR, {TokenKind::STATIC}},
-    {TokenKind::MUT, {TokenKind::STATIC}},
-    {TokenKind::STATIC, {TokenKind::MUT, TokenKind::OPERATOR}},
-    {TokenKind::UNSAFE, {}},
-    {TokenKind::CONST, {}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON}}
+const ConflictRule STRUCT_BODY_VARIABLE_MODIFIERS[] = {
+    CR_ARR(TokenKind::CONST, CONST_COMMON_PLATFORM),
+    CR_EMPTY(TokenKind::STATIC),
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, ACCESS_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR_ARR(TokenKind::COMMON, COMMON_CONST_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_CONST_COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> CLASS_BODY_PROP_MODIFIERS = {
-    {TokenKind::PUBLIC, {TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::PRIVATE}},
-    {TokenKind::PROTECTED, {TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PRIVATE}},
-    {TokenKind::INTERNAL, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::PRIVATE, TokenKind::OPEN}},
-    {TokenKind::PRIVATE, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::OPEN}},
-    {TokenKind::STATIC, {TokenKind::OPEN, TokenKind::OVERRIDE}},
-    {TokenKind::REDEF, {TokenKind::OPEN, TokenKind::OVERRIDE}},
-    {TokenKind::OPEN, {TokenKind::STATIC, TokenKind::INTERNAL, TokenKind::PRIVATE, TokenKind::REDEF}},
-    {TokenKind::OVERRIDE, {TokenKind::STATIC, TokenKind::REDEF}},
-    {TokenKind::MUT, {}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON}},
-    {TokenKind::ABSTRACT, {}},
+const ConflictRule EXTEND_BODY_FUNCDECL_MODIFIERS[] = {
+    CR_EMPTY(TokenKind::CONST),
+    CR(TokenKind::STATIC, TokenKind::MUT, TokenKind::OPERATOR),
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, ACCESS_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR_ARR(TokenKind::MUT, MUT_STATIC),
+    CR_EMPTY(TokenKind::UNSAFE),
+    CR_ARR(TokenKind::OPERATOR, OPERATOR_STATIC),
+    CR_ARR(TokenKind::COMMON, COMMON_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> INTERFACE_BODY_PROP_MODIFIERS = {
-    {TokenKind::STATIC, {TokenKind::OPEN, TokenKind::OVERRIDE}},
-    {TokenKind::REDEF, {TokenKind::OPEN, TokenKind::OVERRIDE}},
-    {TokenKind::OVERRIDE, {TokenKind::STATIC, TokenKind::REDEF}},
-    {TokenKind::OPEN, {TokenKind::STATIC, TokenKind::REDEF}},
-    {TokenKind::MUT, {}},
-    {TokenKind::PUBLIC, {}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON}},
+const ConflictRule CLASS_BODY_PROP_MODIFIERS[] = {
+    CR_ARR(TokenKind::STATIC, STATIC_OVERRIDE_OPEN),
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR(TokenKind::PRIVATE, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::OPEN),
+    CR(TokenKind::INTERNAL, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::PROTECTED, TokenKind::OPEN),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR_ARR(TokenKind::OVERRIDE, OVERRIDE_STATIC_REDEF),
+    CR_ARR(TokenKind::REDEF, REDEF_OVERRIDE_OPEN),
+    CR_EMPTY(TokenKind::ABSTRACT),
+    CR(TokenKind::OPEN, TokenKind::STATIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::REDEF),
+    CR_EMPTY(TokenKind::MUT),
+    CR_ARR(TokenKind::COMMON, COMMON_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> STRUCT_BODY_PROP_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS
-    {TokenKind::STATIC, {TokenKind::OVERRIDE}},
-    {TokenKind::OVERRIDE, {TokenKind::STATIC, TokenKind::REDEF}},
-    {TokenKind::REDEF, {TokenKind::OVERRIDE}},
-    {TokenKind::MUT, {}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON}},
+const ConflictRule INTERFACE_BODY_PROP_MODIFIERS[] = {
+    CR_ARR(TokenKind::STATIC, STATIC_OVERRIDE_OPEN),
+    CR_EMPTY(TokenKind::PUBLIC),
+    CR_ARR(TokenKind::OVERRIDE, OVERRIDE_STATIC_REDEF),
+    CR_ARR(TokenKind::REDEF, REDEF_OVERRIDE_OPEN),
+    CR_ARR(TokenKind::OPEN, OPEN_STATIC_REDEF),
+    CR_EMPTY(TokenKind::MUT),
+    CR_ARR(TokenKind::COMMON, COMMON_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> ENUM_BODY_PROP_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS
-    {TokenKind::STATIC, {TokenKind::OVERRIDE}},
-    {TokenKind::OVERRIDE, {TokenKind::STATIC, TokenKind::REDEF}},
-    {TokenKind::REDEF, {TokenKind::OVERRIDE}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON}},
+const ConflictRule STRUCT_BODY_PROP_MODIFIERS[] = {
+    CR_ARR(TokenKind::STATIC, STATIC_OVERRIDE),
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, ACCESS_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR_ARR(TokenKind::OVERRIDE, OVERRIDE_STATIC_REDEF2),
+    CR_ARR(TokenKind::REDEF, REDEF_OVERRIDE),
+    CR_EMPTY(TokenKind::MUT),
+    CR_ARR(TokenKind::COMMON, COMMON_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_COMMON),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> EXTEND_BODY_PROP_MODIFIERS = {
-    ACCESSIBLE_MODIFIERS
-    {TokenKind::STATIC, {}},
-    {TokenKind::MUT, {}},
-    {TokenKind::COMMON, {TokenKind::SPECIFIC}},
-    {TokenKind::SPECIFIC, {TokenKind::COMMON}},
+const ConflictRule ENUM_BODY_PROP_MODIFIERS[] = {
+    CR_ARR(TokenKind::STATIC, STATIC_OVERRIDE),
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, ACCESS_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR_ARR(TokenKind::OVERRIDE, OVERRIDE_STATIC_REDEF2),
+    CR_ARR(TokenKind::REDEF, REDEF_OVERRIDE),
+    CR_ARR(TokenKind::COMMON, COMMON_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_COMMON),
+};
+
+const ConflictRule EXTEND_BODY_PROP_MODIFIERS[] = {
+    CR_EMPTY(TokenKind::STATIC),
+    CR_ARR(TokenKind::PUBLIC, ACCESS_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, ACCESS_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, ACCESS_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
+    CR_EMPTY(TokenKind::MUT),
+    CR_ARR(TokenKind::COMMON, COMMON_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_COMMON),
 };
 
 // AGGREGATE means class and struct in Cangjie here.
-#define AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS \
-    {TokenKind::PUBLIC, {TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::PRIVATE, TokenKind::STATIC}}, \
-    {TokenKind::PROTECTED, {TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PRIVATE, TokenKind::STATIC}}, \
-    {TokenKind::INTERNAL, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::PRIVATE, TokenKind::STATIC}}, \
-    {TokenKind::PRIVATE, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::STATIC}}, \
-    {TokenKind::CONST, {}},
+const TokenKind AGG_PUBLIC[] = {TokenKind::STATIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED};
+const TokenKind AGG_PRIVATE[] = {TokenKind::STATIC, TokenKind::PUBLIC, TokenKind::INTERNAL, TokenKind::PROTECTED};
+const TokenKind AGG_INTERNAL[] = {TokenKind::STATIC, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::PROTECTED};
+const TokenKind AGG_PROTECTED[] = {TokenKind::STATIC, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL};
 
-#define AGGREGATE_BODY_INIT_MODIFIERS \
-    AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS \
-    {TokenKind::STATIC, {TokenKind::PUBLIC, TokenKind::PROTECTED, TokenKind::INTERNAL, TokenKind::PRIVATE}},\
-    {TokenKind::COMMON, {TokenKind::SPECIFIC}}, \
-    {TokenKind::SPECIFIC, {TokenKind::COMMON}},
+const ConflictRule AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS[] = {
+    CR_EMPTY(TokenKind::CONST),
+    CR_ARR(TokenKind::PUBLIC, AGG_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, AGG_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, AGG_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, AGG_PROTECTED),
+};
 
-/**
- * SCOPE_MODIFIER_RULES contains modifier trustlists defined under different scope kinds. The trustlist contains all
- * allowed modifiers of the current scope kind and modifiers that conflict with the modifier.
- */
-const static std::unordered_map<DefKind,
-    std::unordered_map<ScopeKind, std::unordered_map<TokenKind, std::vector<TokenKind>>>>
-    SCOPE_MODIFIER_RULES = {
-        {DefKind::PACKAGE, {{ScopeKind::TOPLEVEL, PACKAGE_MODIFIERS}}},
-        {
-            DefKind::FUNC,
-            {
-                {ScopeKind::TOPLEVEL, TOPLEVEL_FUNCDECL_MODIFIERS},
-                {ScopeKind::CLASS_BODY, CLASS_BODY_FUNCDECL_MODIFIERS},
-                {ScopeKind::INTERFACE_BODY, INTERFACE_BODY_FUNCDECL_MODIFIERS},
-                {ScopeKind::STRUCT_BODY, STRUCT_BODY_FUNCDECL_MODIFIERS},
-                {ScopeKind::EXTEND_BODY, EXTEND_BODY_FUNCDECL_MODIFIERS},
-                {ScopeKind::ENUM_BODY, ENUM_BODY_FUNCDECL_MODIFIERS},
-                {ScopeKind::FUNC_BODY, FUNC_BODY_FUNCDECL_MODIFIERS},
-            },
-        },
-        {DefKind::MACRO, {{ScopeKind::TOPLEVEL, TOPLEVEL_MACRODECL_MODIFIERS}}},
-        {DefKind::CLASS, {{ScopeKind::TOPLEVEL, TOPLEVEL_CLASS_MODIFIERS}}},
-        {DefKind::INTERFACE, {{ScopeKind::TOPLEVEL, TOPLEVEL_INTERFACE_MODIFIERS}}},
-        {
-            DefKind::VARIABLE,
-            {
-                {ScopeKind::TOPLEVEL, TOPLEVEL_VARIABLE_MODIFIERS},
-                {ScopeKind::CLASS_BODY, CLASS_BODY_VARIABLE_MODIFIERS},
-                {ScopeKind::STRUCT_BODY, STRUCT_BODY_VARIABLE_MODIFIERS},
-                {ScopeKind::PRIMARY_CONSTRUCTOR_BODY_FOR_CLASS, {AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS}},
-                {ScopeKind::PRIMARY_CONSTRUCTOR_BODY_FOR_STRUCT, {AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS}},
-                {ScopeKind::FUNC_BODY, {{TokenKind::CONST, {}}}},
-                {ScopeKind::MACRO_BODY, {{TokenKind::CONST, {}}}},
-            },
-        },
-        {DefKind::STRUCT, {{ScopeKind::TOPLEVEL, TOPLEVEL_STRUCT_MODIFIERS}}},
-        {DefKind::ENUM, {{ScopeKind::TOPLEVEL, TOPLEVEL_ENUM_MODIFIERS}}},
-        {DefKind::TYPE, {{ScopeKind::TOPLEVEL, TOPLEVEL_COMMON_MODIFIERS}}},
-        {DefKind::CONSTRUCTOR,
-            {
-                {ScopeKind::CLASS_BODY, {AGGREGATE_BODY_INIT_MODIFIERS}},
-                {ScopeKind::STRUCT_BODY, {AGGREGATE_BODY_INIT_MODIFIERS}},
-            }},
-        {DefKind::PRIMARY_CONSTRUCTOR,
-            {
-                {ScopeKind::CLASS_BODY, {AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS}},
-                {ScopeKind::STRUCT_BODY, {AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS}},
-            }},
-        {
-            DefKind::PROPERTY,
-            {
-                {ScopeKind::CLASS_BODY, CLASS_BODY_PROP_MODIFIERS},
-                {ScopeKind::INTERFACE_BODY, INTERFACE_BODY_PROP_MODIFIERS},
-                {ScopeKind::STRUCT_BODY, STRUCT_BODY_PROP_MODIFIERS},
-                {ScopeKind::EXTEND_BODY, EXTEND_BODY_PROP_MODIFIERS},
-                {ScopeKind::ENUM_BODY, ENUM_BODY_PROP_MODIFIERS},
-            },
-        },
-        {DefKind::MAIN, {{ScopeKind::TOPLEVEL, TOPLEVEL_MAINDECL_MODIFIERS}}},
-        // Empty means it doesn't support any modifier.
-        {DefKind::EXTEND, {{ScopeKind::TOPLEVEL, {}}}},
-        {DefKind::FINALIZER, {{ScopeKind::CLASS_BODY, {}}}},
+const ConflictRule AGGREGATE_BODY_INIT_MODIFIERS[] = {
+    CR_EMPTY(TokenKind::CONST),
+    CR(TokenKind::STATIC, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED),
+    CR_ARR(TokenKind::PUBLIC, AGG_PUBLIC),
+    CR_ARR(TokenKind::PRIVATE, AGG_PRIVATE),
+    CR_ARR(TokenKind::INTERNAL, AGG_INTERNAL),
+    CR_ARR(TokenKind::PROTECTED, AGG_PROTECTED),
+    CR_ARR(TokenKind::COMMON, COMMON_PLATFORM),
+    CR_ARR(TokenKind::SPECIFIC, PLATFORM_COMMON),
+};
+
+const ConflictRule FUNC_BODY_VARIABLE_MODIFIERS[] = {
+    CR_EMPTY(TokenKind::CONST),
 };
 
 // key: token to be checked, report when any of the token inside map value existed.
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> TOPLEVEL_CLASS_WARNING_MODIFIERS = {
-    {TokenKind::OPEN, {TokenKind::SEALED, TokenKind::ABSTRACT}},
-    {TokenKind::PUBLIC, {TokenKind::SEALED}},
+// For OPEN, check SEALED before ABSTRACT (priority order, not TokenKind order)
+const ConflictRule TOPLEVEL_CLASS_WARNING_MODIFIERS[] = {
+    CR_ARR(TokenKind::PUBLIC, PUBLIC_SEALED),
+    CR(TokenKind::OPEN, TokenKind::SEALED, TokenKind::ABSTRACT),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> TOPLEVEL_INTERFACE_WARNING_MODIFIERS = {
-    // NOTE: interface with open (without sealed) also should report warning.
-    // 'ILLEGAL' used to indicate that always report warning when key token existed.
-    {TokenKind::OPEN, {TokenKind::SEALED, TokenKind::ILLEGAL}},
-    {TokenKind::PUBLIC, {TokenKind::SEALED}},
+// NOTE: interface with open (without sealed) also should report warning.
+// 'ILLEGAL' used to indicate that always report warning when key token existed.
+// For OPEN, check SEALED first; ILLEGAL is fallback when no other modifier matches
+const ConflictRule TOPLEVEL_INTERFACE_WARNING_MODIFIERS[] = {
+    CR_ARR(TokenKind::PUBLIC, PUBLIC_SEALED),
+    CR(TokenKind::OPEN, TokenKind::SEALED, TokenKind::ILLEGAL),
 };
 
-const static std::unordered_map<TokenKind, std::vector<TokenKind>> INTERFACE_MEMBER_WARNING_MODIFIERS = {
-    {TokenKind::OPEN, {TokenKind::ILLEGAL}},
-    {TokenKind::PUBLIC, {TokenKind::ILLEGAL}},
+const ConflictRule INTERFACE_MEMBER_WARNING_MODIFIERS[] = {
+    CR_ARR(TokenKind::PUBLIC, ILLEGAL_ONLY),
+    CR_ARR(TokenKind::OPEN, ILLEGAL_ONLY),
 };
 
-const static std::unordered_map<DefKind,
-    std::unordered_map<ScopeKind, std::unordered_map<TokenKind, std::vector<TokenKind>>>>
-    SCOPE_MODIFIER_WARNING_RULES = {
-        {DefKind::FUNC, {{ScopeKind::INTERFACE_BODY, INTERFACE_MEMBER_WARNING_MODIFIERS}}},
-        {DefKind::PROPERTY, {{ScopeKind::INTERFACE_BODY, INTERFACE_MEMBER_WARNING_MODIFIERS}}},
-        {DefKind::CLASS, {{ScopeKind::TOPLEVEL, TOPLEVEL_CLASS_WARNING_MODIFIERS}}},
-        {DefKind::INTERFACE, {{ScopeKind::TOPLEVEL, TOPLEVEL_INTERFACE_WARNING_MODIFIERS}}},
-    };
+struct ScopeRuleEntry {
+    ScopeKind scope;
+    const ConflictRule* rules;
+    size_t count;
+};
 
-const ModifierRules& GetModifierRulesByDefKind(DefKind defKind)
+// get size of array
+#define SCOPE_ENTRY(sk, arr) {sk, arr, ARRAY_SIZE(arr)}
+#define SCOPE_ENTRY_EMPTY(sk) {sk, nullptr, 0}
+
+struct DefRuleEntry {
+    DefKind def;
+    const ScopeRuleEntry* scopes;
+    size_t count;
+};
+
+// create a literal array with varargs, and add its size
+#define DEF_SCOPES(...)                                                                                                \
+    (const ScopeRuleEntry[]){__VA_ARGS__}, sizeof((const ScopeRuleEntry[]){__VA_ARGS__}) / sizeof(ScopeRuleEntry)
+
+const DefRuleEntry SCOPE_MODIFIER_RULES[] = {
+    {DefKind::FUNC,
+        DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, TOPLEVEL_FUNCDECL_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::CLASS_BODY, CLASS_BODY_FUNCDECL_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::INTERFACE_BODY, INTERFACE_BODY_FUNCDECL_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::STRUCT_BODY, STRUCT_BODY_FUNCDECL_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::EXTEND_BODY, EXTEND_BODY_FUNCDECL_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::FUNC_BODY, FUNC_BODY_FUNCDECL_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::ENUM_BODY, ENUM_BODY_FUNCDECL_MODIFIERS))},
+    {DefKind::MAIN, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, TOPLEVEL_MAINDECL_MODIFIERS))},
+    {DefKind::MACRO, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, TOPLEVEL_MACRODECL_MODIFIERS))},
+    {DefKind::CLASS, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, TOPLEVEL_CLASS_MODIFIERS))},
+    {DefKind::INTERFACE, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, TOPLEVEL_INTERFACE_MODIFIERS))},
+    {DefKind::VARIABLE,
+        DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, TOPLEVEL_VARIABLE_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::CLASS_BODY, CLASS_BODY_VARIABLE_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::STRUCT_BODY, STRUCT_BODY_VARIABLE_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::FUNC_BODY, FUNC_BODY_VARIABLE_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::MACRO_BODY, FUNC_BODY_VARIABLE_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::PRIMARY_CONSTRUCTOR_BODY_FOR_CLASS, AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::PRIMARY_CONSTRUCTOR_BODY_FOR_STRUCT, AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS))},
+    {DefKind::ENUM, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, TOPLEVEL_ENUM_MODIFIERS))},
+    {DefKind::STRUCT, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, TOPLEVEL_STRUCT_MODIFIERS))},
+    // Empty means it doesn't support any modifier.
+    {DefKind::EXTEND, DEF_SCOPES(SCOPE_ENTRY_EMPTY(ScopeKind::TOPLEVEL))},
+    {DefKind::TYPE, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, TOPLEVEL_COMMON_MODIFIERS))},
+    {DefKind::CONSTRUCTOR,
+        DEF_SCOPES(SCOPE_ENTRY(ScopeKind::CLASS_BODY, AGGREGATE_BODY_INIT_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::STRUCT_BODY, AGGREGATE_BODY_INIT_MODIFIERS))},
+    {DefKind::PRIMARY_CONSTRUCTOR,
+        DEF_SCOPES(SCOPE_ENTRY(ScopeKind::CLASS_BODY, AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::STRUCT_BODY, AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS))},
+    {DefKind::PROPERTY,
+        DEF_SCOPES(SCOPE_ENTRY(ScopeKind::CLASS_BODY, CLASS_BODY_PROP_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::INTERFACE_BODY, INTERFACE_BODY_PROP_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::STRUCT_BODY, STRUCT_BODY_PROP_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::EXTEND_BODY, EXTEND_BODY_PROP_MODIFIERS),
+            SCOPE_ENTRY(ScopeKind::ENUM_BODY, ENUM_BODY_PROP_MODIFIERS))},
+    // Empty means it doesn't support any modifier.
+    {DefKind::FINALIZER, DEF_SCOPES(SCOPE_ENTRY_EMPTY(ScopeKind::CLASS_BODY))},
+    {DefKind::PACKAGE, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, PACKAGE_MODIFIERS))},
+};
+
+const DefRuleEntry SCOPE_MODIFIER_WARNING_MODIFIERS[] = {
+    {DefKind::FUNC, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::INTERFACE_BODY, INTERFACE_MEMBER_WARNING_MODIFIERS))},
+    {DefKind::CLASS, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, TOPLEVEL_CLASS_WARNING_MODIFIERS))},
+    {DefKind::INTERFACE, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::TOPLEVEL, TOPLEVEL_INTERFACE_WARNING_MODIFIERS))},
+    {DefKind::PROPERTY, DEF_SCOPES(SCOPE_ENTRY(ScopeKind::INTERFACE_BODY, INTERFACE_MEMBER_WARNING_MODIFIERS))},
+};
+
+// use binary search when data set is large
+constexpr size_t BINARY_SEARCH_THRESHOLD = 12;
+
+const ScopeRuleEntry* FindScopeInDef(const ScopeRuleEntry* scopes, size_t count, ScopeKind scopeKind)
 {
-    CJC_ASSERT(SCOPE_MODIFIER_RULES.find(defKind) != SCOPE_MODIFIER_RULES.end());
-    return SCOPE_MODIFIER_RULES.at(defKind);
+    if (count >= BINARY_SEARCH_THRESHOLD) {
+        int lo = 0;
+        int hi = static_cast<int>(count) - 1;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            if (scopes[mid].scope == scopeKind) {
+                return &scopes[mid];
+            }
+            if (static_cast<int>(scopes[mid].scope) < static_cast<int>(scopeKind)) {
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return nullptr;
+    }
+    // linear search for small data set
+    for (size_t i = 0; i < count; ++i) {
+        if (scopes[i].scope == scopeKind) {
+            return &scopes[i];
+        }
+    }
+    return nullptr;
 }
 
-const ModifierRules& GetModifierWarningRulesByDefKind(DefKind defKind)
+const ScopeRuleEntry* FindScopeEntry(const DefRuleEntry* defs, size_t defCount, DefKind defKind, ScopeKind scopeKind)
 {
-    const static ModifierRules EMPTY;
-    auto found = SCOPE_MODIFIER_WARNING_RULES.find(defKind);
-    return found == SCOPE_MODIFIER_WARNING_RULES.end() ? EMPTY : found->second;
+    const DefRuleEntry* defEntry = nullptr;
+    if (defCount >= BINARY_SEARCH_THRESHOLD) {
+        int lo = 0;
+        int hi = static_cast<int>(defCount) - 1;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            if (defs[mid].def == defKind) {
+                defEntry = &defs[mid];
+                break;
+            }
+            if (static_cast<int>(defs[mid].def) < static_cast<int>(defKind)) {
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+    } else {
+        for (size_t i = 0; i < defCount; ++i) {
+            if (defs[i].def == defKind) {
+                defEntry = &defs[i];
+                break;
+            }
+        }
+    }
+    if (!defEntry) {
+        return nullptr;
+    }
+    return FindScopeInDef(defEntry->scopes, defEntry->count, scopeKind);
+}
+
+const ConflictRule* FindConflictRule(const ConflictRule* rules, size_t count, TokenKind modifier)
+{
+    if (count >= BINARY_SEARCH_THRESHOLD) {
+        int lo = 0;
+        int hi = static_cast<int>(count) - 1;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            if (rules[mid].modifier == modifier) {
+                return &rules[mid];
+            }
+            if (static_cast<int>(rules[mid].modifier) < static_cast<int>(modifier)) {
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return nullptr;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        if (rules[i].modifier == modifier) {
+            return &rules[i];
+        }
+    }
+    return nullptr;
+}
+} // namespace
+
+namespace Cangjie {
+
+std::optional<AST::Attribute> GetAttributeByModifier(TokenKind tokenKind)
+{
+    if (tokenKind == TokenKind::COMMON) {
+        return AST::Attribute::COMMON;
+    }
+    if (tokenKind == TokenKind::SPECIFIC) {
+        return AST::Attribute::SPECIFIC;
+    }
+    if (tokenKind == TokenKind::INOUT) {
+        return std::nullopt;
+    }
+
+    // use array index for consecutive tokens
+    static const AST::Attribute ATTR_TABLE[] = {
+        AST::Attribute::STATIC,
+        AST::Attribute::PUBLIC,
+        AST::Attribute::PRIVATE,
+        AST::Attribute::INTERNAL,
+        AST::Attribute::PROTECTED,
+        AST::Attribute::OVERRIDE,
+        AST::Attribute::REDEF,
+        AST::Attribute::ABSTRACT,
+        AST::Attribute::SEALED,
+        AST::Attribute::OPEN,
+        AST::Attribute::FOREIGN,
+        AST::Attribute::STATIC, // placeholder for INOUT
+        AST::Attribute::MUT,
+        AST::Attribute::UNSAFE,
+        AST::Attribute::OPERATOR,
+    };
+    constexpr int tableSize = static_cast<int>(TokenKind::OPERATOR) - static_cast<int>(TokenKind::STATIC) + 1;
+
+    int idx = static_cast<int>(tokenKind) - static_cast<int>(TokenKind::STATIC);
+    if (idx >= 0 && idx < tableSize) {
+        return ATTR_TABLE[idx];
+    }
+    return std::nullopt;
+}
+
+bool HasScopeRules(DefKind defKind, ScopeKind scopeKind)
+{
+    return FindScopeEntry(SCOPE_MODIFIER_RULES, ARRAY_SIZE(SCOPE_MODIFIER_RULES), defKind, scopeKind) != nullptr;
+}
+
+bool IsScopeRulesEmpty(DefKind defKind, ScopeKind scopeKind)
+{
+    auto entry = FindScopeEntry(SCOPE_MODIFIER_RULES, ARRAY_SIZE(SCOPE_MODIFIER_RULES), defKind, scopeKind);
+    return entry == nullptr || entry->count == 0;
+}
+
+bool IsModifierAllowed(DefKind defKind, ScopeKind scopeKind, TokenKind modifier)
+{
+    auto entry = FindScopeEntry(SCOPE_MODIFIER_RULES, ARRAY_SIZE(SCOPE_MODIFIER_RULES), defKind, scopeKind);
+    if (!entry || entry->count == 0) {
+        return false;
+    }
+    return FindConflictRule(entry->rules, entry->count, modifier) != nullptr;
+}
+
+ConflictArray GetConflictingModifiers(DefKind defKind, ScopeKind scopeKind, TokenKind modifier)
+{
+    auto entry = FindScopeEntry(SCOPE_MODIFIER_RULES, ARRAY_SIZE(SCOPE_MODIFIER_RULES), defKind, scopeKind);
+    if (!entry) {
+        return {};
+    }
+    auto rule = FindConflictRule(entry->rules, entry->count, modifier);
+    if (!rule) {
+        return {};
+    }
+    return {rule->conflicts, rule->conflictCount};
+}
+
+bool HasWarningRules(DefKind defKind, ScopeKind scopeKind)
+{
+    return FindScopeEntry(SCOPE_MODIFIER_WARNING_MODIFIERS, ARRAY_SIZE(SCOPE_MODIFIER_WARNING_MODIFIERS), defKind,
+               scopeKind) != nullptr;
+}
+
+ConflictArray GetWarningConflicts(DefKind defKind, ScopeKind scopeKind, TokenKind modifier)
+{
+    auto entry = FindScopeEntry(
+        SCOPE_MODIFIER_WARNING_MODIFIERS, ARRAY_SIZE(SCOPE_MODIFIER_WARNING_MODIFIERS), defKind, scopeKind);
+    if (!entry) {
+        return {};
+    }
+    auto rule = FindConflictRule(entry->rules, entry->count, modifier);
+    if (!rule) {
+        return {};
+    }
+    return {rule->conflicts, rule->conflictCount};
 }
 
 AST::Attribute ParserImpl::GetModifierAttr(const OwnedPtr<AST::Modifier>& modifier, AST::ASTKind kind) const
 {
     if (modifier) {
-        if (auto found = TK2ATTRMAP.find(modifier->modifier); found != TK2ATTRMAP.end()) {
-            return found->second;
+        if (auto attr = GetAttributeByModifier(modifier->modifier)) {
+            return *attr;
         }
     }
-    // The default modifier of package statement is 'public'.
     if (kind == AST::ASTKind::PACKAGE_SPEC) {
         return AST::Attribute::PUBLIC;
     }
-    // The default modifier of import statement is 'private'.
     if (kind == AST::ASTKind::IMPORT_SPEC) {
         return AST::Attribute::PRIVATE;
     }
-    // Otherwise, the default modifier is 'internal'.
     return AST::Attribute::INTERNAL;
 }
+
 } // namespace Cangjie

@@ -289,13 +289,37 @@ void LexerImpl::ReadUTF8CharFromMultiBytes(int32_t& ch)
 
 TokenKind LexerImpl::LookupKeyword(const std::string& literal)
 {
-    if (LexerImpl::tokenMap.count(literal) != 0) {
-        // keyword
-        return LexerImpl::tokenMap[literal];
+    static const auto tokenMap = [] {
+        static std::unordered_map<std::string_view, TokenKind> map;
+        for (unsigned char i = 0; i < static_cast<unsigned char>(TokenKind::IDENTIFIER); i++) {
+            map[TOKENS[i]] = static_cast<TokenKind>(i);
+        }
+        auto atExclIndex = static_cast<unsigned char>(TokenKind::AT_EXCL);
+        map[TOKENS[atExclIndex]] = static_cast<TokenKind>(atExclIndex);
+        auto commonIndex = static_cast<unsigned char>(TokenKind::COMMON);
+        map[TOKENS[commonIndex]] = static_cast<TokenKind>(commonIndex);
+        auto specificIndex = static_cast<unsigned char>(TokenKind::SPECIFIC);
+        map[TOKENS[specificIndex]] = static_cast<TokenKind>(specificIndex);
+        auto dcIndex = static_cast<unsigned char>(TokenKind::DOUBLE_COLON);
+        map[TOKENS[dcIndex]] = static_cast<TokenKind>(dcIndex);
+        map["true"] = TokenKind::BOOL_LITERAL;
+        map["false"] = TokenKind::BOOL_LITERAL;
+        auto ftrIndex = static_cast<unsigned char>(TokenKind::FEATURES);
+        map[TOKENS[ftrIndex]] = TokenKind::FEATURES;
+        map[TOKENS[static_cast<unsigned char>(TokenKind::PERFORM)]] = TokenKind::PERFORM;
+        map[TOKENS[static_cast<unsigned char>(TokenKind::RESUME)]] = TokenKind::RESUME;
+        map[TOKENS[static_cast<unsigned char>(TokenKind::THROWING)]] = TokenKind::THROWING;
+        map[TOKENS[static_cast<unsigned char>(TokenKind::HANDLE)]] = TokenKind::HANDLE;
+        return map;
+    }();
+    auto it = tokenMap.find(literal);
+    TokenKind kind = it != tokenMap.end() ? it->second : TokenKind::IDENTIFIER;
+    if (!ehEnabled &&
+        (kind == TokenKind::PERFORM || kind == TokenKind::RESUME || kind == TokenKind::THROWING ||
+            kind == TokenKind::HANDLE)) {
+        return TokenKind::IDENTIFIER;
     }
-
-    // identifier
-    return TokenKind::IDENTIFIER;
+    return kind;
 }
 
 void LexerImpl::Back()
@@ -1729,6 +1753,34 @@ Token LexerImpl::ScanSymbol(const char* pStart)
     return GetSymbolToken(pStart);
 }
 
+namespace {
+// Lookup ambiguous token degradation - file-local function (4 elements, sparse keys)
+const std::tuple<TokenKind, std::string_view, TokenKind, std::string_view>* LookupAmbiTokenDeg(TokenKind kind)
+{
+    static const std::tuple<TokenKind, std::string_view, TokenKind, std::string_view> COALESCING_DEG = {
+        TokenKind::QUEST, "?", TokenKind::QUEST, "?"};
+    static const std::tuple<TokenKind, std::string_view, TokenKind, std::string_view> RSHIFT_ASSIGN_DEG = {
+        TokenKind::GT, ">", TokenKind::GE, ">="};
+    static const std::tuple<TokenKind, std::string_view, TokenKind, std::string_view> RSHIFT_DEG = {
+        TokenKind::GT, ">", TokenKind::GT, ">"};
+    static const std::tuple<TokenKind, std::string_view, TokenKind, std::string_view> GE_DEG = {
+        TokenKind::GT, ">", TokenKind::ASSIGN, "="};
+
+    switch (kind) {
+        case TokenKind::COALESCING:
+            return &COALESCING_DEG;
+        case TokenKind::RSHIFT_ASSIGN:
+            return &RSHIFT_ASSIGN_DEG;
+        case TokenKind::RSHIFT:
+            return &RSHIFT_DEG;
+        case TokenKind::GE:
+            return &GE_DEG;
+        default:
+            return nullptr;
+    }
+}
+} // anonymous namespace
+
 Token LexerImpl::ScanFromTokens()
 {
     if (curToken >= tokens.size()) {
@@ -1736,9 +1788,8 @@ Token LexerImpl::ScanFromTokens()
         return Token(TokenKind::END, "", pos, pos);
     }
     if (splitAmbiguousToken) {
-        auto itAmb = ambiCombinedTokensDegTable.find(tokens[curToken].kind);
-        if (itAmb != ambiCombinedTokensDegTable.end()) {
-            const auto& [lkind, lval, rkind, rval] = itAmb->second;
+        if (auto* deg = LookupAmbiTokenDeg(tokens[curToken].kind)) {
+            const auto& [lkind, lval, rkind, rval] = *deg;
             tokens[curToken].kind = rkind;
             auto curPos = tokens[curToken].Begin();
             auto endPos = tokens[curToken].End();

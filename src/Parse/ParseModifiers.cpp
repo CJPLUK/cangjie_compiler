@@ -61,8 +61,7 @@ std::set<AST::Attribute> ParserImpl::CheckDeclModifiers(const std::set<AST::Modi
         return attrs;
     }
 
-    const auto& defRules = GetModifierRulesByDefKind(defKind);
-    if (defRules.find(scopeKind) == defRules.end()) {
+    if (!HasScopeRules(defKind, scopeKind)) {
         return {};
     }
 
@@ -73,26 +72,18 @@ std::set<AST::Attribute> ParserImpl::CheckDeclModifiers(const std::set<AST::Modi
     }
 
     auto modifiersVec = SortModifierByPos(modifiers);
-    if (defRules.at(scopeKind).empty()) {
+    if (IsScopeRulesEmpty(defKind, scopeKind)) {
         DiagIllegalModifierInScope(**modifiersVec.begin());
         return {};
-    }
-    auto scopeRules = defRules.at(scopeKind);
-    std::unordered_map<TokenKind, std::vector<TokenKind>> scopeWarningRules;
-    const auto& rules = GetModifierWarningRulesByDefKind(defKind);
-    if (auto foundRules = rules.find(scopeKind); foundRules != rules.end()) {
-        scopeWarningRules = foundRules->second;
     }
     if (!mpImpl->CheckCJMPModifiers(modifiers)) {
         return {};
     }
-    return GetModifierAttrs(scopeKind, scopeRules, scopeWarningRules, modifiersVec);
+    return GetModifierAttrs(defKind, scopeKind, modifiersVec);
 }
 
-std::set<AST::Attribute> ParserImpl::GetModifierAttrs(const ScopeKind& scopeKind,
-    std::unordered_map<TokenKind, std::vector<TokenKind>>& scopeRules,
-    const std::unordered_map<TokenKind, std::vector<TokenKind>>& scopeWarningRules,
-    const std::vector<Ptr<const AST::Modifier>>& modifiersVec)
+std::set<AST::Attribute> ParserImpl::GetModifierAttrs(
+    DefKind defKind, ScopeKind scopeKind, const std::vector<Ptr<const AST::Modifier>>& modifiersVec)
 {
     // Store the modifiers TokenKind that has been traversed.
     std::vector<Ptr<const AST::Modifier>> traversedModifiers;
@@ -103,7 +94,7 @@ std::set<AST::Attribute> ParserImpl::GetModifierAttrs(const ScopeKind& scopeKind
     // compatible use cases, and adjustments will be made in the future.
     for (auto& it : modifiersVec) {
         // Check allowing modifiers
-        if (scopeRules.find(it->modifier) == scopeRules.end()) {
+        if (!IsModifierAllowed(defKind, scopeKind, it->modifier)) {
             // Ignore modifiers check when Parsing from libast.
             if (diag.ignoreScopeCheck) {
                 continue;
@@ -116,7 +107,9 @@ std::set<AST::Attribute> ParserImpl::GetModifierAttrs(const ScopeKind& scopeKind
         }
         bool hasCollision = false;
         // Check conflict modifiers.
-        for (auto& cm : scopeRules[it->modifier]) {
+        auto conflicts = GetConflictingModifiers(defKind, scopeKind, it->modifier);
+        for (size_t i = 0; i < conflicts.size; ++i) {
+            TokenKind cm = conflicts.data[i];
             auto iter = std::find_if(traversedModifiers.begin(), traversedModifiers.end(),
                 [&cm](auto& preMod) { return preMod->modifier == cm; });
             if (iter == traversedModifiers.end()) {
@@ -135,30 +128,32 @@ std::set<AST::Attribute> ParserImpl::GetModifierAttrs(const ScopeKind& scopeKind
             attrs.insert(attr.value());
         }
     }
-    ReportModifierWarning(scopeKind, scopeWarningRules, validModifiers);
+    ReportModifierWarning(defKind, scopeKind, validModifiers);
     return attrs;
 }
 
-void ParserImpl::ReportModifierWarning([[maybe_unused]] ScopeKind scopeKind,
-    const std::unordered_map<TokenKind, std::vector<TokenKind>>& scopeWarningRules,
-    const std::vector<Ptr<const AST::Modifier>>& modifiers)
+void ParserImpl::ReportModifierWarning(
+    DefKind defKind, ScopeKind scopeKind, const std::vector<Ptr<const AST::Modifier>>& modifiers)
 {
-    for (auto rule : scopeWarningRules) {
-        auto iter = std::find_if(
-            modifiers.begin(), modifiers.end(), [&rule](auto& mod) { return mod->modifier == rule.first; });
-        if (iter == modifiers.end()) {
+    if (!HasWarningRules(defKind, scopeKind)) {
+        return;
+    }
+    for (auto& mod : modifiers) {
+        auto conflicts = GetWarningConflicts(defKind, scopeKind, mod->modifier);
+        if (!conflicts.data) {
             continue;
         }
-        for (auto higherMod : rule.second) {
+        for (size_t i = 0; i < conflicts.size; ++i) {
+            TokenKind higherMod = conflicts.data[i];
             // Do not report scope dependent redundant modifier warning for macro expansion.
             if (higherMod == TokenKind::ILLEGAL && !diag.ignoreScopeCheck) {
-                DiagRedundantModifiers(**iter);
+                DiagRedundantModifiers(*mod);
                 break;
             }
-            auto found = std::find_if(modifiers.begin(), modifiers.end(),
-                [&higherMod](auto& mod) { return mod->modifier == higherMod; });
+            auto found = std::find_if(
+                modifiers.begin(), modifiers.end(), [&higherMod](auto& m) { return m->modifier == higherMod; });
             if (found != modifiers.end()) {
-                DiagRedundantModifiers(**iter, **found);
+                DiagRedundantModifiers(*mod, **found);
                 break;
             }
         }

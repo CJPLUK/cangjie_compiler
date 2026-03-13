@@ -22,21 +22,85 @@
 using namespace Cangjie;
 using namespace Cangjie::AST;
 
+ParserImpl::ExprHandler ParserImpl::LookupExprHandler(TokenKind kind)
+{
+    static constexpr int firstKind = static_cast<int>(TokenKind::LPAREN);
+    static constexpr int lastKind = static_cast<int>(TokenKind::RESUME);
+    static constexpr int arraySize = lastKind - firstKind + 1;
+
+    // clang-format off
+    static const ExprHandler HANDLERS[arraySize] = {
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseLeftParenExpr),
+        nullptr, // RPAREN
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseArrayLitExpr),
+        nullptr, // RSQUARE
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseLambdaExpr),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // RCURL..INCR
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // DECR..BITOR
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // BITXOR..ASSIGN
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // ADD_ASSIGN..OR_ASSIGN
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // BITAND_ASSIGN..BACKARROW
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // DOUBLE_ARROW..LT
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // GT..WILDCARD
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // INT8..UINT8
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // UINT16..RUNE
+        nullptr, nullptr, // BOOLEAN..NOTHING
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseVArrayExpr),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // THISTYPE..MACRO
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseQuoteExpr),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // DOLLAR..INIT
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseThisOrSuper),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseThisOrSuper),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseIfExpr),
+        nullptr, nullptr, // ELSE, CASE
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseTryExpr),
+        nullptr, nullptr, // CATCH, FINALLY
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseForInExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseDoWhileExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseWhileExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseThrowExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseReturnExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseContinueJumpExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseBreakJumpExpr),
+        nullptr, nullptr, // IN, NOT_IN
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseMatchExpr),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // WHERE..OVERRIDE
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // REDEF..MUT
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseUnsafeBlock),
+        nullptr, // OPERATOR
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseSpawnExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseSynchronizedExpr),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // UPPERBOUND..FLOAT_LITERAL
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // COMMENT..MULTILINE_RAW_STRING
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // BOOL_LITERAL..PLATFORM
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParsePerformExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseResumeExpr),
+    };
+    // clang-format on
+
+    int index = static_cast<int>(kind) - firstKind;
+    if (index < 0 || index >= arraySize) {
+        return nullptr;
+    }
+    return HANDLERS[index];
+}
+
 OwnedPtr<Expr> ParserImpl::ParseAtom(ExprKind ek)
 {
     if (IsConditionExpr(ek) && Skip(TokenKind::LPAREN)) {
         return ParseLeftParenExprInKind(ek);
     }
-    if (const TokenKind peekKind = Peek().kind; exprHandlerMap.count(peekKind) != 0) {
+    auto tokenKind = Peek().kind;
+    if (auto handler = LookupExprHandler(tokenKind)) {
         lastToken = lookahead;
         // we put enter/exit here because the following Next() would scan inner tokens of quote expr if it is one.
         // otherwise we must call Next() as the first line of each expr handler.
-        if (peekKind == TokenKind::QUOTE) {
+        if (tokenKind == TokenKind::QUOTE) {
             EnterQuoteExprMod();
         }
         Next();
-        auto ret = exprHandlerMap[peekKind](this);
-        if (peekKind == TokenKind::QUOTE) {
+        auto ret = (this->*handler)(tokenKind);
+        if (tokenKind == TokenKind::QUOTE) {
             ExitQuoteExprMod();
         }
         return ret;
@@ -57,7 +121,7 @@ OwnedPtr<Expr> ParserImpl::ParseAtom(ExprKind ek)
     // Optimize those Seeing().
     // If seeing a primitive type + dot, should be a static function call like Int64.foo().
     if (SeeingPrimitiveTypeAndDot()) {
-        auto ret = MakeOwned<PrimitiveTypeExpr>(TOKENKIND_TO_PRIMITIVE_TYPEKIND_MAP.at(lookahead.kind));
+        auto ret = MakeOwned<PrimitiveTypeExpr>(LookupPrimitiveTypeKind(lookahead.kind));
         ret->begin = lookahead.Begin();
         Next(); // Consume the TYPE token but keep the DOT token.
         ret->end = lastToken.End();
@@ -872,9 +936,8 @@ OwnedPtr<ReturnExpr> ParserImpl::ParseReturnExpr()
     } else {
         if (newlineSkipped) {
             auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_nl_warning, firstNLPosition);
-            auto iter = std::find_if(
-                combinator.rbegin(), combinator.rend(), [this](auto& k) { return SeeingCombinator(k.first); });
-            std::string tkValue = (iter != combinator.rend()) ? std::string(iter->second.second) : lookahead.Value();
+            auto* combInfo = LookupSeenCombinator();
+            std::string tkValue = combInfo ? std::string(combInfo->value) : lookahead.Value();
             builder.AddHint(
                 MakeRange(lastNoneNLToken.Begin(), lookahead.Begin() + 1), lastNoneNLToken.Value(), tkValue);
         }
@@ -1581,7 +1644,7 @@ OwnedPtr<AST::Expr> ParserImpl::ParseTypeConvExpr()
     type->begin = lookahead.Begin();
     type->end = lookahead.End();
     type->str = lookahead.Value();
-    type->kind = TOKENKIND_TO_PRIMITIVE_TYPEKIND_MAP.at(lookahead.kind);
+    type->kind = LookupPrimitiveTypeKind(lookahead.kind);
     Next();
     ret->type = std::move(type);
     if (!Skip(TokenKind::LPAREN)) {
