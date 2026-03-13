@@ -898,6 +898,10 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         opts.outputJavaGenDir = {arg.value};
         return true;
     }},
+    { Options::ID::OUTPUT_OBJC_GEN_DIR, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        opts.outputObjCGenDir = {arg.value};
+        return true;
+    }},
     { Options::ID::SAVE_TEMPS, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         if (!IsDir(arg.value)) {
             DiagnosticEngine diag;
