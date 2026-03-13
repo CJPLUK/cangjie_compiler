@@ -92,7 +92,8 @@ cp $WORKSPACE/cangjie_tools/cangjie-language-server/output/bin/LSPServer cangjie
 
 # Then copy over stdx artifacts
 cp -r $WORKSPACE/cangjie_stdx/target cangjie/stdx
-echo 'export CANGJIE_STDX_PATH=$CANGJIE_HOME/stdx' >> cangjie/envsetup.sh
+echo 'export CANGJIE_STDX_PATH=${CANGJIE_HOME}/stdx' >> cangjie/envsetup.sh
+echo 'export LD_LIBRARY_PATH=${CANGJIE_HOME}/linux_${ARCH}_cjnative/dynamic/stdx:${LD_LIBRARY_PATH}' >> cangjie/envsetup.sh
 cp cangjie/stdx/linux_${ARCH}_cjnative/dynamic/stdx/*.so cangjie/runtime/lib/linux_${ARCH}_cjnative/
 cp cangjie/stdx/linux_${ARCH}_cjnative/dynamic/stdx/libstdx.syntaxFFI.a cangjie/runtime/lib/linux_${ARCH}_cjnative/; # Maybe this should go here? libstdx.syntaxFFI.a is the only .a in that directory...
 cp cangjie/stdx/linux_${ARCH}_cjnative/static/stdx/*.a cangjie/lib/linux_${ARCH}_cjnative/
@@ -102,5 +103,5 @@ cp cangjie/stdx/linux_${ARCH}_cjnative/dynamic/stdx/stdx.cjo cangjie/modules/lin
 
 # 打包和设置权限
 chmod -R 750 cangjie
-tar zcvf cangjie-sdk-${SDK_NAME}-${CANGJIE_VERSION}.tar.gz cangjie;
+tar --format=gnu -zcvf cangjie-sdk-${SDK_NAME}-${CANGJIE_VERSION}.tar.gz cangjie;
 chmod 550 cangjie-sdk-${SDK_NAME}-${CANGJIE_VERSION}.tar.gz;

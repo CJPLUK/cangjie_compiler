@@ -92,7 +92,8 @@ cp $WORKSPACE/cangjie_tools/cangjie-language-server/output/bin/LSPServer cangjie
 
 # Then copy over stdx artifacts
 cp -r $WORKSPACE/cangjie_stdx/target cangjie/stdx
-echo 'export CANGJIE_STDX_PATH=$CANGJIE_HOME/stdx' >> cangjie/envsetup.sh
+echo 'export CANGJIE_STDX_PATH=${CANGJIE_HOME}/stdx' >> cangjie/envsetup.sh
+echo 'export LD_LIBRARY_PATH=${CANGJIE_HOME}/darwin_${ARCH}_cjnative/dynamic/stdx:${LD_LIBRARY_PATH}' >> cangjie/envsetup.sh
 cp cangjie/stdx/darwin_${ARCH}_cjnative/dynamic/stdx/*.dylib cangjie/runtime/lib/darwin_${ARCH}_cjnative/
 cp cangjie/stdx/darwin_${ARCH}_cjnative/dynamic/stdx/libstdx.syntaxFFI.a cangjie/runtime/lib/darwin_${ARCH}_cjnative/; # Maybe this should go here? libstdx.syntaxFFI.a is the only .a in that directory...
 cp cangjie/stdx/darwin_${ARCH}_cjnative/static/stdx/*.a cangjie/lib/darwin_${ARCH}_cjnative/
