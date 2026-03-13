@@ -177,12 +177,7 @@ struct Range {
     {
         return begin == right.begin && end == right.end;
     }
-    size_t Hash() const
-    {
-        return (static_cast<size_t>(begin.fileID)) ^ (static_cast<size_t>(begin.line) << 8u) ^
-            (static_cast<size_t>(begin.column) << 16u) ^ (static_cast<size_t>(begin.fileID) << 24u) ^
-            (static_cast<size_t>(begin.line) << 32u) ^ (static_cast<size_t>(begin.column) << 40u);
-    }
+    size_t Hash() const;
     bool EqualForHash(const Range& right) const
     {
         return begin.fileID == right.begin.fileID && begin == right.begin && end == right.end;
