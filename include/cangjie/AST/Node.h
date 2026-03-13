@@ -896,6 +896,7 @@ struct GenericConstraint : public Node {
     std::vector<Position> bitAndPos;         /**< The position of '&'. */
     std::vector<OwnedPtr<Type>> upperBounds; /**< Upper bounds, class, interface */
     Position commaPos;                       /**< The position of where. */
+    bool isImplicitlyIntroduced{false};      /**< Whether this constraint was inherited from extended type. */
     GenericConstraint() : Node(ASTKind::GENERIC_CONSTRAINT)
     {
     }

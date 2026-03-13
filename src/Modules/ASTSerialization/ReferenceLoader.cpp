@@ -445,6 +445,7 @@ void ASTLoader::ASTLoaderImpl::LoadGenericConstraintsRef(
         for (uoffset_t j = 0; j < upperSize; j++) {
             constraint->upperBounds.emplace_back(WrapType(LoadType(vConstraint->uppers()->Get(j))));
         }
+        constraint->isImplicitlyIntroduced = vConstraint->isImplicitlyIntroduced();
         generic->genericConstraints.emplace_back(std::move(constraint));
     }
 }
