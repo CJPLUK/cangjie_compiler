@@ -21,7 +21,7 @@ Ptr<Value> Translator::Visit(const AST::TypeConvExpr& typeConvExpr)
         return CreateWrappedTypeCast(loc, chirType, operand, currentBlock)->GetResult();
     }
     auto ofs = typeConvExpr.overflowStrategy;
-    auto noException = (srcTy->IsInteger() && targetTy->IsInteger()) && ofs != OverflowStrategy::THROWING;
+    auto noException = targetTy->IsInteger() && ofs != OverflowStrategy::THROWING;
     auto opLoc = TranslateLocation(*typeConvExpr.expr);
     auto newNode = TryCreateCastWithOV(currentBlock, !noException, ofs, loc, chirType, operand);
     return newNode->GetResult();
