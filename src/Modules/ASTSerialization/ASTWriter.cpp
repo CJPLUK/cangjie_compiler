@@ -478,7 +478,8 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
         if (IsGenericInCommonSerialization(this->serializingCommon, *d)) {
             return true;
         }
-        // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls
+        // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls.
+        // Common `decl` members are exported because they can be accessed from specific nominative.
         if (!config.exportForIncr && !decl.TestAttr(Attribute::COMMON) && !isInstMemberVar &&
             d->linkage == Linkage::INTERNAL) {
             return false;

@@ -14,6 +14,7 @@
 #include "TypeCheckerImpl.h"
 
 #include "cangjie/AST/ASTContext.h"
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
@@ -261,7 +262,7 @@ private:
     }
     void SetFuncTargetLinkage(FuncDecl& fd, bool byTy = false);
     void SetPropTargetLinkage(PropDecl& pd, bool byTy = false);
-    void SetVarTargetLinkage(VarDecl& vd, bool byTy = false);
+    void SetVarTargetLinkage(VarDecl& vd, bool byTy = false, bool isConstInCJMP = false);
     void AddSrcExportedDecl(Ptr<Decl> decl)
     {
         if (visitedSrcExportedDecls.count(decl) == 0) {
@@ -502,7 +503,9 @@ void ExternalLinkageAnalyzer::HandleMemberDeclsByTy(const InheritableDecl& id)
         const bool isStaticMemberInVTable =
             isFuncOrProp && !member->TestAttr(Attribute::PRIVATE) && member->TestAttr(Attribute::STATIC);
         const bool isMemberInMemLayout = IsMemberInMemLayout(*member);
-        if (!isInstMemberInVTable && !isStaticMemberInVTable && !isMemberInMemLayout && !member->IsExportedDecl()) {
+        const bool isConstInCJMP = id.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC) && member->IsConst();
+        if (!isInstMemberInVTable && !isStaticMemberInVTable && !isMemberInMemLayout && !member->IsExportedDecl() &&
+            !isConstInCJMP) {
             continue;
         }
         if (auto fd = DynamicCast<FuncDecl>(member.get())) {
@@ -517,7 +520,7 @@ void ExternalLinkageAnalyzer::HandleMemberDeclsByTy(const InheritableDecl& id)
         } else if (auto pd = DynamicCast<PropDecl>(member.get())) {
             SetPropTargetLinkage(*pd, true);
         } else if (auto vd = DynamicCast<VarDecl>(member.get())) {
-            SetVarTargetLinkage(*vd, true);
+            SetVarTargetLinkage(*vd, true, isConstInCJMP);
         }
     }
 }
@@ -564,10 +567,11 @@ void ExternalLinkageAnalyzer::SetPropTargetLinkage(PropDecl& pd, bool byTy)
     }
 }
 
-void ExternalLinkageAnalyzer::SetVarTargetLinkage(VarDecl& vd, bool byTy)
+void ExternalLinkageAnalyzer::SetVarTargetLinkage(VarDecl& vd, bool byTy, bool isConstInCJMP)
 {
+    const bool isPrivateStatic = vd.TestAttr(Attribute::PRIVATE, Attribute::STATIC);
     if (!IsGlobalOrMember(vd) ||
-        (byTy && vd.astKind == ASTKind::VAR_DECL && vd.TestAttr(Attribute::PRIVATE, Attribute::STATIC))) {
+        (byTy && vd.astKind == ASTKind::VAR_DECL && isPrivateStatic && !isConstInCJMP)) {
         return;
     }
     vd.linkage = Linkage::EXTERNAL;
