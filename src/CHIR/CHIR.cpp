@@ -6,6 +6,7 @@
 
 #include "cangjie/CHIR/CHIR.h"
 
+#include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/CallGraphAnalysis.h"
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
 #include "cangjie/CHIR/Utils/CHIRPrinter.h"
@@ -495,8 +496,8 @@ void ToCHIR::RunConstantPropagation()
     DeadCodeElimination dce(builder, diag, *chirPkg);
     if (threadNum == 1) {
         auto cp = CHIR::ConstPropagation(builder, &constAnalysisWrapper, opts);
-        cp.RunOnPackage(chirPkg, opts.chirDebugOptimizer, ci.isCJLint);
         MergeEffectMap(cp.GetEffectMap(), effectMap);
+        cp.RunOnPackage(chirPkg, opts.chirDebugOptimizer, ci.isCJLint);
         dce.UnreachableBlockElimination(cp.GetFuncsNeedRemoveBlocks(), opts.chirDebugOptimizer);
     } else {
         bool isDebug = opts.chirDebugOptimizer;

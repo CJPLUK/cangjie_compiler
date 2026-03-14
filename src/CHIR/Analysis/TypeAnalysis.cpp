@@ -152,9 +152,15 @@ bool TypeAnalysis::CheckFuncHasInvoke(const BlockGroup& body)
 
 bool TypeAnalysis::Filter(const Func& method)
 {
-    return CheckFuncHasInvoke(*method.GetBody());
+    if (!CheckFuncHasInvoke(*method.GetBody())) {
+        return false;
+    }
+    if (IsSTDFunction(method)) {
+        return true;
+    }
+    const static size_t OVERHEAD_BLOCK_SIZE = 300U;
+    return method.GetBody()->GetBlocks().size() <= OVERHEAD_BLOCK_SIZE;
 }
-
 
 void TypeAnalysis::PrintDebugMessage(const Expression* expr, const TypeValue* absVal) const
 {

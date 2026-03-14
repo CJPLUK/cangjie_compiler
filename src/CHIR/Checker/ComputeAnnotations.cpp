@@ -716,7 +716,7 @@ OwnedPtr<ConstEvalResult> ComputeAnnotations(AST::Package& pkg, CompilerInstance
         return {};
     }
     auto res = MakeOwned<ConstEvalResult>(ci.GetFileNameMap(), ci.invocation.globalOptions.GetJobs());
-    CHIR::AnalysisWrapper<CHIR::ConstAnalysis, CHIR::ConstDomain> constAnalysisWrapper{res->builder};
+    CHIR::ConstAnalysisWrapper constAnalysisWrapper{res->builder};
     CHIR::ToCHIR convertor(ci, pkg, constAnalysisWrapper, res->builder);
     bool computeSuccess = convertor.ComputeAnnotations({});
     if (!computeSuccess) {

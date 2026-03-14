@@ -7,7 +7,7 @@
 #ifndef CANGJIE_CHIR_TRANSFORMATION_CONST_PROPAGATION_H
 #define CANGJIE_CHIR_TRANSFORMATION_CONST_PROPAGATION_H
 
-#include "cangjie/CHIR/Analysis/AnalysisWrapper.h"
+#include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/ConstAnalysis.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
@@ -21,11 +21,6 @@ namespace Cangjie::CHIR {
  */
 class ConstPropagation {
 public:
-    /**
-     * @brief const analysis wrapper to call const analysis.
-     */
-    using ConstAnalysisWrapper = AnalysisWrapper<ConstAnalysis, ConstDomain>;
-
     /**
      * @brief constructor to do const propagation.
      * @param builder CHIR builder for generating IR.
@@ -72,6 +67,9 @@ private:
         {
         }
     };
+
+    template <typename TConstDomain>
+    void VisitFunc(const Func& func, bool isDebug, bool isCJLint, Results<TConstDomain>& result);
 
     // ==================== Rewrite Non-terminator Expressions ==================== //
 
@@ -121,8 +119,8 @@ private:
      *
      * note: We don't rewrite `0 - a` to `-a` as CodeGen will rewrite `-a` to `0 - a`.
      */
-    template <typename T>
-    void TrySimplifyingBinaryExpr(const ConstDomain& state, const Ptr<BinaryExpression>& binary, bool isDebug);
+    template <typename T, typename tConstDomain>
+    void TrySimplifyingBinaryExpr(const tConstDomain& state, const Ptr<BinaryExpression>& binary, bool isDebug);
     
     /**
      * This function will replaced all use of the result of the expression @p expr with the value

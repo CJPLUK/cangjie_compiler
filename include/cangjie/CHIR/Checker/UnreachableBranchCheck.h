@@ -7,7 +7,7 @@
 #ifndef CANGJIE_CHIR_CHECKER_UNREACHABLE_BRANCH_CHECK_H
 #define CANGJIE_CHIR_CHECKER_UNREACHABLE_BRANCH_CHECK_H
 
-#include "cangjie/CHIR/Analysis/AnalysisWrapper.h"
+#include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/ConstAnalysis.h"
 #include "cangjie/CHIR/Analysis/Utils.h"
 #include "cangjie/CHIR/Utils/DiagAdapter.h"
@@ -18,7 +18,6 @@ namespace Cangjie::CHIR {
 
 class UnreachableBranchCheck {
 public:
-    using ConstAnalysisWrapper = AnalysisWrapper<ConstAnalysis, ConstDomain>;
     explicit UnreachableBranchCheck(
         ConstAnalysisWrapper* constAnalysisWrapper, DiagAdapter& diag, const std::string& packageName);
 
@@ -28,6 +27,9 @@ public:
 
 private:
     void PrintWarning(const Terminator& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive = false);
+
+    template <typename TConstDomain>
+    void VisitFunc(Results<TConstDomain>& result);
 
     DiagAdapter& diag;
     ConstAnalysisWrapper* analysisWrapper;

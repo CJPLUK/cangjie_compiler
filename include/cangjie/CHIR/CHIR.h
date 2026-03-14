@@ -15,14 +15,14 @@
 
 #include "cangjie/CHIR/AST2CHIR/AST2CHIR.h"
 #include "cangjie/CHIR/Analysis/ValueRangeAnalysis.h"
+#include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/Utils/DiagAdapter.h"
 
 namespace Cangjie::CHIR {
 class ToCHIR {
 public:
-    ToCHIR(CompilerInstance& ci, AST::Package& pkg, AnalysisWrapper<ConstAnalysis, ConstDomain>& constAnalysisWrapper,
-        CHIRBuilder& builder)
+    ToCHIR(CompilerInstance& ci, AST::Package& pkg, ConstAnalysisWrapper& constAnalysisWrapper, CHIRBuilder& builder)
         : ci(ci),
           opts(ci.invocation.globalOptions),
           typeManager(ci.typeManager),
@@ -203,7 +203,7 @@ private:
     bool needToOptGenericDecl = false;
     CHIRBuilder& builder;
     uint64_t debugFileIndex{0};
-    AnalysisWrapper<ConstAnalysis, ConstDomain>& constAnalysisWrapper;
+    ConstAnalysisWrapper& constAnalysisWrapper;
     OptEffectCHIRMap effectMap;
     OptEffectStrMap strEffectMap;
     VirtualWrapperDepMap curVirtFuncWrapDep;
