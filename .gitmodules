@@ -10,3 +10,11 @@
 [submodule "cangjie_tools"]
 	path = cangjie_tools
 	url = https://gitcode.com/Cangjie/cangjie_tools.git
+[submodule "third_party/third_party_flatbuffers"]
+	path = third_party/third_party_flatbuffers
+	url = https://gitcode.com/openharmony/third_party_flatbuffers.git
+	branch = master
+[submodule "third_party/llvm-project"]
+	path = third_party/llvm-project
+	url = https://gitcode.com/Cangjie/llvm-project.git
+	branch = main
