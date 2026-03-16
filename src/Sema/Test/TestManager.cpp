@@ -567,11 +567,6 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
             return VisitAction::WALK_CHILDREN;
         }
 
-        if (auto arg = As<ASTKind::FUNC_ARG>(node); arg && arg->withInout) {
-            // TODO: Support mocking inout parameters
-            return VisitAction::SKIP_CHILDREN;
-        }
-
         if (!MockSupportManager::NeedToSearchCallsToReplaceWithAccessors(*node)) {
             return VisitAction::SKIP_CHILDREN;
         }

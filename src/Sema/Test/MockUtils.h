@@ -49,6 +49,13 @@ public:
         return type;
     }
 
+    Ptr<Cangjie::AST::PointerTy> WrapTy2CPointer(const Ptr<AST::Ty> ty)
+    {
+        CJC_NULLPTR_CHECK(ty);
+        auto pointerTy = typeManager.GetPointerTy(ty);
+        return pointerTy;
+    }
+
     static std::string mockAccessorSuffix;
     static std::string spyObjVarName;
     static std::string spyCallMarkerVarName;
@@ -162,7 +169,7 @@ private:
 
     Ptr<AST::Decl> FindAccessor(AST::ClassDecl& outerClass, const Ptr<AST::Decl> member,
         const std::vector<Ptr<AST::Ty>>& instTys, AccessorKind kind) const;
-    Ptr<AST::Decl> FindAccessorForMemberAccess(const AST::MemberAccess& memberAccess,
+    Ptr<AST::Decl> FindAccessorForMemberAccess(const Ptr<AST::Ty> ty,
         const Ptr<AST::Decl> resolvedMember, const std::vector<Ptr<AST::Ty>>& instTys, AccessorKind kind) const;
     Ptr<AST::FuncDecl> FindTopLevelAccessor(Ptr<AST::Decl> member, AccessorKind kind) const;
     OwnedPtr<AST::Expr> WrapCallTypeArgsIntoArray(const AST::Decl& decl);
