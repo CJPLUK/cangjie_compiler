@@ -221,6 +221,23 @@ Block* Expression::GetParentBlock() const
     return parent;
 }
 
+BlockGroup* Expression::GetFuncOrLambdaBody() const
+{
+    if (this->GetExprKind() == ExprKind::LAMBDA) {
+        return StaticCast<Lambda*>(this)->GetBody();
+    }
+    auto blockGroup = GetParentBlockGroup();
+    if (auto ownerFunc = blockGroup->GetOwnerFunc()) {
+        return ownerFunc->GetBody();
+    }
+    auto ownerExpr = blockGroup->GetOwnerExpression();
+    CJC_NULLPTR_CHECK(ownerExpr);
+    if (auto ownerLambda = DynamicCast<Lambda*>(ownerExpr)) {
+        return ownerLambda->GetBody();
+    }
+    return ownerExpr->GetFuncOrLambdaBody();
+}
+
 const std::vector<BlockGroup*>& Expression::GetBlockGroups() const
 {
     return blockGroups;
@@ -257,9 +274,7 @@ Type* Expression::GetResultType() const
  */
 BlockGroup* Expression::GetParentBlockGroup() const
 {
-    if (parent == nullptr) {
-        return nullptr;
-    }
+    CJC_NULLPTR_CHECK(parent);
     return parent->GetParentBlockGroup();
 }
 
@@ -329,6 +344,7 @@ void Expression::MoveBefore(Expression* expr)
 
     // 2. insert current expr before `expr`
     CJC_NULLPTR_CHECK(expr->parent);
+    CJC_ASSERT(this->GetParentBlockGroup() == expr->GetParentBlockGroup());
     auto pos = std::find(expr->parent->exprs.begin(), expr->parent->exprs.end(), expr);
     CJC_ASSERT(pos != expr->parent->exprs.end());
     expr->parent->exprs.insert(pos, this);
@@ -346,6 +362,7 @@ void Expression::MoveBefore(Expression* expr)
 void Expression::MoveAfter(Expression* expr)
 {
     CJC_NULLPTR_CHECK(expr);
+    CJC_ASSERT(this->GetParentBlockGroup() == expr->GetParentBlockGroup());
     // you shouldn't move an expression after a terminator, that's illegal ir
     CJC_ASSERT(!expr->IsTerminator());
     if (parent != nullptr) {
@@ -366,6 +383,7 @@ void Expression::MoveAfter(Expression* expr)
 void Expression::MoveTo(Block& block)
 {
     CJC_NULLPTR_CHECK(parent);
+    CJC_ASSERT(this->GetParentBlockGroup() == block.GetParentBlockGroup());
     parent->RemoveExprOnly(*this);
     if (IsTerminator()) {
         for (auto suc : StaticCast<Terminator*>(this)->GetSuccessors()) {

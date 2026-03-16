@@ -84,6 +84,11 @@ public:
     CHIR::ConstAnalysisWrapper& GetConstAnalysisResultRef();
     const CHIR::ConstAnalysisWrapper& GetConstAnalysisResult() const;
 
+    /**
+     * @brief Manually destruct constAnalysisWrapper
+     */
+    void FreeConstAnalysisWrapper();
+
 private:
     CHIR::CHIRContext cctx;
     std::vector<CHIR::Package*> chirPkgs;
@@ -94,7 +99,7 @@ private:
     // only for AnalysisWrapper
     CHIR::CHIRBuilder builder{cctx, 0};
     // provide the capability and results of constant analysis, used by cjlint
-    CHIR::ConstAnalysisWrapper constAnalysisWrapper{builder};
+    std::unique_ptr<CHIR::ConstAnalysisWrapper> constAnalysisWrapper;
 };
 #endif
 
@@ -535,9 +540,14 @@ public:
     std::vector<OwnedPtr<AST::Package>> srcPkgs;
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    CHIRData chirData;
+    std::unique_ptr<CHIRData> chirData;
     // we need to remove this later
     std::unordered_map<Ptr<AST::Package>, Ptr<CHIR::Package>> astPkg2chirPkgMap;
+
+    /**
+     * @brief Manually destruct chirData
+     */
+    void FreeCHIRData();
 #endif
     bool HasTypeChecker() const
     {

@@ -12,9 +12,9 @@
 #include "cangjie/Utils/ProfileRecorder.h"
 
 namespace Cangjie::CodeGen {
-CGPkgContext::CGPkgContext(CHIR::CHIRBuilder& chirBuilder, const CHIRData& chirData, const GlobalOptions& options,
+CGPkgContext::CGPkgContext(CHIRData& chirData, const GlobalOptions& options,
     bool enableIncrement, const CachedMangleMap& cachedMangleMap)
-    : chirBuilder(chirBuilder), chirData(chirData), options(options), enableIncrement(enableIncrement)
+    : chirData(chirData), options(options), chirBuilder(chirData.GetCHIRContext()), enableIncrement(enableIncrement)
 {
     cachedMangleMap.Dump();
     correctedCachedMangleMap.importedInlineDecls = cachedMangleMap.importedInlineDecls;

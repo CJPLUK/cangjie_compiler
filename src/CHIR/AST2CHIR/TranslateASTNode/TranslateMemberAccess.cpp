@@ -415,7 +415,8 @@ Ptr<Value> Translator::TransformThisType(Value& rawThis, Type& expectedTy, Lambd
         expr = builder.CreateExpression<Load>(&expectedTy, &rawThis, curLambda.GetParentBlock());
     } else {
         // case e
-        expr = StaticCast<LocalVar*>(TypeCastOrBoxIfNeeded(rawThis, expectedTy, INVALID_LOCATION))->GetExpr();
+        expr = StaticCast<LocalVar*>(
+            CHIR::TypeCastOrBoxIfNeeded(rawThis, expectedTy, builder, *curLambda.GetParentBlock()))->GetExpr();
     }
     // this is really hack, should change this
     if (expr->GetResult() != &rawThis) {
