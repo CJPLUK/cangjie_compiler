@@ -28,36 +28,36 @@ using namespace Utils;
 using namespace Meta;
 
 // Local-only ostream printing helpers.
-// Marked static to limit linkage to this translation unit and avoid accidental reuse elsewhere.
+// Anonymous namespace already limits linkage to this translation unit.
 namespace {
-template <typename... Args> static inline void Print(std::ostream& stream, Args&&... args)
+template <typename... Args> inline void Print(std::ostream& stream, Args&&... args)
 {
     ((stream << args << ' '), ...);
 }
 
-template <typename Arg> static inline void Println(std::ostream& stream, Arg&& arg)
+template <typename Arg> inline void Println(std::ostream& stream, Arg&& arg)
 {
     stream << std::forward<Arg>(arg) << std::endl;
 }
 
-template <typename Arg, typename... Args> static inline void Println(std::ostream& stream, Arg&& arg, Args&&... args)
+template <typename Arg, typename... Args> inline void Println(std::ostream& stream, Arg&& arg, Args&&... args)
 {
     stream << std::forward<Arg>(arg);
     ((stream << ' ' << std::forward<Args>(args)), ...);
     stream << std::endl;
 }
 
-template <typename... Args> static inline void PrintNoSplit(std::ostream& stream, Args&&... args)
+template <typename... Args> inline void PrintNoSplit(std::ostream& stream, Args&&... args)
 {
     (stream << ... << args);
 }
 
-static inline void PrintIndentOnly(std::ostream& stream, unsigned indent, unsigned numSpaces = 2)
+inline void PrintIndentOnly(std::ostream& stream, unsigned indent, unsigned numSpaces = 2)
 {
     stream << std::string(indent * numSpaces, ' ');
 }
 
-template <typename... Args> static inline void PrintIndent(std::ostream& stream, unsigned indent, const Args... args)
+template <typename... Args> inline void PrintIndent(std::ostream& stream, unsigned indent, const Args... args)
 {
     PrintIndentOnly(stream, indent);
     Println(stream, args...);
@@ -90,28 +90,52 @@ void PrintTarget(unsigned indent, const Decl& target, std::ostream& stream = std
     }
 }
 
+const char* LinkageToString(Linkage linkage)
+{
+    switch (linkage) {
+        case Linkage::INTERNAL:
+            return "INTERNAL";
+        case Linkage::EXTERNAL:
+            return "EXTERNAL";
+        case Linkage::WEAK_ODR:
+            return "WEAK_ODR";
+        case Linkage::LINKONCE_ODR:
+            return "LINKONCE_ODR";
+        case Linkage::EXTERNAL_WEAK:
+            return "EXTERNAL_WEAK";
+        default:
+            return "UNKNOWN";
+    }
+}
+
 void PrintBasic(unsigned indent, const Node& node, std::ostream& stream = std::cout)
 {
     // Basic info:
     std::string filePath = node.curFile ? node.curFile->filePath : "not in file";
     PrintIndent(stream, indent, "curFile:", filePath);
     PrintIndent(stream, indent, "position:", node.begin.ToString(), node.end.ToString());
-    PrintIndent(stream, indent, "scopeName:", "\"" + node.scopeName + "\"");
-    PrintIndent(stream, indent, "ty:", node.ty->String());
+    if (!node.scopeName.empty()) {
+        PrintIndent(stream, indent, "scopeName:", "\"" + node.scopeName + "\"");
+    }
+    if (!Ty::IsInitialTy(node.ty)) {
+        PrintIndent(stream, indent, "ty:", node.ty->String());
+    }
     PrintIndent(stream, indent, "ptr:", &node);
     const auto& fullPkgName = node.GetFullPackageName();
-    if (!fullPkgName.empty()) {
+    if (!fullPkgName.empty() && fullPkgName != "default") {
         PrintIndent(stream, indent, "fullPackageName:", fullPkgName);
-    } else {
-        PrintIndent(stream, indent, "fullPackageName is empty");
     }
     PrintIndent(stream, indent, "attributes:", node.GetAttrs().ToString());
     if (!node.exportId.empty()) {
         PrintIndent(stream, indent, "exportId:", "\"" + node.exportId + "\"");
     }
     if (auto d = DynamicCast<Decl>(&node)) {
-        PrintIndent(
-            stream, indent, "linkage:", static_cast<int>(d->linkage), ", isConst:", static_cast<int>(d->IsConst()));
+        if (d->linkage != Linkage::EXTERNAL) {
+            PrintIndent(stream, indent, "linkage:", LinkageToString(d->linkage));
+        }
+        if (d->IsConst()) {
+            PrintIndent(stream, indent, "isConst: true");
+        }
         if (!d->mangledName.empty()) {
             PrintIndent(stream, indent, "mangledName:", "\"" + d->mangledName + "\"");
         }
@@ -127,7 +151,7 @@ void PrintBasic(unsigned indent, const Node& node, std::ostream& stream = std::c
         }
     }
     if (!node.comments.IsEmpty()) {
-        PrintIndent(stream, indent, "comments: " + node.comments.ToString());
+        PrintIndent(stream, indent, "comments:", node.comments.ToString());
     }
 }
 
