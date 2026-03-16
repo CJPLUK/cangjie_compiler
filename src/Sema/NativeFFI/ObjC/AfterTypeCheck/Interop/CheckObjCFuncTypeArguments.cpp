@@ -22,7 +22,8 @@ using namespace Cangjie::Interop::ObjC;
 
 namespace {
 
-void ReportObjCIncompatibleType(const InteropContext& ctx, Ptr<Type> typeUsage) {
+void ReportObjCIncompatibleType(const InteropContext& ctx, Ptr<Type> typeUsage)
+{
     Ptr<Node> errorRef = typeUsage;
     // find the concrete type node that is not compatible
     if (typeUsage->GetTypeArgs().size() > 0) {
@@ -64,10 +65,8 @@ void CheckObjCFuncTypeArguments::HandleImpl(InteropContext& ctx)
             if (typeUsage && typeUsage->TestAttr(Attribute::COMPILER_ADD)) {
                 return VisitAction::SKIP_CHILDREN;
             }
-            if (typeUsage
-             && typeUsage->ty
-             && typeUsage->ty->typeArgs.size() == 1
-             && ctx.typeMapper.IsObjCFuncOrBlock(*typeUsage->ty)) {
+            if (typeUsage && typeUsage->ty && typeUsage->ty->typeArgs.size() == 1 &&
+                ctx.typeMapper.IsObjCFuncOrBlock(*typeUsage->ty)) {
                 auto tyArg = typeUsage->ty->typeArgs[0];
                 auto valid = tyArg->IsFunc();
                 valid &= !tyArg->IsCFunc();

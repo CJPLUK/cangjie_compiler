@@ -175,7 +175,8 @@ void GenerateFwdClass::GenerateInitCJObject(AST::FuncDecl& ctor, AST::FuncDecl& 
     auto params = Nodes<FuncParam>(std::move(objParam), std::move(maskParam));
     // Mapping type: Cangjie -> ObjC (Native)
     CreateParamsAndArgs(
-        ASTFactory::GetParams(ctor), params, *ctorCall, [](Ptr<Ty> ty) { return ty; }, [](OwnedPtr<Expr> e) { return e; });
+        ASTFactory::GetParams(ctor), params, *ctorCall, [](Ptr<Ty> ty) { return ty; },
+        [](OwnedPtr<Expr> e) { return e; });
     // create: putToRegistry(cjA)
     auto putCall = pctx->factory.CreatePutToRegistryCall(std::move(ctorCall));
     auto wrapperName = pctx->nameGenerator.GenerateInitCjObjectName(fwdCtor);
@@ -357,8 +358,8 @@ void GenerateFwdClass::GenerateObjcObjForPureCJ(ClassDecl& decl)
     auto nativeHandle = pctx->factory.CreateAllocCall(decl, decl.curFile);
     auto unsafeBlock = RegCjObjAndInitObjcObj(std::move(nativeHandle), CreateRefExpr(*param));
     auto fnTy = pctx->typeManager.GetFunctionTy({decl.ty}, objVar->ty);
-    auto fn =
-        ASTFactory::CreateFunc(OBJC_FOR_PURE_CJ_IDENT, fnTy, Nodes<FuncParam>(std::move(param)), Nodes(std::move(unsafeBlock)));
+    auto fn = ASTFactory::CreateFunc(
+        OBJC_FOR_PURE_CJ_IDENT, fnTy, Nodes<FuncParam>(std::move(param)), Nodes(std::move(unsafeBlock)));
     fn->EnableAttr(Attribute::PRIVATE, Attribute::STATIC);
     objcObj4PureCJFunc = fn.get();
     PutIntoFwdClass(std::move(fn));
@@ -478,7 +479,8 @@ Ptr<FuncDecl> GenerateFwdClass::GenerateImplMethod4FwdClass(FuncDecl& decl)
     auto superCall = CreateMemCall(CreateSuperRef(superClassDecl, superClassDecl->ty), &decl);
     std::vector<OwnedPtr<FuncParam>> params;
     CreateParamsAndArgs(ASTFactory::GetParams(decl), params, *superCall);
-    auto fn = ASTFactory::CreateFunc(decl.identifier.Val() + IMPL_SUFFIX, fnTy, std::move(params), Nodes(std::move(superCall)));
+    auto fn = ASTFactory::CreateFunc(
+        decl.identifier.Val() + IMPL_SUFFIX, fnTy, std::move(params), Nodes(std::move(superCall)));
     fn->EnableAttr(Attribute::INTERNAL);
     auto ret = fn.get();
     PutIntoFwdClass(std::move(fn));
@@ -603,7 +605,8 @@ OwnedPtr<Expr> GenerateFwdClass::CreateMaskCond(size_t mid)
     auto bitAndExpr = CreateBinaryExpr(
         CreateMemberAccessOfFwdClass(*maskVar), ASTFactory::CreateParenExpr(std::move(lshiftExpr)), TokenKind::BITAND);
     auto zeroLit = CreateLitConstExpr(LitConstKind::INTEGER, "0", uint64Ty);
-    auto cond = CreateBinaryExpr(ASTFactory::CreateParenExpr(std::move(bitAndExpr)), std::move(zeroLit), TokenKind::NOTEQ);
+    auto cond =
+        CreateBinaryExpr(ASTFactory::CreateParenExpr(std::move(bitAndExpr)), std::move(zeroLit), TokenKind::NOTEQ);
     cond->ty = boolTy;
     return std::move(cond);
 }

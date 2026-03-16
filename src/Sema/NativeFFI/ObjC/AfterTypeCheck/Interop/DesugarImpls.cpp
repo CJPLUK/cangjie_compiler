@@ -165,19 +165,19 @@ void DesugarThisCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
      * if is in generated ctor:
      * this($obj, ...args)
      */
-     auto curFile = ce->curFile;
-     auto targetFd = ce->resolvedFunction;
-     auto& methodParams = ctor.funcBody->paramLists[0]->params;
-     CJC_ASSERT(methodParams.size() > 0);
-     auto objCSelf = CreateRefExpr(*methodParams[0]);
+    auto curFile = ce->curFile;
+    auto targetFd = ce->resolvedFunction;
+    auto& methodParams = ctor.funcBody->paramLists[0]->params;
+    CJC_ASSERT(methodParams.size() > 0);
+    auto objCSelf = CreateRefExpr(*methodParams[0]);
 
-     std::vector<OwnedPtr<FuncArg>> args;
-     args.push_back(CreateFuncArg(std::move(objCSelf)));
-     args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
+    std::vector<OwnedPtr<FuncArg>> args;
+    args.push_back(CreateFuncArg(std::move(objCSelf)));
+    args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
 
-     auto realTarget = ctx.factory.GetGeneratedImplCtor(impl, *targetFd);
-     auto realTargetTy = StaticCast<FuncTy>(realTarget->ty);
-     ce->desugarExpr = CreateThisCall(impl, *realTarget, realTargetTy, curFile, std::move(args));
+    auto realTarget = ctx.factory.GetGeneratedImplCtor(impl, *targetFd);
+    auto realTargetTy = StaticCast<FuncTy>(realTarget->ty);
+    ce->desugarExpr = CreateThisCall(impl, *realTarget, realTargetTy, curFile, std::move(args));
 }
 } // namespace
 
@@ -190,7 +190,10 @@ void DesugarImpls::Desugar(InteropContext& ctx, ClassDecl& impl, FuncDecl& metho
     // 2. MemberAccess, as it could be a prop getter call
     Walker(method.funcBody->body.get(), [&](auto node) {
         if (node->TestAnyAttr(
-                Attribute::HAS_BROKEN, Attribute::IS_BROKEN, Attribute::UNREACHABLE, Attribute::LEFT_VALUE)) {
+            Attribute::HAS_BROKEN,
+            Attribute::IS_BROKEN,
+            Attribute::UNREACHABLE,
+            Attribute::LEFT_VALUE)) {
             return VisitAction::SKIP_CHILDREN;
         }
 
@@ -258,8 +261,8 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
             OwnedPtr<Expr> msgSendSuperCall;
             if (targetFd->propDecl) {
                 if (!msgSendSuperArgs.empty()) {
-                    msgSendSuperCall = ctx.factory.CreatePropSetterCallViaMsgSendSuper(
-                        *targetFd->propDecl, std::move(receiver), ASTCloner::Clone(objCSuper.get()), std::move(msgSendSuperArgs[0]));
+                    msgSendSuperCall = ctx.factory.CreatePropSetterCallViaMsgSendSuper(*targetFd->propDecl,
+                        std::move(receiver), ASTCloner::Clone(objCSuper.get()), std::move(msgSendSuperArgs[0]));
                 } else {
                     msgSendSuperCall = ctx.factory.CreatePropGetterCallViaMsgSendSuper(
                         *targetFd->propDecl, std::move(receiver), ASTCloner::Clone(objCSuper.get()));
@@ -272,8 +275,8 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
             if (targetFd->HasAnno(AST::AnnotationKind::OBJ_C_OPTIONAL)) {
                 auto methodSelector = ctx.nameGenerator.GetObjCDeclName(*targetFd);
                 auto superClass = ctx.factory.CreateGetSuperClassExpr(std::move(objCSuper), curFile);
-                auto guardCall = ctx.factory.CreateOptionalMethodGuard(std::move(msgSendSuperCall), std::move(superClass),
-                    methodSelector, curFile);
+                auto guardCall = ctx.factory.CreateOptionalMethodGuard(
+                    std::move(msgSendSuperCall), std::move(superClass), methodSelector, curFile);
                 guardCall->curFile = curFile;
                 return Nodes<Node>(std::move(guardCall));
             }

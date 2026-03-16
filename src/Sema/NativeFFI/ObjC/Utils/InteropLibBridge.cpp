@@ -369,7 +369,8 @@ Ptr<StructDecl> InteropLibBridge::GetObjCFuncDecl()
     return result;
 }
 
-Ptr<ClassDecl> InteropLibBridge::GetObjCBlockDecl() {
+Ptr<ClassDecl> InteropLibBridge::GetObjCBlockDecl()
+{
     static auto result = GetObjCLangDecl<ASTKind::CLASS_DECL>(OBJ_C_BLOCK_IDENT);
     return result;
 }
@@ -454,7 +455,8 @@ Ptr<FuncDecl> InteropLibBridge::GetObjCFuncFPointerAccessor()
 
 namespace {
 
-Ptr<FuncDecl> GetObjCBlockConstructorByABIName(InteropLibBridge& bridge, const std::string& abiTypeName) {
+Ptr<FuncDecl> GetObjCBlockConstructorByABIName(InteropLibBridge& bridge, const std::string& abiTypeName)
+{
     auto outer = bridge.GetObjCBlockDecl();
     for (auto& member : outer->body->decls) {
         if (auto funcDecl = DynamicCast<FuncDecl*>(member.get())) {
@@ -482,12 +484,14 @@ Ptr<FuncDecl> GetObjCBlockConstructorByABIName(InteropLibBridge& bridge, const s
 
 } // empty namespace
 
-Ptr<FuncDecl> InteropLibBridge::GetObjCBlockConstructorFromObjC() {
+Ptr<FuncDecl> InteropLibBridge::GetObjCBlockConstructorFromObjC()
+{
     static Ptr<FuncDecl> result = GetObjCBlockConstructorByABIName(*this, INTEROPLIB_NATIVE_BLOCK_ABI);
     return result;
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetObjCBlockConstructorFromCangjie() {
+Ptr<FuncDecl> InteropLibBridge::GetObjCBlockConstructorFromCangjie()
+{
     static Ptr<FuncDecl> result = GetObjCBlockConstructorByABIName(*this, INTEROPLIB_CANGJIE_BLOCK_ABI);
     return result;
 }

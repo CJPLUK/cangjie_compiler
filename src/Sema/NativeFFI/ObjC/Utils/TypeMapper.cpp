@@ -41,10 +41,11 @@ static constexpr auto TYPEDEF_PREFIX = "typedef ";
 namespace {
 void MangleTypedefName(std::string& name)
 {
-    size_t start_pos = 0;
-    while ((start_pos = name.find("_", start_pos)) != std::string::npos) {
-        name.replace(start_pos, 1, "_1");
-        start_pos += 2;
+    static const size_t replacementLen = 2;
+    size_t startPos = 0;
+    while ((startPos = name.find("_", startPos)) != std::string::npos) {
+        name.replace(startPos, 1, "_1");
+        startPos += replacementLen;
     }
 
     std::replace(name.begin(), name.end(), '.', '_');
@@ -74,7 +75,7 @@ MappedCType TypeMapper::BuildFunctionalCType(const FuncTy& funcType, const std::
         decl.pop_back();
     }
     decl.push_back(')');
-    return {mangledName, decl};
+    return {std::move(mangledName), std::move(decl)};
 }
 
 Ptr<Ty> TypeMapper::Cj2CType(Ptr<Ty> cjty) const
@@ -116,76 +117,76 @@ MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from) const
 {
     switch (from.kind) {
         case TypeKind::TYPE_UNIT:
-            return VOID_TYPE;
+            return MappedCType(VOID_TYPE);
         case TypeKind::TYPE_INT8:
-            return INT8_TYPE;
+            return MappedCType(INT8_TYPE);
         case TypeKind::TYPE_INT16:
-            return INT16_TYPE;
+            return MappedCType(INT16_TYPE);
         case TypeKind::TYPE_INT32:
-            return INT32_TYPE;
+            return MappedCType(INT32_TYPE);
         case TypeKind::TYPE_INT64:
         case TypeKind::TYPE_IDEAL_INT: // alias for int64
-            return INT64_TYPE;
+            return MappedCType(INT64_TYPE);
         case TypeKind::TYPE_INT_NATIVE:
-            return NATIVE_INT_TYPE;
+            return MappedCType(NATIVE_INT_TYPE);
         case TypeKind::TYPE_UINT8:
-            return UINT8_TYPE;
+            return MappedCType(UINT8_TYPE);
         case TypeKind::TYPE_UINT16:
-            return UINT16_TYPE;
+            return MappedCType(UINT16_TYPE);
         case TypeKind::TYPE_UINT32:
-            return UINT32_TYPE;
+            return MappedCType(UINT32_TYPE);
         case TypeKind::TYPE_UINT64:
-            return UINT64_TYPE;
+            return MappedCType(UINT64_TYPE);
         case TypeKind::TYPE_UINT_NATIVE:
-            return NATIVE_UINT_TYPE;
+            return MappedCType(NATIVE_UINT_TYPE);
         case TypeKind::TYPE_FLOAT32:
-            return FLOAT_TYPE;
+            return MappedCType(FLOAT_TYPE);
         case TypeKind::TYPE_FLOAT64:
         case TypeKind::TYPE_IDEAL_FLOAT:
-            return DOUBLE_TYPE;
+            return MappedCType(DOUBLE_TYPE);
         case TypeKind::TYPE_BOOLEAN:
-            return BOOL_TYPE;
+            return MappedCType(BOOL_TYPE);
         case TypeKind::TYPE_STRUCT:
             if (IsObjCPointer(from)) {
                 auto result = Cj2ObjCForObjC(*from.typeArgs[0]);
                 result.usage += "*";
                 return result;
             } else if (Ty::IsCStructType(from)) {
-                return STRUCT_TYPE_PREFIX + from.name;
+                return MappedCType(STRUCT_TYPE_PREFIX + from.name);
             } else if (IsObjCCJMapping(from)) {
-                return from.name + "*";
+                return MappedCType(from.name + "*");
             }
             if (IsObjCFunc(from)) {
                 auto actualFuncType = DynamicCast<FuncTy>(from.typeArgs[0]);
                 if (!actualFuncType) {
-                    return UNSUPPORTED_TYPE;
+                    return MappedCType(UNSUPPORTED_TYPE);
                 }
                 return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, false,
                     [this](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
             }
             CJC_ABORT();
-            return UNSUPPORTED_TYPE;
+            return MappedCType(UNSUPPORTED_TYPE);
         case TypeKind::TYPE_CLASS:
             if (IsObjCBlock(from)) {
                 auto actualFuncType = DynamicCast<FuncTy>(from.typeArgs[0]);
                 if (!actualFuncType) {
-                    return UNSUPPORTED_TYPE;
+                    return MappedCType(UNSUPPORTED_TYPE);
                 }
                 return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, true,
                     [this](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
             }
             if (IsObjCObjectType(from)) {
-                return from.name + "*";
+                return MappedCType(from.name + "*");
             }
-            return UNSUPPORTED_TYPE;
+            return MappedCType(UNSUPPORTED_TYPE);
         case TypeKind::TYPE_INTERFACE:
             if (IsObjCId(from)) {
-                return "id";
+                return MappedCType("id");
             }
             if (IsObjCMirror(from) || IsObjCCJMappingInterface(from)) {
-                return "id<" + from.name + ">";
+                return MappedCType("id<" + from.name + ">");
             }
-            return UNSUPPORTED_TYPE;
+            return MappedCType(UNSUPPORTED_TYPE);
         case TypeKind::TYPE_POINTER: {
             if (from.typeArgs[0]->kind == TypeKind::TYPE_FUNC) {
                 return Cj2ObjCForObjC(*from.typeArgs[0]);
@@ -202,18 +203,18 @@ MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from) const
         }
         case TypeKind::TYPE_ENUM:
             if (IsObjCCJMapping(from)) {
-                return from.name + "*";
+                return MappedCType(from.name + "*");
             }
             if (!from.IsCoreOptionType()) {
                 CJC_ABORT();
-                return UNSUPPORTED_TYPE;
+                return MappedCType(UNSUPPORTED_TYPE);
             };
             if (IsObjCObjectType(*from.typeArgs[0])) {
                 return Cj2ObjCForObjC(*from.typeArgs[0]);
             }
         default:
             CJC_ABORT();
-            return UNSUPPORTED_TYPE;
+            return MappedCType(UNSUPPORTED_TYPE);
     }
 }
 

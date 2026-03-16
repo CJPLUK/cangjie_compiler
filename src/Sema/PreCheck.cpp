@@ -406,16 +406,16 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, RefType&
 
     std::sort(targets.begin(), targets.end(),
         [](Ptr<const Decl> d1, Ptr<const Decl> d2) {
-            if (d1->scopeLevel > d2->scopeLevel) {
+        if (d1->scopeLevel > d2->scopeLevel) {
+            return true;
+        } else if (d1->scopeLevel == d2->scopeLevel) {
+            // Ranking overloads also by specific > common
+            if (d1->TestAttr(Attribute::SPECIFIC)) {
                 return true;
-            } else if (d1->scopeLevel == d2->scopeLevel) {
-                // Ranking overloads also by specific > common
-                if (d1->TestAttr(Attribute::SPECIFIC)) {
-                    return true;
-                }
             }
-            return false;
-        });
+        }
+        return false;
+    });
 
     Ptr<Decl> target{nullptr};
     if (targets.empty()) {
@@ -1178,7 +1178,6 @@ void TypeChecker::TypeCheckerImpl::AddSuperClassObjectForClassDecl(ASTContext& c
 
 void TypeChecker::TypeCheckerImpl::AddSuperInterfaceForClassLikeDecl(ASTContext& ctx)
 {
-    // TODO: move it to Interop::ObjC
     std::vector<Symbol*> syms = GetAllDecls(ctx);
     for (auto& sym : syms) {
         CJC_ASSERT(sym && sym->node);
@@ -1567,7 +1566,7 @@ void TypeChecker::TypeCheckerImpl::PreCheckFuncStaticConflict(const std::vector<
         for (const auto& func : staticFuncs) {
             DiagStaticAndNonStaticOverload(diag, *func, *firstNonStatic);
         }
-}
+    }
 }
 
 bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(

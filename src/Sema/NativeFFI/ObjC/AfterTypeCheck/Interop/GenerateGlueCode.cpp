@@ -28,7 +28,7 @@ void GenerateGlueCode::HandleImpl(InteropContext& ctx)
 
     // For Generic Glue Code
     auto genGlueCodeWithGenericConfigs = [this, &ctx](Decl& decl, Native::FFI::GenericConfigInfo* genericConfig,
-        bool isGenericGlueCode) {
+                                             bool isGenericGlueCode) {
         if (decl.TestAnyAttr(Attribute::IS_BROKEN, Attribute::HAS_BROKEN)) {
             return;
         }
@@ -39,8 +39,7 @@ void GenerateGlueCode::HandleImpl(InteropContext& ctx)
             ctx.cjLibOutputPath,
             this->interopType,
             genericConfig,
-            isGenericGlueCode
-        );
+            isGenericGlueCode);
         codegen.Generate();
     };
 
@@ -52,8 +51,7 @@ void GenerateGlueCode::HandleImpl(InteropContext& ctx)
                 *item->curFile,
                 item.get(),
                 genericConfigsVector,
-                isGenericGlueCode
-            );
+                isGenericGlueCode);
             if (isGenericGlueCode) {
                 for (auto genericConfig : genericConfigsVector) {
                     genGlueCodeWithGenericConfigs(*item, genericConfig, isGenericGlueCode);

@@ -94,7 +94,8 @@ public:
 
     /**
      * Gets ObjCUnreachableCodeException declaration.
-     * An exception that has to be used to mark an unreachable code (e.g call static method on @ObjCMirror interface wrapper).
+     * An exception that has to be used to mark an unreachable code (e.g call static method on @ObjCMirror interface
+     * wrapper).
      */
     Ptr<AST::ClassDecl> GetObjCUnreachableCodeExceptionDecl();
 
@@ -150,29 +151,29 @@ public:
 
     /**
      * Get objc.lang.ObjCPointer declaration
-    */
+     */
     Ptr<AST::StructDecl> GetObjCPointerDecl();
     Ptr<AST::FuncDecl> GetObjCPointerConstructor();
     Ptr<AST::VarDecl> GetObjCPointerPointerField();
 
     /**
      * Get objc.lang.ObjCFunc declaration
-    */
+     */
     Ptr<AST::StructDecl> GetObjCFuncDecl();
     Ptr<AST::FuncDecl> GetObjCFuncConstructor();
     Ptr<AST::FuncDecl> GetObjCFuncFPointerAccessor();
 
     /**
      * Get objc.lang.ObjCBlock declaration
-    */
+     */
     Ptr<AST::ClassDecl> GetObjCBlockDecl();
     Ptr<AST::FuncDecl> GetObjCBlockConstructorFromObjC();
     Ptr<AST::FuncDecl> GetObjCBlockConstructorFromCangjie();
     Ptr<AST::FuncDecl> GetObjCBlockAbiPointerAccessor();
     Ptr<AST::FuncDecl> GetObjCBlockFPointerAccessor();
     /**
-    * Get interoplib.objc.NativeBlockABI declaration
-    */
+     * Get interoplib.objc.NativeBlockABI declaration
+     */
     Ptr<AST::StructDecl> GetNativeBlockABIDecl();
     Ptr<AST::StructDecl> GetCangjieBlockABIDecl();
 

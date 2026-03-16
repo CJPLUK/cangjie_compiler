@@ -43,13 +43,14 @@ void CompileStrategy::TypeCheck() const
     ci->typeChecker->TypeCheckForPackages(ci->GetSourcePackages());
 }
 
-void CompileStrategy::InteropConfigTomlCheck() {
+void CompileStrategy::InteropConfigTomlCheck()
+{
     InteropCJPackageConfigReader packagesFullConfig;
     if (ci->invocation.globalOptions.enableInteropCJMapping &&
         ci->invocation.globalOptions.interopCJPackageConfigPath != "./" &&
         !packagesFullConfig.Parse(ci->invocation.globalOptions.interopCJPackageConfigPath)) {
-            ci->diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_generic_method_not_get_instance_config,
-                                      DEFAULT_POSITION, ci->invocation.globalOptions.interopCJPackageConfigPath);
+        ci->diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_generic_method_not_get_instance_config,
+                                  DEFAULT_POSITION, ci->invocation.globalOptions.interopCJPackageConfigPath);
     }
 }
 
@@ -171,7 +172,7 @@ public:
             package.accessible = !packageSpec->modifier                  ? AccessLevel::PUBLIC
                 : packageSpec->modifier->modifier == TokenKind::PROTECTED ? AccessLevel::PROTECTED
                 : packageSpec->modifier->modifier == TokenKind::INTERNAL  ? AccessLevel::INTERNAL
-                                                                            : AccessLevel::PUBLIC;
+                                                                          : AccessLevel::PUBLIC;
         }
     }
 
@@ -244,26 +245,26 @@ public:
                 [this, curFile]() -> ParseResult {
 #if (defined RELEASE)
 #if (defined __unix__)
-                    // Since alternate signal stack is per thread, we have to create an alternate signal stack for each
-                    // thread.
-                    Cangjie::CreateAltSignalStack();
+                // Since alternate signal stack is per thread, we have to create an alternate signal stack for each
+                // thread.
+                Cangjie::CreateAltSignalStack();
 #elif _WIN32
-                    // When the SIGABRT, SIGFPE, SIGSEGV and SIGILL signals are triggered in a subthread,
-                    // the signals cannot be captured and the process exits directly. Therefore,
-                    // the signal processing function must be set for each thread.
-                    Cangjie::RegisterCrashSignalHandler();
+                // When the SIGABRT, SIGFPE, SIGSEGV and SIGILL signals are triggered in a subthread,
+                // the signals cannot be captured and the process exits directly. Therefore,
+                // the signal processing function must be set for each thread.
+                Cangjie::RegisterCrashSignalHandler();
 #endif
 #endif
-                    auto parser = CreateParser(curFile);
-                    parser->SetCompileOptions(s.ci->invocation.globalOptions);
-                    auto file = parser->ParseTopLevel();
+                auto parser = CreateParser(curFile);
+                parser->SetCompileOptions(s.ci->invocation.globalOptions);
+                auto file = parser->ParseTopLevel();
 #ifdef SIGNAL_TEST
-                    // The interrupt signal triggers the function. In normal cases, this function does not take effect.
+                // The interrupt signal triggers the function. In normal cases, this function does not take effect.
                     Cangjie::SignalTest::ExecuteSignalTestCallbackFunc(
                         Cangjie::SignalTest::TriggerPointer::PARSER_POINTER);
 #endif
-                    return {std::move(file), parser->GetCommentsMap(), parser->GetLineNum()};
-                });
+                return {std::move(file), parser->GetCommentsMap(), parser->GetLineNum()};
+            });
             taskResults.push_back(std::move(taskResult));
             fileInfoQueue.pop();
         }

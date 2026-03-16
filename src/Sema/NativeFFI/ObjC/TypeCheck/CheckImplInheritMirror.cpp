@@ -22,7 +22,7 @@ void CheckImplInheritMirror::HandleImpl(TypeCheckContext& ctx)
         return;
     }
 
-    // TODO: remove the whole if when hierarchy root @ObjCImpl is supported
+    // Remove the whole `if` clause when hierarchy root @ObjCImpl is supported
     if (auto classTy = DynamicCast<ClassTy*>(ctx.target.ty); classTy) {
         auto hasOnlyMirrorSuperInterfaces = classTy->GetSuperInterfaceTys().size() > 0;
         for (auto superInterfaceTy : classTy->GetSuperInterfaceTys()) {

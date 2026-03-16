@@ -91,7 +91,6 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
                 return VisitAction::WALK_CHILDREN;
             }
             auto decl = GetDirectlyReferencedMemberDecl(StaticCast<Expr>(node));
-
             if (FTypeKindByCallPropertyDecl(ctx.typeMapper, decl) != ObjCFTypeKind::NONE) {
                 ctx.diag.DiagnoseRefactor(
                     DiagKindRefactor::sema_objc_func_call_property_can_only_be_called,
