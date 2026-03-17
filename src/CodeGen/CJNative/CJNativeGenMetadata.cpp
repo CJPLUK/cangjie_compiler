@@ -686,6 +686,8 @@ std::string EnumMetadataInfo::GenerateCtorFn(
         llvm::FunctionType* ctorFn =
             llvm::FunctionType::get(llvm::Type::getInt8PtrTy(module.GetLLVMContext()), argTypes, false);
         getTiFn = llvm::Function::Create(ctorFn, llvm::Function::PrivateLinkage, funcName, module.GetLLVMModule());
+        getTiFn->addFnAttr("native-interface-fn");
+        getTiFn->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
         CodeGen::IRBuilder2 irBuilder(module);
         auto entryBB = irBuilder.CreateEntryBasicBlock(getTiFn, "entry");
         irBuilder.SetInsertPoint(entryBB);
