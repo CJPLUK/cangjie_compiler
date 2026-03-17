@@ -226,21 +226,25 @@ std::string EnumPattern::GetIdentifier() const
 
 std::string CallExpr::ToString() const
 {
-    if (baseFunc == nullptr) {
-        return "";
-    }
     std::stringstream ss;
-    Position curSpanBegin = baseFunc->begin;
-    ss << NextSpan(baseFunc->ToString(), curSpanBegin, baseFunc->end);
-    curSpanBegin = baseFunc->end;
-    ss << NextSpan("(", curSpanBegin, leftParenPos, 1);
-    curSpanBegin = leftParenPos + Position{0, 0, 1};
-    for (auto& arg : args) {
-        ss << NextSpan(arg->ToString(), curSpanBegin, arg->end);
-        curSpanBegin = arg->end;
-        if (arg->commaPos != INVALID_POSITION) {
-            ss << NextSpan(",", curSpanBegin, arg->commaPos, 1);
-            curSpanBegin = arg->commaPos + Position{0, 0, 1};
+    Position curSpanBegin;
+    if (baseFunc != nullptr) {
+        curSpanBegin = baseFunc->begin;
+        ss << NextSpan(baseFunc->ToString(), curSpanBegin, baseFunc->end);
+        curSpanBegin = baseFunc->end;
+        ss << NextSpan("(", curSpanBegin, leftParenPos, 1);
+        curSpanBegin = leftParenPos + Position{0, 0, 1};
+    } else {
+        ss << "(";
+        curSpanBegin = Position{0, 0, 1};
+    }
+    for (size_t i = 0; i < args.size(); ++i) {
+        CJC_ASSERT(args[i] != nullptr);
+        ss << NextSpan(args[i]->ToString(), curSpanBegin, args[i]->end);
+        curSpanBegin = args[i]->end;
+        if (i + 1 < args.size() && args[i]->commaPos != INVALID_POSITION) {
+            ss << NextSpan(",", curSpanBegin, args[i]->commaPos, 1);
+            curSpanBegin = args[i]->commaPos + Position{0, 0, 1};
         }
     }
     ss << NextSpan(")", curSpanBegin, rightParenPos, 1);
@@ -261,9 +265,12 @@ void CallExpr::Clear() noexcept
 
 std::string FuncArg::ToString() const
 {
-    if (expr == nullptr) {
-        return "";
+    // In null-safety scenarios we may build an incomplete FuncArg (name set, expr absent).
+    // Returning a compact fallback avoids emitting artificial newlines/spaces from sparse positions.
+    if (!name.Empty() && expr == nullptr) {
+        return name.Val() + ":";
     }
+
     std::stringstream ss;
     Position curSpanBegin = begin;
     if (!name.Empty()) {
@@ -272,27 +279,30 @@ std::string FuncArg::ToString() const
         curSpanBegin += Position{0, 0, static_cast<int>(name.Length())};
         ss << NextSpan(":", curSpanBegin, colonPos, 1);
         curSpanBegin += Position{0, 0, 1};
-    } else {
-        curSpanBegin = expr->begin;
     }
-    if (withInout) {
-        ss << "inout ";
+    if (expr != nullptr) {
+        if (withInout) {
+            ss << "inout ";
+        }
+        ss << NextSpan(expr->ToString(), curSpanBegin, expr->end);
+    } else if (!name.Empty()) {
+        // If name is set but expr is null, return "name:"
+        // curSpanBegin is already at the position after colon
     }
-    ss << NextSpan(expr->ToString(), curSpanBegin, expr->end);
     return ss.str();
 }
 
 std::string MemberAccess::ToString() const
 {
-    if (baseExpr == nullptr) {
-        return "";
-    }
     std::stringstream ss;
-    Position curSpanBegin = baseExpr->begin;
-    ss << NextSpan(baseExpr->ToString(), curSpanBegin, baseExpr->end);
-    curSpanBegin = baseExpr->end;
-    ss << NextSpan(".", curSpanBegin, dotPos, 1);
-    curSpanBegin = dotPos + Position{0, 0, 1};
+    Position curSpanBegin;
+    if (baseExpr != nullptr) {
+        curSpanBegin = baseExpr->begin;
+        ss << NextSpan(baseExpr->ToString(), curSpanBegin, baseExpr->end);
+        curSpanBegin = baseExpr->end;
+        ss << NextSpan(".", curSpanBegin, dotPos, 1);
+        curSpanBegin = dotPos + Position{0, 0, 1};
+    }
     ss << NextSpan(field, curSpanBegin, field.Begin(), static_cast<int>(field.Length()));
     return ss.str();
 }
@@ -374,9 +384,10 @@ std::string RefType::ToString() const
     if (!typeArguments.empty()) {
         ss << NextSpan("<", curSpanBegin, leftAnglePos, 1);
         curSpanBegin = leftAnglePos + Position{0, 0, 1};
-        for (auto& typeArgument : typeArguments) {
-            ss << NextSpan(typeArgument->ToString(), curSpanBegin, typeArgument->end);
-            curSpanBegin = typeArgument->end;
+        for (size_t i = 0; i < typeArguments.size(); ++i) {
+            CJC_ASSERT(typeArguments[i] != nullptr);
+            ss << NextSpan(typeArguments[i]->ToString(), curSpanBegin, typeArguments[i]->end);
+            curSpanBegin = typeArguments[i]->end;
         }
         ss << NextSpan(">", curSpanBegin, rightAnglePos, 1);
     }
@@ -393,15 +404,14 @@ std::string ArrayLit::ToString() const
     std::stringstream ss;
     ss << "[";
     Position curSpanBegin = begin + Position{0, 0, 1};
-    size_t i = 0;
-    for (auto& child : children) {
-        ss << NextSpan(child->ToString(), curSpanBegin, child->end);
-        curSpanBegin = child->end;
-        if (i < commaPosVector.size()) {
+    for (size_t i = 0; i < children.size(); ++i) {
+        CJC_ASSERT(children[i] != nullptr);
+        ss << NextSpan(children[i]->ToString(), curSpanBegin, children[i]->end);
+        curSpanBegin = children[i]->end;
+        if (i + 1 < children.size() && i < commaPosVector.size()) {
             ss << NextSpan(",", curSpanBegin, commaPosVector[i], 1);
             curSpanBegin = commaPosVector[i] + Position{0, 0, 1};
         }
-        i++;
     }
     ss << NextSpan("]", curSpanBegin, rightSquarePos, 1);
     return ss.str();
@@ -410,15 +420,23 @@ std::string ArrayLit::ToString() const
 std::string ArrayExpr::ToString() const
 {
     std::stringstream ss;
-    Position curSpanBegin = begin;
-    ss << NextSpan(type->ToString(), curSpanBegin, type->end);
-    curSpanBegin = type->end;
-    ss << NextSpan("(", curSpanBegin, leftParenPos, 1);
-    curSpanBegin = leftParenPos + Position{0, 0, 1};
+    Position curSpanBegin;
+    if (type != nullptr) {
+        curSpanBegin = begin;
+        ss << NextSpan(type->ToString(), curSpanBegin, type->end);
+        curSpanBegin = type->end;
+        ss << NextSpan("(", curSpanBegin, leftParenPos, 1);
+        curSpanBegin = leftParenPos + Position{0, 0, 1};
+    } else {
+        ss << "(";
+        curSpanBegin = Position{0, 0, 1};
+    }
+
     for (size_t i = 0; i < args.size(); ++i) {
+        CJC_ASSERT(args[i] != nullptr);
         ss << NextSpan(args[i]->ToString(), curSpanBegin, args[i]->end);
         curSpanBegin = args[i]->end;
-        if (i < commaPosVector.size()) {
+        if (i + 1 < args.size() && i < commaPosVector.size()) {
             ss << NextSpan(",", curSpanBegin, commaPosVector[i], 1);
             curSpanBegin = commaPosVector[i] + Position{0, 0, 1};
         }
