@@ -8,6 +8,21 @@ services:
       SDK_NAME: ${SDK_NAME:-stdx}
       ARCH: x86_64
       OPENSSL_ROOT_DIR: /opt/buildtools/openssl-3.0.9
+      CMAKE_PREFIX_PATH: /opt/buildtools/openssl-3.0.9
+    volumes:
+      - ./:/workspace
+    command: >-
+      bash -lc "bash build_scripts/linux.sh"
+  build-sdk-linuxarm:
+    image: swr.cn-north-4.myhuaweicloud.com/cj-docker/cangjie_ubuntu18_arm_kernel:v2.2
+    working_dir: /workspace
+    user: ${FIXUID:-1000}:${FIXGID:-1000}
+    environment:
+      CANGJIE_VERSION: ${CANGJIE_VERSION:-unofficial}
+      SDK_NAME: ${SDK_NAME:-stdx}
+      ARCH: aarch64
+      OPENSSL_ROOT_DIR: /opt/buildtools/openssl-3.0.9
+      CMAKE_PREFIX_PATH: /opt/buildtools/openssl-3.0.9
     volumes:
       - ./:/workspace
     command: >-
