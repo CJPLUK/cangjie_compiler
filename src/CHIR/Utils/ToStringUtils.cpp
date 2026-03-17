@@ -184,12 +184,20 @@ std::string GetLambdaStr(const Lambda& lambda, size_t indent)
     auto& params = lambda.GetParams();
     if (!params.empty()) {
         ss << params[0]->GetAttributeInfo().ToString();
-        ss << params[0]->GetIdentifier() << ": " << params[0]->GetType()->ToString();
+        ss << params[0]->GetIdentifier();
+        if (auto srcName = params[0]->GetSrcCodeIdentifier(); !srcName.empty()) {
+            ss << "[" << srcName << "]";
+        }
+        ss << ": " << params[0]->GetType()->ToString();
     }
     for (size_t i = 1; i < params.size(); i++) {
         ss << ", ";
         ss << params[i]->GetAttributeInfo().ToString();
-        ss << params[i]->GetIdentifier() << ": " << params[i]->GetType()->ToString();
+        ss << params[i]->GetIdentifier();
+        if (auto srcName = params[i]->GetSrcCodeIdentifier(); !srcName.empty()) {
+            ss << "[" << srcName << "]";
+        }
+        ss << ": " << params[i]->GetType()->ToString();
     }
     ss << ")";
     ss << "=> {";
