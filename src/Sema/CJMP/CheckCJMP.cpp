@@ -71,9 +71,20 @@ std::string GetTypeNameFromTy(
             str = "<" + str + ">";
         }
         if (forCJMPMatch) {
-            auto decl = Ty::GetDeclOfTy(ty);
-            CJC_NULLPTR_CHECK(decl);
-            return decl->fullPackageName + "." + ty->name + str;
+            switch (ty->kind) {
+                case AST::TypeKind::TYPE_TUPLE:
+                case AST::TypeKind::TYPE_FUNC:
+                case AST::TypeKind::TYPE_VARRAY:
+                case AST::TypeKind::TYPE_POINTER:
+                case AST::TypeKind::TYPE_CSTRING: {
+                    return ty->name + str;
+                }
+                default: {
+                    auto decl = Ty::GetDeclOfTy(ty);
+                    CJC_NULLPTR_CHECK(decl);
+                    return decl->fullPackageName + "." + ty->name + str;
+                }
+            }
         } else {
             return ty->name + str;
         }

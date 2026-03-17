@@ -2382,6 +2382,7 @@ void CollectGenericParam(const FuncDecl& funcDecl, Ptr<FuncDecl> desugared)
     }
     for (auto& constraint : std::as_const(funcDecl.funcBody->generic->genericConstraints)) {
         auto gc = MakeOwnedNode<GenericConstraint>();
+        CopyBasicInfo(constraint.get(), gc.get());
         auto& constraintType = constraint->type;
         auto rt = MakeOwnedNode<RefType>();
         rt->ref.identifier = orig2New[constraintType->ref.identifier];
