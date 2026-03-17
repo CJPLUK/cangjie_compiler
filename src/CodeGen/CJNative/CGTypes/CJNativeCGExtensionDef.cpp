@@ -307,6 +307,7 @@ llvm::Constant* CGExtensionDef::GenerateWhereConditionFn()
     }
     auto fn = llvm::Function::Create(whereCondFnType, llvm::Function::PrivateLinkage, funcName, cgMod.GetLLVMModule());
     fn->addFnAttr("native-interface-fn");
+    fn->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     auto entryBB = llvm::BasicBlock::Create(llvmCtx, "entry", fn);
     IRBuilder2 irBuilder(cgMod, entryBB);
     auto typeInfos = fn->getArg(1); // Parameter with index 1 is an array of typeinfo.
@@ -353,6 +354,8 @@ llvm::Constant* CGExtensionDef::GenerateOuterTiFn(const CHIR::VirtualMethodInfo&
         llvm::FunctionType* getOuterTiFnType = llvm::FunctionType::get(typeInfoPtrType, {typeInfoPtrType}, false);
         getOuterTiFn =
             llvm::Function::Create(getOuterTiFnType, llvm::Function::PrivateLinkage, fnName, cgMod.GetLLVMModule());
+        getOuterTiFn->addFnAttr("native-interface-fn");
+        getOuterTiFn->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
         auto entryBB = llvm::BasicBlock::Create(llvmCtx, "entry", getOuterTiFn);
         IRBuilder2 irBuilder(cgMod, entryBB);
         innerTypeMap.emplace(targetType, InnerTiInfo{getOuterTiFn->getArg(0), true});
@@ -424,6 +427,7 @@ std::pair<llvm::Constant*, bool> CGExtensionDef::GenerateInterfaceFn(const CHIR:
     llvm::Function* interfaceFn =
         llvm::Function::Create(interfaceFnType, llvm::Function::PrivateLinkage, funcName, cgMod.GetLLVMModule());
     interfaceFn->addFnAttr("native-interface-fn");
+    interfaceFn->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     auto entryBB = llvm::BasicBlock::Create(llvmCtx, "entry", interfaceFn);
     // Parameter with index 1 is an array of typeinfo.
     innerTypeMap.emplace(targetType, InnerTiInfo{interfaceFn->getArg(1), false});

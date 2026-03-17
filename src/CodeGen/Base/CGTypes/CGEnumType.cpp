@@ -484,6 +484,7 @@ llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& c
     auto getTiFn1 = llvm::Function::Create(
         fieldFnType, llvm::Function::PrivateLinkage, funcPrefixName + ".fieldTiFn.0", cgMod.GetLLVMModule());
     getTiFn1->addFnAttr("native-interface-fn");
+    getTiFn1->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     CodeGen::IRBuilder2 irBuilder(cgMod);
     auto entryBB = irBuilder.CreateEntryBasicBlock(getTiFn1, "entry");
     irBuilder.SetInsertPoint(entryBB);
@@ -501,6 +502,7 @@ llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& c
     auto getTiFn2 = llvm::Function::Create(
         fieldFnType, llvm::Function::PrivateLinkage, funcPrefixName + ".fieldTiFn.1", cgMod.GetLLVMModule());
     getTiFn2->addFnAttr("native-interface-fn");
+    getTiFn2->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     entryBB = irBuilder.CreateEntryBasicBlock(getTiFn2, "entry");
     irBuilder.SetInsertPoint(entryBB);
     ti = irBuilder.LLVMIRBuilder2::CreateLoad(typeInfoPtrType, getTiFn2->getArg(1));
