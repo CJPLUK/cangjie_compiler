@@ -15,7 +15,7 @@ With the environment set up as dictated by cangjie_build, you can build the SDK 
 sh build_scripts/linux.sh // observed to work on linux/x64
 // mac:
 sh build_scripts/mac.sh // observed to work on macos/aarch64
-
+```
 
 ## Build (containerized)
 
