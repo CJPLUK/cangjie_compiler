@@ -23,12 +23,12 @@ There are services defined in `compose.yaml` which will build the SDK for differ
 
 ### Linux/x86_64
 ```shell
-docker-compose run --rm build-sdk-linux64
+FIXUID=`id -u` FIXGUID=`id -g` docker-compose run --rm build-sdk-linux64
 ```
 
 ### Linux/aarch64
 ```shell
-docker-compose run --rm build-sdk-linuxarm
+FIXUID=`id -u` FIXGUID=`id -g` docker-compose run --rm build-sdk-linuxarm
 ```
 
 ### Others
