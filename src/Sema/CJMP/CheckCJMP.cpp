@@ -95,12 +95,22 @@ std::string CalculatedGenericConstraintsStr(const std::vector<OwnedPtr<GenericCo
     const std::unordered_map<Ptr<Ty>, unsigned>& genericIdx)
 {
     std::string ret;
-    if (genericConstraints.empty()) {
+
+    auto&& constraintCount = std::count_if(
+        genericConstraints.begin(),
+        genericConstraints.end(),
+        [](auto&& gc) { return !gc->isImplicitlyIntroduced; }
+    );
+
+    if (constraintCount == 0) {
         return ret;
     }
 
     std::set<std::string> gcStrs;
     for (auto& genericConstraint : genericConstraints) {
+        if (genericConstraint->isImplicitlyIntroduced) { 
+            continue; 
+        }
         std::set<std::string> ubStrs;
         for (auto& upperBound : genericConstraint->upperBounds) {
             ubStrs.emplace(GetTypeNameFromTy(upperBound->ty, true, genericIdx));
