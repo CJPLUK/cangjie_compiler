@@ -1214,7 +1214,7 @@ const OrderedDeclSet& ImportManager::GetPackageMembersByName(const Package& pack
 }
 
 // For LSP
-AST::OrderedDeclSet ImportManager::GetPackageMembers(
+std::map<std::string, AST::OrderedDeclSet> ImportManager::GetPackageMembers(
     const std::string& srcFullPackageName, const std::string& targetFullPackageName) const
 {
     if (srcFullPackageName == targetFullPackageName) {
@@ -1222,12 +1222,16 @@ AST::OrderedDeclSet ImportManager::GetPackageMembers(
     }
     auto relation = Modules::GetPackageRelation(srcFullPackageName, targetFullPackageName);
     auto members = cjoManager->GetPackageMembers(targetFullPackageName);
-    AST::OrderedDeclSet res;
-    for (auto& [_, decls] : members) {
+    std::map<std::string, AST::OrderedDeclSet> res;
+    for (auto& [name, decls] : members) {
+        AST::OrderedDeclSet visibleDecls;
         for (auto it : decls) {
             if (Modules::IsVisible(*it, relation)) {
-                res.emplace(it.get());
+                visibleDecls.emplace(it.get());
             }
+        }
+        if (!visibleDecls.empty()) {
+            res[name] = std::move(visibleDecls);
         }
     }
     return res;
