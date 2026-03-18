@@ -103,7 +103,7 @@ DEFINE_NODE_TYPE_KIND(CHIR::StructDef, CHIR::CustomDefKind::TYPE_STRUCT);
 DEFINE_NODE_TYPE_KIND(CHIR::ExtendDef, CHIR::CustomDefKind::TYPE_EXTEND);
 
 // Defined the mono type checking method for CHIRNode.
-template <> struct TypeAs<CHIR::FuncBase> {
+template <> struct TypeAs<CHIR::Function> {
     static bool IsInstanceOf(const CHIR::Value& value)
     {
         return value.IsFunc();
@@ -121,34 +121,6 @@ template <> struct TypeAs<CHIR::BlockGroup> {
     static bool IsInstanceOf(const CHIR::Value& value)
     {
         return value.IsBlockGroup();
-    }
-};
-
-template <> struct TypeAs<CHIR::Func> {
-    static bool IsInstanceOf(const CHIR::Value& value)
-    {
-        return value.IsFuncWithBody();
-    }
-};
-
-template <> struct TypeAs<CHIR::GlobalVar> {
-    static bool IsInstanceOf(const CHIR::Value& value)
-    {
-        return value.IsGlobalVarInCurPackage();
-    }
-};
-
-template <> struct TypeAs<CHIR::ImportedFunc> {
-    static bool IsInstanceOf(const CHIR::Value& value)
-    {
-        return value.IsImportedFunc();
-    }
-};
-
-template <> struct TypeAs<CHIR::ImportedVar> {
-    static bool IsInstanceOf(const CHIR::Value& value)
-    {
-        return value.IsImportedVar();
     }
 };
 
@@ -222,17 +194,10 @@ template <> struct TypeAs<CHIR::Parameter> {
     }
 };
 
-template <> struct TypeAs<CHIR::GlobalVarBase> {
+template <> struct TypeAs<CHIR::GlobalVar> {
     static bool IsInstanceOf(const CHIR::Value& value)
     {
         return value.IsGlobalVar();
-    }
-};
-
-template <> struct TypeAs<CHIR::ImportedValue> {
-    static bool IsInstanceOf(const CHIR::Value& value)
-    {
-        return value.IsImportedSymbol();
     }
 };
 

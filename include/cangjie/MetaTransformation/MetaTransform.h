@@ -20,7 +20,7 @@
 namespace Cangjie {
 namespace CHIR {
 class CHIRBuilder;
-class Func;
+class Function;
 class Package;
 } // namespace CHIR
 
@@ -63,7 +63,7 @@ public:
 
     MetaTransform() : MetaTransformConcept()
     {
-        if constexpr (std::is_same_v<DeclT, CHIR::Func>) {
+        if constexpr (std::is_same_v<DeclT, CHIR::Function>) {
             kind = MetaTransformKind::FOR_CHIR_FUNC;
         } else if constexpr (std::is_same_v<DeclT, CHIR::Package>) {
             kind = MetaTransformKind::FOR_CHIR_PACKAGE;

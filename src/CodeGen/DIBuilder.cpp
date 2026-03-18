@@ -205,7 +205,7 @@ llvm::DISubroutineType* DIBuilder::CreateDefaultFunctionType()
 }
 
 #ifndef __APPLE__
-static const CHIR::Type* GetOuterTypeOfMemberFunc(const CHIR::Func& func)
+static const CHIR::Type* GetOuterTypeOfMemberFunc(const CHIR::Function& func)
 {
     const auto parent = func.GetParentCustomTypeDef();
     CJC_NULLPTR_CHECK(parent);
@@ -218,7 +218,7 @@ static const CHIR::Type* GetOuterTypeOfMemberFunc(const CHIR::Func& func)
 }
 #endif
 
-void DIBuilder::SetSubprogram(const CHIR::Func* func, llvm::Function* function)
+void DIBuilder::SetSubprogram(const CHIR::Function* func, llvm::Function* function)
 {
     if (!enabled && !enableLineInfo) {
         return;

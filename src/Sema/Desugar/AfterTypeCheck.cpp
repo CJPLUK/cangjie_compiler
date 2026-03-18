@@ -512,9 +512,10 @@ void TypeChecker::TypeCheckerImpl::GenerateMainInvoke()
     auto funcParamList = MakeOwnedNode<FuncParamList>();
     Ptr<VarDecl> argPtr = nullptr;
     if (!mainFunc->funcBody->paramLists[0]->params.empty()) {
-        auto param = CreateFuncParam("v", ASTCloner::Clone(mainFunc->funcBody->paramLists[0]->params[0]->type.get()));
-        argPtr = param.get();
-        funcParamList->params.emplace_back(std::move(param));
+        const auto& param = mainFunc->funcBody->paramLists[0]->params[0];
+        auto newParam = CreateFuncParam("v", ASTCloner::Clone(param->type.get()), nullptr, param->ty);
+        argPtr = newParam.get();
+        funcParamList->params.emplace_back(std::move(newParam));
     }
     funcBody->paramLists.push_back(std::move(funcParamList));
 

@@ -40,7 +40,7 @@ public:
      * @brief Main process to do function inline.
      * @param func func to do function inline.
      */
-    void Run(Func& func);
+    void Run(Function& func);
 
     /**
      * @brief Get effect map after this pass.
@@ -70,9 +70,9 @@ private:
     CHIRBuilder& builder;
     const GlobalOptions::OptimizationLevel& optLevel;
     bool debug{false};
-    Func* globalFunc{nullptr};
-    std::unordered_map<Func*, size_t> inlinedCountMap;
-    std::unordered_map<Func*, size_t> funcSizeMap;
+    Function* globalFunc{nullptr};
+    std::unordered_map<Function*, size_t> inlinedCountMap;
+    std::unordered_map<Function*, size_t> funcSizeMap;
     const std::string optName{"Function Inline"};
     OptEffectCHIRMap effectMap;
 };

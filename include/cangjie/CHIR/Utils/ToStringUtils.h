@@ -211,9 +211,8 @@ const std::unordered_map<CHIR::Package::AccessLevel, std::string> PACKAGE_ACCESS
 
 class BlockGroup;
 class Block;
-class Func;
+class Function;
 class Lambda;
-class ImportedValue;
 class ClassType;
 
 /**
@@ -257,9 +256,9 @@ std::string GetBlockStr(const Block& block, size_t indent = 0);
  * @param indent The number of indentation levels.
  * @return A string representing the function.
  */
-std::string GetFuncStr(const Func& func, size_t indent = 0);
+std::string GetFuncStr(const Function& func, size_t indent = 0);
 
-std::string FuncSymbolStr(const Func& func);
+std::string FuncSymbolStr(const Function& func);
 
 /**
  * @brief Generates a string representation of a lambda expression.
@@ -271,12 +270,12 @@ std::string FuncSymbolStr(const Func& func);
 std::string GetLambdaStr(const Lambda& lambda, size_t indent = 0);
 
 /**
- * @brief Generates a string representation of an imported value.
+ * @brief Generates a string representation of an imported var.
  *
- * @param value The imported value to represent.
+ * @param value The imported var to represent.
  * @return A string representing the imported value.
  */
-std::string GetImportedValueStr(const ImportedValue& value);
+std::string GetImportedVarStr(const GlobalVar& value);
 
 /**
  * @brief Generates a string representation of an imported function.
@@ -284,7 +283,7 @@ std::string GetImportedValueStr(const ImportedValue& value);
  * @param value The imported function to represent.
  * @return A string representing the imported function.
  */
-std::string GetImportedFuncStr(const ImportedFunc& value);
+std::string GetImportedFuncStr(const Function& value);
 
 /**
  * @brief Generates a string representation of exceptions.

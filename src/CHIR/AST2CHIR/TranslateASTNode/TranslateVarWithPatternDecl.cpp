@@ -18,9 +18,10 @@ void Translator::HandleVarWithVarPattern(
     Ptr<Value> leftValue = TranslateLeftValueOfVarDecl(*varDecl, initNode == nullptr, isLocalPattern);
     if (initNode != nullptr) {
         StoreRValueToLValue(*varDecl, *initNode, leftValue);
-        if (leftValue->IsGlobalVarInCurPackage()) {
-            CJC_ASSERT(GetTopLevelFunc(*initNode));
-            VirtualCast<GlobalVar*>(leftValue)->SetInitFunc(*GetTopLevelFunc(*initNode));
+        if (auto gVar = DynamicCast<GlobalVar*>(leftValue)) {
+            auto initFunc = GetTopLevelFunc(*initNode);
+            CJC_NULLPTR_CHECK(initFunc);
+            gVar->SetInitFunc(*initFunc);
         }
     }
     SetSymbolTable(*varDecl, *leftValue);

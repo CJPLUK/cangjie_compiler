@@ -52,7 +52,7 @@ std::string CGPkgContext::GetCurrentPkgName() const
     return curPackage->GetName();
 }
 
-CHIR::FuncBase* CGPkgContext::GetImplicitUsedFunc(const std::string& funcMangledName)
+CHIR::Function* CGPkgContext::GetImplicitUsedFunc(const std::string& funcMangledName)
 {
     auto funcs = chirData.GetImplicitFuncs();
     auto it = funcs.find(funcMangledName);
@@ -140,15 +140,18 @@ CHIR::Value* CGPkgContext::FindCHIRGlobalValue(const std::string& mangledName)
         [&capturedChirPkg, &mangledName](std::unordered_map<std::string, CHIR::Value*>& object) -> CHIR::Value* {
             if (object.empty()) {
                 object.reserve(capturedChirPkg.GetGlobalFuncs().size() + capturedChirPkg.GetGlobalVars().size() +
-                    capturedChirPkg.GetImportedVarAndFuncs().size());
+                    capturedChirPkg.GetImportedGlobalVars().size() + capturedChirPkg.GetImportedFunctions().size());
                 for (auto chirFunc : capturedChirPkg.GetGlobalFuncs()) {
                     object.emplace(chirFunc->GetIdentifierWithoutPrefix(), chirFunc);
                 }
                 for (auto chirGv : capturedChirPkg.GetGlobalVars()) {
                     object.emplace(chirGv->GetIdentifierWithoutPrefix(), chirGv);
                 }
-                for (auto importedValue : capturedChirPkg.GetImportedVarAndFuncs()) {
-                    object.emplace(importedValue->GetIdentifierWithoutPrefix(), importedValue);
+                for (auto importedFunc : capturedChirPkg.GetImportedFunctions()) {
+                    object.emplace(importedFunc->GetIdentifierWithoutPrefix(), importedFunc);
+                }
+                for (auto importedVar : capturedChirPkg.GetImportedGlobalVars()) {
+                    object.emplace(importedVar->GetIdentifierWithoutPrefix(), importedVar);
                 }
             }
 

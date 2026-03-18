@@ -101,10 +101,10 @@ void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)
         return;
     }
     if (decl.TestAttr(AST::Attribute::STATIC)) {
-        auto staticVar = VirtualCast<GlobalVarBase*>(GetSymbolTable(decl));
+        auto staticVar = StaticCast<GlobalVar*>(GetSymbolTable(decl));
         def.AddStaticMemberVar(staticVar);
-        if (auto gv = DynamicCast<GlobalVar>(staticVar)) {
-            CreateAnnotationInfo<GlobalVar>(decl, *gv, &def);
+        if (!decl.TestAttr(AST::Attribute::IMPORTED) || IsSrcCodeImportedGlobalDecl(decl, opts)) {
+            CreateAnnotationInfo<GlobalVar>(decl, *staticVar, &def);
         }
     } else {
         Ptr<Type> ty = TranslateType(*decl.ty);
@@ -133,7 +133,7 @@ void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)
     }
 }
 
-Func* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
+Function* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
 {
     static const std::string POSTFIX = "$varInit";
 
@@ -144,10 +144,10 @@ Func* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
         return nullptr;
     }
 
-    Func* func = nullptr;
+    Function* func = nullptr;
     BlockGroup* body = nullptr;
     auto mangledName = decl.mangledName + POSTFIX;
-    if (func = TryGetFromCache<Value, Func>(GLOBAL_VALUE_PREFIX + mangledName, deserializedVals); func) {
+    if (func = TryGetFromCache<Value, Function>(GLOBAL_VALUE_PREFIX + mangledName, deserializedVals); func) {
         // found deserialized one
         body = builder.CreateBlockGroup(*func);
         auto params = func->GetParams();
@@ -175,7 +175,7 @@ Func* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
         auto loc = DebugLocation(TranslateLocationWithoutScope(builder.GetChirContext(), decl.begin, decl.end));
 
         auto customTypeDef = chirTy.GetGlobalNominalCache(outerDecl);
-        func = builder.CreateFunc(loc, funcType, mangledName, identifier, rawMangledName, pkgName);
+        func = builder.CreateFuncWithBody(loc, funcType, mangledName, identifier, rawMangledName, pkgName);
         customTypeDef->AddMethod(func);
         func->SetFuncKind(FuncKind::INSTANCEVAR_INIT);
         func->EnableAttr(Attribute::PRIVATE);
@@ -199,7 +199,7 @@ Func* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
     return func;
 }
 
-Func* Translator::TranslateVarInit(const AST::VarDecl& varDecl)
+Function* Translator::TranslateVarInit(const AST::VarDecl& varDecl)
 {
     if (!varDecl.initializer) {
         return nullptr;
@@ -234,7 +234,7 @@ Func* Translator::TranslateVarInit(const AST::VarDecl& varDecl)
     return funcDef;
 }
 
-Func* Translator::TranslateVarsInit(const AST::Decl& decl)
+Function* Translator::TranslateVarsInit(const AST::Decl& decl)
 {
     auto funcDef = ClearOrCreateVarInitFunc(decl);
     if (!funcDef) {
@@ -299,11 +299,11 @@ void Translator::AddMemberMethodToCustomTypeDef(const AST::FuncDecl& decl, Custo
     if (IsStaticInit(decl)) {
         return;
     }
-    auto func = VirtualCast<FuncBase>(GetSymbolTable(decl));
+    auto func = StaticCast<Function>(GetSymbolTable(decl));
     def.AddMethod(func);
     for (auto& param : decl.funcBody->paramLists[0]->params) {
         if (param->desugarDecl != nullptr) {
-            def.AddMethod(VirtualCast<FuncBase>(GetSymbolTable(*param->desugarDecl)));
+            def.AddMethod(StaticCast<Function>(GetSymbolTable(*param->desugarDecl)));
         }
     }
     auto it = genericFuncMap.find(&decl);
@@ -311,10 +311,10 @@ void Translator::AddMemberMethodToCustomTypeDef(const AST::FuncDecl& decl, Custo
         for (auto instFunc : it->second) {
             CJC_NULLPTR_CHECK(instFunc->outerDecl);
             CJC_ASSERT(instFunc->outerDecl == decl.outerDecl);
-            def.AddMethod(VirtualCast<FuncBase*>(GetSymbolTable(*instFunc)));
+            def.AddMethod(StaticCast<Function*>(GetSymbolTable(*instFunc)));
             for (auto& param : instFunc->funcBody->paramLists[0]->params) {
                 if (param->desugarDecl != nullptr) {
-                    def.AddMethod(VirtualCast<FuncBase>(GetSymbolTable(*param->desugarDecl)));
+                    def.AddMethod(StaticCast<Function>(GetSymbolTable(*param->desugarDecl)));
                 }
             }
         }
@@ -427,12 +427,12 @@ void Translator::AddMemberFunctionGenericInstantiations(
         CJC_ASSERT(instFunc->outerDecl == originalDecl.outerDecl);
 
         // Add the instantiated member function to class
-        classDef.AddMethod(VirtualCast<FuncBase*>(GetSymbolTable(*instFunc)));
+        classDef.AddMethod(StaticCast<Function*>(GetSymbolTable(*instFunc)));
 
         // Add member function parameter desugar declarations to class
         for (auto& param : instFunc->funcBody->paramLists[0]->params) {
             if (param->desugarDecl != nullptr) {
-                classDef.AddMethod(VirtualCast<FuncBase>(GetSymbolTable(*param->desugarDecl)));
+                classDef.AddMethod(StaticCast<Function>(GetSymbolTable(*param->desugarDecl)));
             }
         }
     }
@@ -452,12 +452,12 @@ void Translator::AddMemberPropDecl(CustomTypeDef& def, const AST::PropDecl& decl
     } else {
         // prop defined within STRUCT or ENUM can't be abstract, so just put into method
         for (auto& getter : decl.getters) {
-            auto func = VirtualCast<FuncBase>(GetSymbolTable(*getter));
+            auto func = StaticCast<Function>(GetSymbolTable(*getter));
             def.AddMethod(func);
             CreateAnnoFactoryFuncsForFuncDecl(StaticCast<AST::FuncDecl>(*getter), &def);
         }
         for (auto& setter : decl.setters) {
-            auto func = VirtualCast<FuncBase>(GetSymbolTable(*setter));
+            auto func = StaticCast<Function>(GetSymbolTable(*setter));
             def.AddMethod(func);
             CreateAnnoFactoryFuncsForFuncDecl(StaticCast<AST::FuncDecl>(*setter), &def);
         }

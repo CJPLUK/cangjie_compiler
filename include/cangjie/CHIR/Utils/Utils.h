@@ -147,7 +147,7 @@ struct FuncInfo {
  * @param funcInfo The expected function information.
  * @return True if the function matches the expected information, false otherwise.
  */
-bool IsExpectedFunction(const FuncBase& func, const FuncInfo& funcInfo);
+bool IsExpectedFunction(const Function& func, const FuncInfo& funcInfo);
 
 /**
  * @brief Prints optimization information for an expression.
@@ -174,7 +174,7 @@ FuncKind GetFuncKindFromAST(const AST::FuncDecl& func);
  * @param funcDecl The function declaration to check.
  * @return True if the function is virtual, false otherwise.
  */
-bool IsVirtualFunction(const FuncBase& funcDecl);
+bool IsVirtualFunction(const Function& funcDecl);
 
 /**
  * @brief Checks if a function is a static method in an interface.
@@ -182,7 +182,7 @@ bool IsVirtualFunction(const FuncBase& funcDecl);
  * @param func The function to check.
  * @return True if the function is a static method in an interface, false otherwise.
  */
-bool IsInterfaceStaticMethod(const Func& func);
+bool IsInterfaceStaticMethod(const Function& func);
 
 /**
  * @brief Checks if a function is semantically abstract and an instance.
@@ -211,7 +211,7 @@ std::deque<Block*> TopologicalSort(Block* entrybb);
  * @param initFunc The global initialization function.
  * @param insertExpr The expressions to add to the initialization function.
  */
-void AddExpressionsToGlobalInitFunc(const Func& initFunc, const std::vector<Expression*>& insertExpr);
+void AddExpressionsToGlobalInitFunc(const Function& initFunc, const std::vector<Expression*>& insertExpr);
 
 /**
  * @brief Retrieves static member variables from a declaration.
@@ -437,7 +437,7 @@ template <typename TExpr, typename... Args> TExpr* CreateAndAppendTerminator(CHI
  * @return True if the function is a static initializer, false otherwise.
  */
 bool IsStaticInit(const AST::FuncDecl& func);
-bool IsStaticInit(const FuncBase& func);
+bool IsStaticInit(const Function& func);
 
 /**
  * @brief Checks if an expression is a super or this call.
@@ -653,7 +653,7 @@ bool IsCapturedClass(const ClassDef& def);
  * @param value The value to retrieve the parent function from.
  * @return The parent function of the given value.
  */
-Func* GetTopLevelFunc(const Value& value);
+Function* GetTopLevelFunc(const Value& value);
 
 /**
  * @brief Retrieves the visible generic types for a given value.
@@ -780,7 +780,7 @@ Type* GetInstParentType(Type& instSubType, Type& genericParentType, CHIRBuilder&
  * @param func The function to check.
  * @return True if the function's return type should be `Void`, false otherwise.
  */
-bool ReturnTypeShouldBeVoid(const FuncBase& func);
+bool ReturnTypeShouldBeVoid(const Function& func);
 
 /**
  * @brief Retrieves the reference dimensions of a type.
@@ -795,7 +795,7 @@ uint64_t GetRefDims(const Type& type);
  *
  * @return True if func is from standard library.
  */
-bool IsSTDFunction(const FuncBase& func);
+bool IsSTDFunction(const Function& func);
 
 /**
  * @brief Retrieves the non-debug users of a value.

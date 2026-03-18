@@ -155,7 +155,7 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
     result.VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator);
 }
 
-void UnreachableBranchCheck::RunOnFunc(const Ptr<Func> func)
+void UnreachableBranchCheck::RunOnFunc(const Ptr<Function> func)
 {
     // we should check the generic func, not the instantiated func.
     if (func->TestAttr(Attribute::GENERIC_INSTANTIATED)) {

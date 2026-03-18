@@ -49,22 +49,26 @@ public:
     // ===--------------------------------------------------------------------===//
     // Global Function API
     // ===--------------------------------------------------------------------===//
-    void AddGlobalFunc(Func* item);
-    Func* TryGetGlobalFunc(const std::string identifier);
-    std::vector<Func*> GetGlobalFuncs() const;
-    void SetGlobalFuncs(const std::vector<Func*>& funcs);
+    void AddGlobalFunc(Function* item);
+    Function* TryGetGlobalFunc(const std::string identifier);
+    std::vector<Function*> GetGlobalFuncs() const;
+    void SetGlobalFuncs(const std::vector<Function*>& funcs);
 
-    Func* GetPackageInitFunc() const;
-    void SetPackageInitFunc(Func* func);
+    Function* GetPackageInitFunc() const;
+    void SetPackageInitFunc(Function* func);
 
-    void SetPackageLiteralInitFunc(Func* func);
-    Func* GetPackageLiteralInitFunc() const;
+    void SetPackageLiteralInitFunc(Function* func);
+    Function* GetPackageLiteralInitFunc() const;
     // ===--------------------------------------------------------------------===//
     // Imported Var and Function API
     // ===--------------------------------------------------------------------===//
-    void AddImportedVarAndFunc(ImportedValue* item);
-    std::vector<ImportedValue*> GetImportedVarAndFuncs() const;
-    void SetImportedVarAndFuncs(std::vector<ImportedValue*>&& items);
+    void AddImportedGlobalVar(GlobalVar* item);
+    std::vector<GlobalVar*> GetImportedGlobalVars() const;
+    void SetImportedGlobalVars(std::vector<GlobalVar*>&& items);
+
+    void AddImportedFunction(Function* item);
+    std::vector<Function*> GetImportedFunctions() const;
+    void SetImportedFunctions(std::vector<Function*>&& items);
 
     // ===--------------------------------------------------------------------===//
     // StructDef API
@@ -129,7 +133,8 @@ private:
     AccessLevel pkgAccessLevel{AccessLevel::INVALID};  // public/internal/protected, get from AST
 
     // imported decls
-    std::vector<ImportedValue*> importedVarAndFuncs;
+    std::vector<GlobalVar*> importedGlobalVars;
+    std::vector<Function*> importedFuncs;
     std::vector<StructDef*> importedStructs;
     std::vector<ClassDef*> importedClasses;
     std::vector<EnumDef*> importedEnums;
@@ -137,13 +142,13 @@ private:
 
     // decls in current package
     std::vector<GlobalVar*> globalVars;
-    std::vector<Func*> globalFuncs;
+    std::vector<Function*> globalFuncs;
     std::vector<StructDef*> structs;
     std::vector<ClassDef*> classes;
     std::vector<EnumDef*> enums;
     std::vector<ExtendDef*> extends;
-    Func* packageInitFunc = nullptr;
-    Func* packageLiteralInitFunc = nullptr; // global literals init function in one package
+    Function* packageInitFunc = nullptr;
+    Function* packageLiteralInitFunc = nullptr; // global literals init function in one package
 };
 
 } // namespace Cangjie::CHIR

@@ -37,9 +37,9 @@ public:
         const TranslateASTNodeFunc& funcForTranlateASTNode,
         std::unordered_map<Block*, Terminator*>& maybeUnreachable,
         bool computeAnnotations,
-        std::vector<CHIR::Func*>& initFuncsForAnnoFactory,
+        std::vector<CHIR::Function*>& initFuncsForAnnoFactory,
         const Cangjie::TypeManager& typeManager,
-        std::vector<std::pair<const AST::Decl*, Func*>>& annoFactoryFuncs)
+        std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs)
     {
         size_t funcNum = decls.size();
         std::vector<std::unique_ptr<CHIR::CHIRBuilder>> builderList = ConstructSubBuilders(funcNum);

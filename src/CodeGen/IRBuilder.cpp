@@ -377,10 +377,9 @@ void IRBuilder2::CreateBoxedValueForValueType(const CHIR::Debug& debugNode, cons
             CGType::TypeExtraInfo(1U));
         CreateStore(cgValue, CGValue(castedPtr, addrType));
         if (ty->IsStruct()) {
-            auto curCHIRFunc = DynamicCast<const CHIR::Func*>(&GetInsertCGFunction()->GetOriginal());
-            CJC_NULLPTR_CHECK(curCHIRFunc);
+            const auto& curCHIRFunc = StaticCast<const CHIR::Function&>(GetInsertCGFunction()->GetOriginal());
             bool shouldUpdateThis =
-                curCHIRFunc->GetSrcCodeIdentifier() == "init" || curCHIRFunc->TestAttr(CHIR::Attribute::MUT);
+                curCHIRFunc.GetSrcCodeIdentifier() == "init" || curCHIRFunc.TestAttr(CHIR::Attribute::MUT);
             cgMod.GetCGContext().debugValue =
                 shouldUpdateThis && arg->getName() == "this" ? thisDebug : cgMod.GetCGContext().debugValue;
         }
@@ -466,7 +465,7 @@ void IRBuilder2::CreateGenericParaDeclare(const CGFunction& cgFunc)
     if (cgFunc.chirFunc.TestAttr(CHIR::Attribute::NO_DEBUG_INFO)) {
         return;
     }
-    auto chirFunc = dynamic_cast<const CHIR::Func*>(&cgFunc.GetOriginal());
+    auto chirFunc = dynamic_cast<const CHIR::Function*>(&cgFunc.GetOriginal());
     size_t genericIndex = 0;
     auto null = llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
     // For member function only.

@@ -310,7 +310,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
 Value* Translator::GetWrapperFuncFromMemberAccess(Type& thisType, const std::string funcName,
     FuncType& instFuncType, bool isStatic, std::vector<Type*>& funcInstTypeArgs)
 {
-    FuncBase* result = nullptr;
+    Function* result = nullptr;
     if (auto genericType = DynamicCast<GenericType*>(&thisType)) {
         auto& upperBounds = genericType->GetUpperBounds();
         CJC_ASSERT(!upperBounds.empty());

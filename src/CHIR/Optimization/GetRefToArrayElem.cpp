@@ -18,7 +18,7 @@ void GetRefToArrayElem::RunOnPackage(const Package& package, CHIRBuilder& builde
     }
 }
 
-void GetRefToArrayElem::RunOnFunc(const Func& func, CHIRBuilder& builder)
+void GetRefToArrayElem::RunOnFunc(const Function& func, CHIRBuilder& builder)
 {
     for (auto block : func.GetBody()->GetBlocks()) {
         for (auto expr : block->GetExpressions()) {

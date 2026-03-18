@@ -20,7 +20,7 @@
 namespace Cangjie::CHIR {
 class Type;
 class Expression;
-class Func;
+class Function;
 class If;
 class Loop;
 class ForIn;
@@ -31,7 +31,7 @@ class Package;
 
 class CHIRPrinter {
 public:
-    static void PrintCFG(const Func& func, const std::string& path);
+    static void PrintCFG(const Function& func, const std::string& path);
     static void PrintPackage(const Package& package, std::ostream& os = std::cout);
     static void PrintPackage(const Package& package, const std::string& fullPath);
     static void PrintCHIRSerializeInfo(ToCHIR::Phase phase, const std::string& path);

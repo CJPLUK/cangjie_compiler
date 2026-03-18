@@ -14,7 +14,7 @@
 using namespace Cangjie::CHIR;
 
 VirtualMethodInfo::VirtualMethodInfo(
-    FuncSigInfo&& c, FuncBase* func, const AttributeInfo& a, FuncType& o, Type& p, Type& r)
+    FuncSigInfo&& c, Function* func, const AttributeInfo& a, FuncType& o, Type& p, Type& r)
     : condition(std::move(c)), instance(func), attr(a), originalType(&o), parentType(&p), returnType(&r)
 {
 }
@@ -24,7 +24,7 @@ AttributeInfo VirtualMethodInfo::GetAttributeInfo() const
     return attr;
 }
 
-FuncBase* VirtualMethodInfo::GetVirtualMethod() const
+Function* VirtualMethodInfo::GetVirtualMethod() const
 {
     return instance;
 }
@@ -130,7 +130,7 @@ Type* VirtualMethodInfo::GetMethodInstRetType() const
     return returnType;
 }
 
-void VirtualMethodInfo::SetVirtualMethod(FuncBase* newFunc)
+void VirtualMethodInfo::SetVirtualMethod(Function* newFunc)
 {
     instance = newFunc;
 }
@@ -279,7 +279,7 @@ void VTableInDef::ConvertPrivateType(
 }
 
 void VTableInDef::UpdateItemInTypeVTable(
-    ClassType& srcClassTy, size_t index, FuncBase* newFunc, Type* newParentTy, const std::string& newName)
+    ClassType& srcClassTy, size_t index, Function* newFunc, Type* newParentTy, const std::string& newName)
 {
     for (auto& vtableIt : vtables) {
         if (vtableIt.GetSrcParentType() != &srcClassTy) {

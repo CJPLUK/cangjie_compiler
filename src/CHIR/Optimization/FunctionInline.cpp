@@ -88,7 +88,7 @@ void FunctionInline::InlineImpl(BlockGroup& bg)
     Visitor::Visit(bg, preVisit);
 }
 
-void FunctionInline::Run(Func& func)
+void FunctionInline::Run(Function& func)
 {
     globalFunc = &func;
     InlineImpl(*func.GetBody());
@@ -99,7 +99,7 @@ const OptEffectCHIRMap& FunctionInline::GetEffectMap() const
     return effectMap;
 }
 
-static bool InBlackList(const Func& func)
+static bool InBlackList(const Function& func)
 {
     if (func.GetFuncKind() == FuncKind::MACRO_FUNC || func.GetFuncKind() == FuncKind::GLOBALVAR_INIT ||
         func.GetFuncKind() == FuncKind::MAIN_ENTRY) {
@@ -121,7 +121,7 @@ static bool InBlackList(const Func& func)
     return false;
 }
 
-static bool InWhiteList(const Func& func)
+static bool InWhiteList(const Function& func)
 {
     for (auto element : functionInlineWhiteList) {
         if (IsExpectedFunction(func, element)) {
@@ -131,7 +131,7 @@ static bool InWhiteList(const Func& func)
     return false;
 }
 
-static bool OnlyCalledOnce(const Func& func)
+static bool OnlyCalledOnce(const Function& func)
 {
     bool alreadyHasUser = false;
     for (auto user : func.GetUsers()) {
@@ -145,7 +145,7 @@ static bool OnlyCalledOnce(const Func& func)
     return true;
 }
 
-static bool IsHotSpotCall(const Func& callee)
+static bool IsHotSpotCall(const Function& callee)
 {
     // Case A: the callee is operator overloading function like `[]`, `+`, `-`
     if (callee.TestAttr(Attribute::OPERATOR)) {
@@ -156,7 +156,7 @@ static bool IsHotSpotCall(const Func& callee)
     return false;
 }
 
-static bool FunctionWithLambdaArg(const Func& func)
+static bool FunctionWithLambdaArg(const Function& func)
 {
     for (auto arg : func.GetParams()) {
         if (arg->GetType()->IsFunc()) {
@@ -169,18 +169,17 @@ static bool FunctionWithLambdaArg(const Func& func)
 static size_t CalculateThreshold(const Value& callee, const Cangjie::GlobalOptions::OptimizationLevel& optLevel)
 {
     size_t realThreshold = INIT_INLINE_THRESHOLD;
-    auto func = Cangjie::DynamicCast<const Func*>(&callee);
-    CJC_NULLPTR_CHECK(func);
-    if (OnlyCalledOnce(*func)) {
+    const auto& func = Cangjie::StaticCast<const Function&>(callee);
+    if (OnlyCalledOnce(func)) {
         // Increase the threshold value by 20%
         realThreshold += realThreshold / INCREASE_THRESHOLD;
     }
     if (optLevel < Cangjie::GlobalOptions::OptimizationLevel::Os) {
-        if (IsHotSpotCall(*func)) {
+        if (IsHotSpotCall(func)) {
             // Increase the threshold value by 20%
             realThreshold = INIT_INLINE_THRESHOLD + INIT_INLINE_THRESHOLD / INCREASE_THRESHOLD;
         }
-        if (FunctionWithLambdaArg(*func)) {
+        if (FunctionWithLambdaArg(func)) {
             realThreshold = INIT_INLINE_THRESHOLD * INCREASE_WHEN_CALLEE_WITH_LAMBDA_ARG;
         }
     }
@@ -201,7 +200,7 @@ static size_t GetExprSize(const Expression& expr)
     return exprSize;
 }
 
-static size_t CountFuncSize(const Func& func)
+static size_t CountFuncSize(const Function& func)
 {
     size_t funcSize = 0;
     for (auto block : func.GetBody()->GetBlocks()) {
@@ -222,7 +221,7 @@ bool FunctionInline::CheckCanRewrite(const Apply& apply)
     if (!callee->IsFuncWithBody()) {
         return false;
     }
-    auto func = VirtualCast<Func*>(callee);
+    auto func = StaticCast<Function*>(callee);
     CJC_NULLPTR_CHECK(callee);
 
     // when the terminator of this block is RaiseException, do not inline this apply because it rarely happens
@@ -368,14 +367,14 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
     // func foo1(param: Int64) { return param }
     // func foo2() { foo1(2) }
     // CHIR graph is like:
-    // Func foo1(%7: Int64) { // Block Group: 1
+    // Function foo1(%7: Int64) { // Block Group: 1
     // Block #7:
     //   %8: Unit = Debug(%7, param)
     //   [ret]%9: Int64& = Allocate(Int64)
     //   %10: Unit = Store(%7, %9)
     //   Exit()
     // }
-    // Func foo2 { // Block Group: 2
+    // Function foo2 { // Block Group: 2
     // Block #14:
     //   %[ret]%11: Int64& = Allocate(Int64)
     //   %12: Int64 = ConstantInt(2)
@@ -389,7 +388,7 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
     BlockGroup* oldFuncGroup = nullptr;
     std::vector<Parameter*> funcArgs;
     if (apply.GetCallee()->IsFuncWithBody()) {
-        auto func = VirtualCast<Func*>(apply.GetCallee());
+        auto func = StaticCast<Function*>(apply.GetCallee());
         oldFuncGroup = func->GetBody();
         funcArgs = func->GetParams();
     } else {
@@ -417,7 +416,7 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
     auto exitBlocks = GetExitBlocks(newBlocks);
 
     // step 2: change connection of func args
-    // Func foo2 { // Block Group: 4
+    // Function foo2 { // Block Group: 4
     // Block #14:
     //   [ret] %11: Int64& = Allocate(Int64)
     //   %12: Int64 = Constant(2)
@@ -437,7 +436,7 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
 
     // if callee must throw exception, then we can't get return value
     // step 4 : Insert a load for return value of inlined function and replace the use
-    // Func foo2 { // Block Group: 4
+    // Function foo2 { // Block Group: 4
     // Block #14:
     //   [ret] %11: Int64& = Allocate(Int64)
     //   %12: Int64 = Constant(2)
@@ -453,7 +452,7 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
         ReplaceFuncResult(returnVal, StaticCast<LocalVar*>(apply.GetResult()));
     }
     // step 5: split block to 2 pieces and remove `apply` node
-    // Func foo2 { // Block Group: 4
+    // Function foo2 { // Block Group: 4
     // Block #14:                       // `Block #14` is split to `Block #14` and `Block #28`
     //   [ret] %11: Int64& = Allocate(Int64)
     //   %12: Int64 = Constant(2)
@@ -471,7 +470,7 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
     auto [block1, block2] = builder.SplitBlock(apply);
 
     // step 6: change connection in `Block Group 4`
-    // Func foo2 { // Block Group: 4
+    // Function foo2 { // Block Group: 4
     // Block #21:
     //   [ret] %11: Int64& = Allocate(Int64)
     //   %12: Int64 = Constant(2)
@@ -501,11 +500,11 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
 
 void FunctionInline::RecordEffectMap(const Apply& apply)
 {
-    auto callee = DynamicCast<CHIR::Func*>(apply.GetCallee());
     // `callee` may be a lambda, we only record global function
-    if (callee == nullptr) {
+    if (!apply.GetCallee()->IsFuncWithBody()) {
         return;
     }
+    auto callee = StaticCast<Function*>(apply.GetCallee());
     auto parentFunc = apply.GetTopLevelFunc();
     CJC_NULLPTR_CHECK(parentFunc);
     if (!callee->IsLambda() && !parentFunc->IsLambda()) {

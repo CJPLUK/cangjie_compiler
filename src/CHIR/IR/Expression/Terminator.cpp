@@ -678,7 +678,7 @@ Value* SpawnWithException::GetFuture() const
     return operands[0];
 }
 
-void SpawnWithException::SetExecuteClosure(FuncBase& func)
+void SpawnWithException::SetExecuteClosure(Function& func)
 {
     executeClosure = &func;
 }
@@ -697,7 +697,7 @@ Value* SpawnWithException::GetClosure() const
     return operands[0];
 }
 
-FuncBase* SpawnWithException::GetExecuteClosure() const
+Function* SpawnWithException::GetExecuteClosure() const
 {
     return executeClosure;
 }

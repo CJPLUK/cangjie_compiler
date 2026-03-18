@@ -59,7 +59,7 @@ public:
      * @param func function to analyse.
      * @param isDebug flag whether print debug log.
      */
-    GetOrThrowResultAnalysis(const Func* func, bool isDebug);
+    GetOrThrowResultAnalysis(const Function* func, bool isDebug);
     ~GetOrThrowResultAnalysis()
     {
     }

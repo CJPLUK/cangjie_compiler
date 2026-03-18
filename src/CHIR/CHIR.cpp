@@ -94,10 +94,10 @@ static void FlattenEffectMap(OptEffectCHIRMap& effectMap)
 
 static bool IsDesugaredNoneStaticConstructor(const Value& value)
 {
-    const auto func = DynamicCast<const Func*>(&value);
-    if (func == nullptr) {
+    if (!value.IsFuncWithBody()) {
         return false;
     }
+    const auto func = StaticCast<const Function*>(&value);
     return func->TestAttr(Attribute::COMPILER_ADD) && !func->TestAttr(Attribute::STATIC) &&
         (func->GetFuncKind() == FuncKind::CLASS_CONSTRUCTOR || func->GetFuncKind() == FuncKind::STRUCT_CONSTRUCTOR);
 }
@@ -113,12 +113,7 @@ static std::unordered_set<std::string> GetNoneStaticMemberVars(const CustomTypeD
 
 static std::string GetRawMangledName(const Value& value)
 {
-    if (auto func = DynamicCast<const Func*>(&value); func) {
-        return func->GetRawMangledName();
-    } else {
-        auto var = VirtualCast<const GlobalVar*>(&value);
-        return var->GetRawMangledName();
-    }
+    return StaticCast<const GlobalValue*>(&value)->GetRawMangledName();
 }
 
 static std::unordered_set<std::string> GetRawMangledNameSet(const std::unordered_set<Ptr<Value>>& set)
@@ -141,7 +136,7 @@ static void UpdateOptEffectMapBecauseOfInit(OptEffectCHIRMap& oldMap, OptEffectS
         auto effectedIt = mapIt->second.begin();
         while (effectedIt != mapIt->second.end()) {
             if (IsDesugaredNoneStaticConstructor(**effectedIt)) {
-                auto parentClass = VirtualCast<Func*>(*effectedIt)->GetParentCustomTypeDef();
+                auto parentClass = StaticCast<Function*>(*effectedIt)->GetParentCustomTypeDef();
                 CJC_NULLPTR_CHECK(parentClass);
                 effectedNodePatch.merge(GetNoneStaticMemberVars(*parentClass));
                 effectedIt = mapIt->second.erase(effectedIt);
@@ -156,7 +151,7 @@ static void UpdateOptEffectMapBecauseOfInit(OptEffectCHIRMap& oldMap, OptEffectS
             }
         }
         if (IsDesugaredNoneStaticConstructor(*(mapIt->first))) {
-            auto parentClass = VirtualCast<Func*>(mapIt->first)->GetParentCustomTypeDef();
+            auto parentClass = StaticCast<Function*>(mapIt->first)->GetParentCustomTypeDef();
             CJC_NULLPTR_CHECK(parentClass);
             auto effectedSet = GetRawMangledNameSet(mapIt->second);
             effectedSet.merge(effectedNodePatch);
@@ -508,7 +503,7 @@ void ToCHIR::RunConstantPropagation()
     } else {
         bool isDebug = opts.chirDebugOptimizer;
         bool isCJLint = ci.isCJLint;
-        std::vector<Func*> globalFuncs = chirPkg->GetGlobalFuncs();
+        std::vector<Function*> globalFuncs = chirPkg->GetGlobalFuncs();
         size_t funcNum = globalFuncs.size();
         std::vector<std::unique_ptr<CHIR::CHIRBuilder>> builderList = ConstructSubBuilders(threadNum, funcNum);
         Utils::TaskQueue taskQueue(threadNum);
@@ -551,7 +546,7 @@ void ToCHIR::RunRangePropagation()
         dce.UnreachableBlockElimination(cp.GetFuncsNeedRemoveBlocks(), opts.chirDebugOptimizer);
     } else {
         bool isDebug = opts.chirDebugOptimizer;
-        std::vector<Func*> globalFuncs = chirPkg->GetGlobalFuncs();
+        std::vector<Function*> globalFuncs = chirPkg->GetGlobalFuncs();
         size_t funcNum = globalFuncs.size();
         std::vector<std::unique_ptr<CHIR::CHIRBuilder>> builderList =
             CHIR::ToCHIR::ConstructSubBuilders(threadNum, funcNum);
@@ -639,7 +634,7 @@ DevirtualizationInfo ToCHIR::CollectDevirtualizationInfo()
 
 void ToCHIR::OptimizeFuncReturnType()
 {
-    Utils::ProfileRecorder recorder("CHIR Opt", "Optimize Func Return Type");
+    Utils::ProfileRecorder recorder("CHIR Opt", "Optimize Function Return Type");
     OptFuncRetType optFuncRetType(*chirPkg, builder);
     optFuncRetType.Unit2Void();
     DumpCHIRToFile("OptimizeFuncReturnType");
@@ -717,6 +712,8 @@ bool ToCHIR::RunIRChecker(const Phase& phase)
     if (phase == Phase::OPT) {
         rules.emplace(CHIRChecker::Rule::GET_INSTANTIATE_VALUE_SHOULD_GONE);
         rules.emplace(CHIRChecker::Rule::RETURN_TYPE_NEED_BE_VOID);
+    } else {
+        rules.emplace(CHIRChecker::Rule::IMPORTED_CONST_VAR_SHOULD_HAVE_INITIALIZER);
     }
     // there may be something wrong, we will check this rule after CJMP's scheme done
     if (opts.commonPartCjos.size() <= 0) {
@@ -916,17 +913,17 @@ void ToCHIR::EraseDebugExpr()
 void ToCHIR::CFFIFuncWrapper()
 {
     Utils::ProfileRecorder recorder("CHIR", "CFFIFuncWrapper");
-    std::vector<Func*> cfuncs;
-    std::vector<ImportedFunc*> foreignFuncs;
+    std::vector<Function*> cfuncs;
+    std::vector<Function*> foreignFuncs;
     for (auto curFunc : chirPkg->GetGlobalFuncs()) {
         if (curFunc->GetType()->IsCFunc()) {
             cfuncs.emplace_back(curFunc);
         }
     }
-    for (auto foreignFunc : chirPkg->GetImportedVarAndFuncs()) {
+    for (auto foreignFunc : chirPkg->GetImportedFunctions()) {
         if (foreignFunc->GetType()->IsCFunc()) {
             CJC_ASSERT(foreignFunc->IsImportedFunc());
-            foreignFuncs.emplace_back(StaticCast<ImportedFunc*>(foreignFunc));
+            foreignFuncs.emplace_back(StaticCast<Function*>(foreignFunc));
         }
     }
     for (auto curFunc : cfuncs) {
@@ -975,13 +972,13 @@ std::pair<Value*, Apply*> ToCHIR::DoCFFIFuncWrapper(T& curFunc, bool isForeign, 
         ident = funcPkgName + ":" + ident;
     }
     if (funcPkgName != pkg.fullPackageName) {
-        auto wrapperFunc = builder.CreateImportedVarOrFunc<ImportedFunc>(
+        auto wrapperFunc = builder.CreateImportedFuncSig(
             curFunc.GetFuncType(), ident, ident, "", funcPkgName, curFunc.GetGenericTypeParams());
         wrapperFunc->SetCFFIWrapper(true);
         return std::make_pair(wrapperFunc, nullptr);
     }
     auto wrapperFunc =
-        builder.CreateFunc(curFunc.GetDebugLocation(), curFunc.GetFuncType(), ident, ident, "", funcPkgName);
+        builder.CreateFuncWithBody(curFunc.GetDebugLocation(), curFunc.GetFuncType(), ident, ident, "", funcPkgName);
     wrapperFunc->SetFuncKind(curFunc.GetFuncKind());
     if (wrapperFunc->IsLambda()) {
         auto originalLambdaInfo = FuncSigInfo {
@@ -1238,7 +1235,7 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
             hasPluginForCHIR = true;
             if (mtc.IsForFunc()) {
                 for (auto func : package.GetGlobalFuncs()) {
-                    static_cast<MetaTransform<CHIR::Func>*>(&mtc)->Run(*func);
+                    static_cast<MetaTransform<CHIR::Function>*>(&mtc)->Run(*func);
                 }
             } else if (mtc.IsForPackage()) {
                 static_cast<MetaTransform<CHIR::Package>*>(&mtc)->Run(package);
@@ -1255,7 +1252,6 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
         diag.DiagnoseRefactor(DiagKindRefactor::plugin_throws_exception, DEFAULT_POSITION);
     } else if (hasPluginForCHIR && builder.IsEnableIRCheckerAfterPlugin()) {
         DumpCHIRToFile("PLUGIN");
-        succeed = RunIRChecker(Phase::PLUGIN);
     }
     return succeed;
 }

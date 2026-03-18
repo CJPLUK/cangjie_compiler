@@ -30,7 +30,7 @@ using namespace AST;
 // 1) Annotation Factory func: _CAF + package + orignalDecl + "Hv"
 // 2) each annotation var: _CAO + package + originalDecl + 64bit var index + "E"
 // 3) each annotation var init: _CAO + package + originalDecl + 64bit var index + "iiHv"
-GlobalVar* Translator::TranslateCustomAnnoInstanceSig(const Expr& expr, const Func& func, size_t i)
+GlobalVar* Translator::TranslateCustomAnnoInstanceSig(const Expr& expr, const Function& func, size_t i)
 {
     auto name = func.GetIdentifierWithoutPrefix();
     CJC_ASSERT(name.size() > 3UL);
@@ -39,14 +39,14 @@ GlobalVar* Translator::TranslateCustomAnnoInstanceSig(const Expr& expr, const Fu
     name += MANGLE_COUNT_PREFIX;
     name += MangleUtils::DecimalToManglingNumber(std::to_string(i));
     auto varName = name + MANGLE_SUFFIX;
-    auto gv = builder.CreateGlobalVar(INVALID_LOCATION,
+    auto gv = builder.CreateGlobalVarWithInit(INVALID_LOCATION,
         builder.GetType<RefType>(TranslateType(*expr.ty)), varName, varName, "", func.GetPackageName());
     gv->EnableAttr(Attribute::COMPILER_ADD);
     gv->EnableAttr(Attribute::CONST);
     gv->Set<LinkTypeInfo>(Linkage::INTERNAL);
     auto initName = std::move(name) + "iiHv";
     auto ty = builder.GetType<FuncType>(std::vector<Type*>{}, builder.GetUnitTy());
-    auto init = builder.CreateFunc(INVALID_LOCATION, ty, initName, initName, "", func.GetPackageName());
+    auto init = builder.CreateFuncWithBody(INVALID_LOCATION, ty, initName, initName, "", func.GetPackageName());
     init->SetFuncKind(FuncKind::GLOBALVAR_INIT);
     init->Set<LinkTypeInfo>(Linkage::INTERNAL);
     init->EnableAttr(Attribute::CONST);
@@ -66,7 +66,7 @@ GlobalVar* Translator::TranslateCustomAnnoInstanceSig(const Expr& expr, const Fu
     return gv;
 }
 
-std::vector<GlobalVar*> Translator::TranslateAnnotationsArraySig(const ArrayLit& annos, const Func& func)
+std::vector<GlobalVar*> Translator::TranslateAnnotationsArraySig(const ArrayLit& annos, const Function& func)
 {
     std::vector<GlobalVar*> res;
     for (size_t i{0}; i < annos.children.size(); ++i) {
@@ -78,7 +78,7 @@ std::vector<GlobalVar*> Translator::TranslateAnnotationsArraySig(const ArrayLit&
     return res;
 }
 
-void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Func& func)
+void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Function& func)
 {
     auto& annoInsts = func.Get<AnnoFactoryInfo>();
     auto annoArrSize =
@@ -155,7 +155,7 @@ void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Func& func)
 }
 #endif
 
-void Translator::TranslateAnnoFactoryFuncBody([[maybe_unused]] const AST::Decl& decl, Func& func)
+void Translator::TranslateAnnoFactoryFuncBody([[maybe_unused]] const AST::Decl& decl, Function& func)
 {
     auto body = builder.CreateBlockGroup(func);
     blockGroupStack.emplace_back(body);
@@ -198,7 +198,7 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
             std::to_string(decl.begin.line) + " is " + mangledName + '\n';
         std::cout << ms;
     }
-    auto func = builder.CreateFunc(loc, funcType, mangledName, mangledName, "", decl.fullPackageName);
+    auto func = builder.CreateFuncWithBody(loc, funcType, mangledName, mangledName, "", decl.fullPackageName);
     func->SetFuncKind(FuncKind::ANNOFACTORY_FUNC);
     func->EnableAttr(Attribute::CONST);
     annoFactoryFuncs.emplace_back(&decl, func);
@@ -236,7 +236,7 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
 #endif
 }
 
-std::unordered_map<std::string, Ptr<Func>> Translator::jAnnoFuncMap;
+std::unordered_map<std::string, Ptr<Function>> Translator::jAnnoFuncMap;
 
 void Translator::CreateParamAnnotationInfo(const AST::FuncParam& astParam, Parameter& chirParam, CustomTypeDef& parent)
 {
@@ -248,21 +248,20 @@ void Translator::CreateAnnoFactoryFuncsForFuncDecl(const AST::FuncDecl& funcDecl
     auto& params = funcDecl.funcBody->paramLists[0]->params;
     auto funcValue = GetSymbolTable(funcDecl);
     const AST::Decl& annotatedDecl = funcDecl.propDecl ? *funcDecl.propDecl : StaticCast<AST::Decl>(funcDecl);
-    if (auto func = DynamicCast<Func>(funcValue)) {
-        CreateAnnotationInfo<Func>(annotatedDecl, *func, parent);
+    if (funcValue->IsFuncWithBody()) {
+        auto func = StaticCast<Function*>(funcValue);
+        CreateAnnotationInfo<Function>(annotatedDecl, *func, parent);
         size_t offset = params.size() == func->GetNumOfParams() ? 0 : 1;
         for (size_t i = 0; i < params.size(); ++i) {
             CreateParamAnnotationInfo(*params[i], *func->GetParam(i + offset), *parent);
         }
     } else if (!funcDecl.TestAttr(AST::Attribute::IMPORTED) && funcValue->TestAttr(Attribute::NON_RECOMPILE)) {
-        // Update annotation info for incremental created 'ImportedValue';
-        auto importedFunc = DynamicCast<ImportedFunc>(funcValue);
-        CJC_NULLPTR_CHECK(importedFunc);
-        CreateAnnotationInfo<ImportedFunc>(annotatedDecl, *importedFunc, parent);
-        auto paramInfo = importedFunc->GetParamInfo();
+        // Update annotation info for incremental created 'Function';
+        auto importedFunc = StaticCast<Function*>(funcValue);
+        CreateAnnotationInfo<Function>(annotatedDecl, *importedFunc, parent);
+        const auto& paramInfo = importedFunc->GetParams();
         for (size_t i = 0; i < params.size(); ++i) {
-            paramInfo[i].annoInfo = CreateAnnoFactoryFuncSig(*params[i], parent);
+            paramInfo[i]->SetAnnoInfo(CreateAnnoFactoryFuncSig(*params[i], parent));
         }
-        importedFunc->SetParamInfo(std::move(paramInfo));
     }
 }

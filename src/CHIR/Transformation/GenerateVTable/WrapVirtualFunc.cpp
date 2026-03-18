@@ -29,7 +29,7 @@ bool FuncTypeMatch(const FuncType& parentFuncType, const FuncType& curFuncType)
 }
 
 bool JudgeIfNeedVirtualWrapper(
-    const VirtualMethodInfo& parentFuncInfo, const FuncBase& virtualFunc, const Type& selfTy, CHIRBuilder& builder)
+    const VirtualMethodInfo& parentFuncInfo, const Function& virtualFunc, const Type& selfTy, CHIRBuilder& builder)
 {
     /** if struct and enum inherit interface, for non-static function, wrapper func is needed
      *  because `this` in struct is value type, and in interface is ref type
@@ -72,7 +72,7 @@ bool JudgeIfNeedVirtualWrapper(
 }
 
 // maybe we can not deserialize virutal wrapper function, because it's not in source code
-void TryDeleteVirtuallWrapperFunc(CustomTypeDef& customTypeDef, FuncBase& finalFunc, CHIRBuilder& builder)
+void TryDeleteVirtuallWrapperFunc(CustomTypeDef& customTypeDef, Function& finalFunc, CHIRBuilder& builder)
 {
     if (!customTypeDef.TestAttr(Attribute::SPECIFIC)) {
         return;
@@ -90,7 +90,7 @@ void TryDeleteVirtuallWrapperFunc(CustomTypeDef& customTypeDef, FuncBase& finalF
             continue;
         }
         if (finalFunc.GetFuncType()->IsEqualOrSubTypeOf(*method->GetFuncType(), builder)) {
-            method->FuncBase::DestroySelf();
+            method->Function::DestroySelf();
             return;
         }
     }
@@ -133,7 +133,7 @@ void WrapVirtualFunc::CheckAndWrap(CustomTypeDef& customTypeDef)
     }
 }
 
-void WrapVirtualFunc::HandleVirtualFuncWrapperForIncrCompilation(const FuncBase* wrapper, const FuncBase& curFunc)
+void WrapVirtualFunc::HandleVirtualFuncWrapperForIncrCompilation(const Function* wrapper, const Function& curFunc)
 {
     CJC_ASSERT(!curFunc.GetSrcCodeIdentifier().empty());
     const auto& cachedVirDep = increCachedInfo.virtualFuncDep;
@@ -195,7 +195,7 @@ WrapVirtualFunc::WrapperFuncGenericTable WrapVirtualFunc::GetReplaceTableForVirt
     return resultTable;
 }
 
-void WrapVirtualFunc::CreateWrapperFuncBody(Func& wrapperFunc,
+void WrapVirtualFunc::CreateWrapperFuncBody(Function& wrapperFunc,
     const VirtualMethodInfo& childFuncInfo, Type& selfTy, WrapVirtualFunc::WrapperFuncGenericTable& genericTable)
 {
     /*
@@ -304,7 +304,7 @@ FuncType* WrapVirtualFunc::RemoveThisArg(FuncType* funcTy)
 }
 
 // change this function to class method, to much args in functions called by this function
-FuncBase* WrapVirtualFunc::CreateVirtualWrapperIfNeeded(const VirtualMethodInfo& funcInfo,
+Function* WrapVirtualFunc::CreateVirtualWrapperIfNeeded(const VirtualMethodInfo& funcInfo,
     const VirtualMethodInfo& parentFuncInfo, Type& selfTy, CustomTypeDef& customTypeDef, const ClassType& parentTy)
 {
     auto curFunc = funcInfo.GetVirtualMethod();
@@ -333,13 +333,13 @@ FuncBase* WrapVirtualFunc::CreateVirtualWrapperIfNeeded(const VirtualMethodInfo&
     bool isImported =
         customTypeDef.TestAttr(Attribute::IMPORTED) && parentTy.GetCustomTypeDef()->TestAttr(Attribute::IMPORTED);
     bool parentIsFromExtend = ParentDefIsFromExtend(customTypeDef, *parentTy.GetClassDef());
-    FuncBase* funcBase = nullptr;
+    Function* funcBase = nullptr;
     if (isImported && !parentIsFromExtend) {
-        funcBase = builder.CreateImportedVarOrFunc<ImportedFunc>(wrapperTy,
+        funcBase = builder.CreateImportedFuncSig(wrapperTy,
             funcIdentifier, funcSrcIdentifier, rawMangledName, packageName, genericTable.funcGenericTypeParams);
     } else {
-        funcBase = builder.CreateFunc(INVALID_LOCATION, wrapperTy, funcIdentifier, funcSrcIdentifier, "", packageName,
-            genericTable.funcGenericTypeParams);
+        funcBase = builder.CreateFuncWithBody(INVALID_LOCATION, wrapperTy, funcIdentifier,
+            funcSrcIdentifier, "", packageName, genericTable.funcGenericTypeParams);
     }
     CJC_NULLPTR_CHECK(funcBase);
     funcBase->Set<WrappedRawMethod>(curFunc);
@@ -364,7 +364,7 @@ FuncBase* WrapVirtualFunc::CreateVirtualWrapperIfNeeded(const VirtualMethodInfo&
         return funcBase;
     }
     // 5. Create the function body if the raw function is not imported
-    auto func = StaticCast<Func*>(funcBase);
+    auto func = StaticCast<Function*>(funcBase);
     CreateWrapperFuncBody(*func, funcInfo, selfTy, genericTable);
     return func;
 }

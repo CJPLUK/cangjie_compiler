@@ -276,12 +276,6 @@ PackageFormat::ValueKind Serialize(const Value::ValueKind& kind)
         case Value::ValueKind::KIND_PARAMETER:
             ret = ValueKind_PARAMETER;
             break;
-        case Value::ValueKind::KIND_IMP_FUNC:
-            ret = ValueKind_IMPORTED_FUNC;
-            break;
-        case Value::ValueKind::KIND_IMP_VAR:
-            ret = ValueKind_IMPORTED_VAR;
-            break;
         case Value::ValueKind::KIND_LOCALVAR:
             ret = ValueKind_LOCALVAR;
             break;

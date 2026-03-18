@@ -57,9 +57,8 @@ void MarkClassHasInited::AddHasInitedFlagToClassDef(ClassDef& classDef)
 
 void MarkClassHasInited::AddGuardToFinalizer(ClassDef& classDef)
 {
-    auto finalizer = Cangjie::DynamicCast<Cangjie::CHIR::Func*>(classDef.GetFinalizer());
-    if (!finalizer) {
-        // the finalizer may be an ImportedFunc when:
+    if (auto finalizer = classDef.GetFinalizer(); !finalizer->IsFuncWithBody()) {
+        // the finalizer may be an imported function when:
         // 1. incremental compilation
         // 2. class is imported
         return;
@@ -75,6 +74,7 @@ void MarkClassHasInited::AddGuardToFinalizer(ClassDef& classDef)
             }
         }
     */
+    auto finalizer = StaticCast<Function*>(classDef.GetFinalizer());
     auto block = builder.CreateBlock(finalizer->GetBody());
     auto thisArg = finalizer->GetParam(0);
     CJC_NULLPTR_CHECK(thisArg);
@@ -91,7 +91,7 @@ void MarkClassHasInited::AddGuardToFinalizer(ClassDef& classDef)
     finalizer->GetBody()->SetEntryBlock(block);
 }
 
-void MarkClassHasInited::AssignHasInitedFlagToFalseInConstructorHead(Func& constructor)
+void MarkClassHasInited::AssignHasInitedFlagToFalseInConstructorHead(Function& constructor)
 {
     /*
         class CA {
@@ -114,7 +114,7 @@ void MarkClassHasInited::AssignHasInitedFlagToFalseInConstructorHead(Func& const
     entry->InsertExprIntoHead(*falseVal);
 }
 
-void MarkClassHasInited::AssignHasInitedFlagToTrueInConstructorExit(Func& constructor)
+void MarkClassHasInited::AssignHasInitedFlagToTrueInConstructorExit(Function& constructor)
 {
     /*
         class CA {
@@ -173,14 +173,12 @@ void MarkClassHasInited::RunOnPackage(const Package& package)
             continue;
         }
         AddHasInitedFlagToClassDef(*classDef);
-        for (auto funcBase : classDef->GetMethods()) {
-            if (!funcBase->IsConstructor()) {
+        for (auto func : classDef->GetMethods()) {
+            if (!func->IsConstructor() || !func->IsFuncWithBody()) {
                 continue;
             }
-            if (auto func = DynamicCast<Func*>(funcBase)) {
-                AssignHasInitedFlagToFalseInConstructorHead(*func);
-                AssignHasInitedFlagToTrueInConstructorExit(*func);
-            }
+            AssignHasInitedFlagToFalseInConstructorHead(*func);
+            AssignHasInitedFlagToTrueInConstructorExit(*func);
         }
 
         AddGuardToFinalizer(*classDef);

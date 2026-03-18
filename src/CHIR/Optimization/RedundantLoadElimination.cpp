@@ -28,7 +28,7 @@ static void ModifyApplyCalleeInfo(const LocalVar& loadResult, Value& storeValue)
     if (!storeValue.IsFunc()) {
         return;
     }
-    auto funcBase = VirtualCast<FuncBase*>(&storeValue);
+    auto funcBase = StaticCast<Function*>(&storeValue);
     if (!funcBase->IsMemberFunc() || !funcBase->TestAttr(Attribute::STATIC)) {
         return;
     }
@@ -48,7 +48,7 @@ static void ModifyApplyCalleeInfo(const LocalVar& loadResult, Value& storeValue)
     }
 }
 
-void RedundantLoadElimination::RunOnFunc(const Ptr<const Func>& func, bool isDebug) const
+void RedundantLoadElimination::RunOnFunc(const Ptr<const Function>& func, bool isDebug) const
 {
     if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
         return;

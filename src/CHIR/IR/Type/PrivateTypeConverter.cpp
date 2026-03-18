@@ -175,7 +175,7 @@ void ValueTypeConverter::VisitValueDefaultImpl(Value& o)
     o.ty = ConvertType(*o.ty);
 }
 
-void ValueTypeConverter::VisitFuncBase(FuncBase& o)
+void ValueTypeConverter::VisitFuncBase(Function& o)
 {
     o.ty = ConvertFuncParamsAndRetType(*o.GetFuncType());
     auto srcFuncType = o.Get<OverrideSrcFuncType>();
@@ -188,21 +188,12 @@ void ValueTypeConverter::VisitFuncBase(FuncBase& o)
     }
 }
 
-void ValueTypeConverter::VisitSubValue(Func& o)
+void ValueTypeConverter::VisitSubValue(Function& o)
 {
     VisitFuncBase(o);
     // convert param types
     for (auto param : o.GetParams()) {
         VisitValue(*param);
-    }
-}
-
-void ValueTypeConverter::VisitSubValue(ImportedFunc& o)
-{
-    VisitFuncBase(o);
-    // convert param types
-    for (auto& param : o.paramInfo) {
-        param.type = ConvertType(*param.type);
     }
 }
 
@@ -324,7 +315,7 @@ void TypeConverterForCC::VisitSubExpression(RawArrayAllocateWithException& o)
     o.elementType = converter(*o.elementType);
 }
 
-void TypeConverterForCC::VisitSubValue(Func& o)
+void TypeConverterForCC::VisitSubValue(Function& o)
 {
     if (o.GetSrcCodeIdentifier() == GENERIC_VIRTUAL_FUNC) {
         auto funcType = o.GetFuncType();

@@ -22,7 +22,7 @@ class CGModule;
 template <typename ObjectType> class ObjectLocker {
 public:
     // Locks the associated object and calls the given function.
-    template <typename Func> decltype(auto) Do(Func&& func)
+    template <typename Function> decltype(auto) Do(Function&& func)
     {
         std::unique_lock<std::mutex> lock(this->locker);
         return func(object);
@@ -54,7 +54,7 @@ public:
         return options;
     }
 
-    CHIR::FuncBase* GetImplicitUsedFunc(const std::string& funcMangledName);
+    CHIR::Function* GetImplicitUsedFunc(const std::string& funcMangledName);
 
     const CachedMangleMap& GetCachedMangleMap() const
     {

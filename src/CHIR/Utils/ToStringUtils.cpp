@@ -209,7 +209,7 @@ std::string GetLambdaStr(const Lambda& lambda, size_t indent)
     return ss.str();
 }
 
-std::string FuncSymbolStr(const Func& func)
+std::string FuncSymbolStr(const Function& func)
 {
     std::stringstream ss;
     ss << func.GetAttributeInfo().ToString();
@@ -254,14 +254,8 @@ std::string FuncSymbolStr(const Func& func)
         attrss << ", ";
     }
     attrss << annostr;
-    if (func.GetGenericDecl() != nullptr) {
-        bool skipFlag = false;
-        if (auto genericFunc = DynamicCast<Func*>(func.GetGenericDecl()); genericFunc && !genericFunc->GetBody()) {
-            skipFlag = true;
-        }
-        if (!skipFlag) {
-            attrss << ", genericDecl: " << func.GetGenericDecl()->GetIdentifierWithoutPrefix();
-        }
+    if (auto gFunc = func.GetGenericDecl(); gFunc && gFunc->IsFuncWithBody()) {
+        attrss << ", genericDecl: " << gFunc->GetIdentifierWithoutPrefix();
     }
     if (func.GetParentCustomTypeDef() != nullptr) {
         attrss << ", declared parent: " << func.GetParentCustomTypeDef()->GetIdentifierWithoutPrefix();
@@ -303,7 +297,7 @@ std::string FuncSymbolStr(const Func& func)
     return ss.str();
 }
 
-std::string GetFuncStr(const Func& func, size_t indent)
+std::string GetFuncStr(const Function& func, size_t indent)
 {
     std::stringstream ss;
     ss << FuncSymbolStr(func);
@@ -313,13 +307,10 @@ std::string GetFuncStr(const Func& func, size_t indent)
     return ss.str();
 }
 
-std::string GetImportedValueStr(const ImportedValue& value)
+std::string GetImportedVarStr(const GlobalVar& value)
 {
-    if (auto f = DynamicCast<ImportedFunc>(&value)) {
-        return GetImportedFuncStr(*f);
-    }
     std::stringstream ss;
-    ss << "#from <" << value.GetSourcePackageName() << "> ";
+    ss << "#from <" << value.GetPackageName() << "> ";
     ss << "import " << value.GetAttributeInfo().ToString() << value.GetIdentifier() << ": "
        << value.GetType()->ToString();
     std::stringstream attrss;
@@ -334,10 +325,10 @@ std::string GetImportedValueStr(const ImportedValue& value)
     return ss.str();
 }
 
-std::string GetImportedFuncStr(const ImportedFunc& value)
+std::string GetImportedFuncStr(const Function& value)
 {
     std::stringstream ss;
-    ss << "#from <" << value.GetSourcePackageName() << "> ";
+    ss << "#from <" << value.GetPackageName() << "> ";
     ss << "import " << value.GetAttributeInfo().ToString();
     if (value.IsFastNative()) {
         ss << "[fastNative] ";
@@ -347,10 +338,10 @@ std::string GetImportedFuncStr(const ImportedFunc& value)
     }
     ss << value.GetIdentifier();
     // params
-    auto params = value.GetParamInfo();
+    const auto& params = value.GetParams();
     ss << "(";
     for (size_t i = 0; i < params.size(); ++i) {
-        ss << params[i].paramName;
+        ss << params[i]->ToString();
         if (i != params.size() - 1) {
             ss << ", ";
         }
@@ -375,14 +366,8 @@ std::string GetImportedFuncStr(const ImportedFunc& value)
         attrss << ", ";
     }
     attrss << annostr;
-    if (value.GetGenericDecl() != nullptr) {
-        bool skipFlag = false;
-        if (auto genericFunc = DynamicCast<Func*>(value.GetGenericDecl()); genericFunc && !genericFunc->GetBody()) {
-            skipFlag = true;
-        }
-        if (!skipFlag) {
-            attrss << ", genericDecl: " << value.GetGenericDecl()->GetIdentifierWithoutPrefix();
-        }
+    if (auto gFunc = value.GetGenericDecl(); gFunc && gFunc->IsFuncWithBody()) {
+        attrss << ", genericDecl: " << gFunc->GetIdentifierWithoutPrefix();
     }
     if (attrss.str() != "") {
         ss << " // " << attrss.str();

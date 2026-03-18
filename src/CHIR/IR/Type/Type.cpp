@@ -203,7 +203,7 @@ bool Type::IsCType() const
     return CheckCustomTypeDefIsExpected(*def, CORE_PACKAGE_NAME, CTYPE_NAME);
 }
 
-std::vector<FuncBase*> Type::GetDeclareAndExtendMethods([[maybe_unused]] CHIRBuilder& builder) const
+std::vector<Function*> Type::GetDeclareAndExtendMethods([[maybe_unused]] CHIRBuilder& builder) const
 {
 #ifdef NDEBUG
     return {};
@@ -508,7 +508,7 @@ std::vector<FuncType*> CustomType::GetInstMethodTypes(CHIRBuilder& builder) cons
     return instFuncTypes;
 }
 
-std::vector<FuncBase*> CustomType::GetDeclareAndExtendMethods(CHIRBuilder& builder) const
+std::vector<Function*> CustomType::GetDeclareAndExtendMethods(CHIRBuilder& builder) const
 {
     auto allMethods = def->GetMethods();
     for (auto extendDef : def->GetExtends()) {
@@ -707,7 +707,7 @@ static bool CollectReplaceTableForExtendedType(Type& extendedType, Type& instCus
     return true;
 }
 
-std::pair<FuncBase*, bool> CustomType::GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
+std::pair<Function*, bool> CustomType::GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
     std::vector<Type*>& funcInstTypeArgs, CHIR::CHIRBuilder& builder, bool checkAbstractMethod)
 {
     std::unordered_map<const GenericType*, Type*> replaceTable;
@@ -1414,9 +1414,9 @@ void BuiltinType::AddExtend(ExtendDef& extend)
     extends.emplace_back(&extend);
 }
 
-std::vector<FuncBase*> BuiltinType::GetExtendMethods() const
+std::vector<Function*> BuiltinType::GetExtendMethods() const
 {
-    std::vector<FuncBase*> methods;
+    std::vector<Function*> methods;
     for (auto def : extends) {
         auto funcs = def->GetMethods();
         methods.insert(methods.end(), funcs.begin(), funcs.end());
@@ -1424,7 +1424,7 @@ std::vector<FuncBase*> BuiltinType::GetExtendMethods() const
     return methods;
 }
 
-std::vector<FuncBase*> BuiltinType::GetDeclareAndExtendMethods([[maybe_unused]] CHIRBuilder& builder) const
+std::vector<Function*> BuiltinType::GetDeclareAndExtendMethods([[maybe_unused]] CHIRBuilder& builder) const
 {
     return GetExtendMethods();
 }

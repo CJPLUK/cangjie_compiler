@@ -43,7 +43,7 @@ void UnitUnify::RunOnPackage(const Ptr<const Package>& package, bool isDebug)
     }
 }
 
-void UnitUnify::RunOnFunc(const Ptr<Func>& func, bool isDebug)
+void UnitUnify::RunOnFunc(const Ptr<Function>& func, bool isDebug)
 {
     Ptr<Constant> optUnit;
     auto preAcation = [this, isDebug, &optUnit](Expression& expr) {

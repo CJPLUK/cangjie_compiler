@@ -46,7 +46,7 @@ std::string SkipCheck::ToString()
 std::string WrappedRawMethod::ToString()
 {
     // WrappedRawMethod may be removed body when removeUnusedImported，do not form it.
-    auto wrapMethod = dynamic_cast<Func*>(rawMethod);
+    auto wrapMethod = dynamic_cast<Function*>(rawMethod);
     if (wrapMethod != nullptr && !wrapMethod->GetBody()) {
         return "";
     }

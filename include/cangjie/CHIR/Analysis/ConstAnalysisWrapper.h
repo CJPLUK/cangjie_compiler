@@ -53,7 +53,7 @@ public:
      * @return result of analysis per function
      */
     template <typename... Args>
-    std::unique_ptr<Results<ConstDomain>> RunOnFunc(const Func* func, bool isDebug, Args&&... args)
+    std::unique_ptr<Results<ConstDomain>> RunOnFunc(const Function* func, bool isDebug, Args&&... args)
     {
         auto analysis =
             std::make_unique<ConstAnalysis<ConstStatePool>>(func, builder, isDebug, std::forward<Args>(args)...);
@@ -70,7 +70,7 @@ public:
      * @return result of analysis per function
      */
     template <typename... Args>
-    std::unique_ptr<Results<ConstPoolDomain>> RunOnFuncWithPool(const Func* func, bool isDebug, Args&&... args)
+    std::unique_ptr<Results<ConstPoolDomain>> RunOnFuncWithPool(const Function* func, bool isDebug, Args&&... args)
     {
         auto analysis =
             std::make_unique<ConstAnalysis<ConstActivePool>>(func, builder, isDebug, std::forward<Args>(args)...);
@@ -83,14 +83,14 @@ public:
      * @param func function to return analysis result
      * @return analysis result
      */
-    Results<ConstDomain>* CheckFuncResult(const Func& func);
+    Results<ConstDomain>* CheckFuncResult(const Function& func);
 
     /**
      * @brief return result of analysis for certain function
      * @param func function to return analysis result
      * @return analysis result
      */
-    Results<ConstPoolDomain>* CheckFuncActiveResult(const Func& func);
+    Results<ConstPoolDomain>* CheckFuncActiveResult(const Function& func);
 
     /**
      * @brief clear analysis result
@@ -104,11 +104,11 @@ private:
         ActiveStatePool
     };
 
-    AnalysisStrategy ChooseAnalysisStrategy(const Func& func);
+    AnalysisStrategy ChooseAnalysisStrategy(const Function& func);
 
     /// Compute block size helpers
     static size_t GetBlockSize(const Expression& expr);
-    static size_t CountBlockSize(const Func& func);
+    static size_t CountBlockSize(const Function& func);
 
     template <typename... Args>
     void RunOnPackageInSerial(const Package* package, bool isDebug, Args&&... args)
@@ -178,8 +178,8 @@ private:
         }
     }
 
-    std::unordered_map<const Func*, std::unique_ptr<Results<ConstDomain>>> resultsMap;
-    std::unordered_map<const Func*, std::unique_ptr<Results<ConstPoolDomain>>> resultsPoolMap;
+    std::unordered_map<const Function*, std::unique_ptr<Results<ConstDomain>>> resultsMap;
+    std::unordered_map<const Function*, std::unique_ptr<Results<ConstPoolDomain>>> resultsPoolMap;
     CHIRBuilder& builder;
 };
 

@@ -19,7 +19,7 @@ void UselessAllocateElimination::RunOnPackage(const Package& package, bool isDeb
     }
 }
 
-void UselessAllocateElimination::RunOnFunc(const Func& func, bool isDebug)
+void UselessAllocateElimination::RunOnFunc(const Function& func, bool isDebug)
 {
     for (auto block : func.GetBody()->GetBlocks()) {
         for (auto expr : block->GetExpressions()) {

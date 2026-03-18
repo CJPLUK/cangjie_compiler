@@ -222,7 +222,7 @@ public:
      * @param isDebug flag whether print debug log.
      * @param diag reporter to report warning or error.
      */
-    ConstAnalysis(const Func* func, CHIRBuilder& builder, bool isDebug, DiagAdapter* diag)
+    ConstAnalysis(const Function* func, CHIRBuilder& builder, bool isDebug, DiagAdapter* diag)
         : ValueAnalysis<ConstValueDomain, ValueStatePool>(func, builder, isDebug), diag(diag)
     {
     }
@@ -1202,7 +1202,7 @@ private:
 
     template <typename TApply> ExceptionKind HandleApply(TConstDomain& state, const TApply* apply, Value* /* refObj */)
     {
-        auto calleeFunc = DynamicCast<FuncBase*>(apply->GetCallee());
+        auto calleeFunc = DynamicCast<Function*>(apply->GetCallee());
         if (!calleeFunc) {
             return ExceptionKind::NA;
         }
