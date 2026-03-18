@@ -63,22 +63,11 @@ size_t GetTokenLenth(const Token& token)
 void CollectMacroDebugPosition(
     MacroInvocation& invocation, const Token& token, unsigned int lastColumn)
 {
-    if (!token.Begin().isCurFile || token.kind == TokenKind::COMMENT) {
+    if (!token.Begin().isCurFile || token.kind == TokenKind::COMMENT || token.kind == TokenKind::NL) {
         return;
     }
     auto key = token.Begin().Hash64();
     if (invocation.origin2newPosMap.find(key) != invocation.origin2newPosMap.end()) {
-        return;
-    }
-    // Collect the position information of tokens from macrocalls for debugging purposes.
-    if (token.kind == TokenKind::NL) {
-        if (!invocation.macroDebugMap.empty()) {
-            auto lastPos = invocation.macroDebugMap.begin()->second;
-            // If the last token is newline, then the lastPos's column is 1, and it only needs to be collected once.
-            if (lastPos.column != 1) {
-                invocation.macroDebugMap[lastColumn] = Position{lastPos.fileID, lastPos.line + 1, 1};
-            }
-        }
         return;
     }
     // Other tokens except newline.
@@ -86,12 +75,6 @@ void CollectMacroDebugPosition(
         auto lastPos = invocation.macroDebugMap.begin()->second;
         if (lastPos == token.Begin()) {
             // No need to collect the same position.
-            return;
-        }
-        // If the last token is newline, replace the last position with the position of current token.
-        if (lastPos.column == 1) {
-            invocation.macroDebugMap.begin()->second = token.Begin();
-            invocation.macroDebugMap[static_cast<unsigned>(lastColumn + GetTokenLenth(token))] = token.End();
             return;
         }
     }

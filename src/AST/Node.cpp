@@ -1056,10 +1056,10 @@ Position Node::GetDebugPos(const Position& curPos) const
         }
     }
     auto key = static_cast<unsigned int>(curPos.column);
-    if (pInvocation->macroDebugMap.lower_bound(key) == pInvocation->macroDebugMap.end()) {
+    if (pInvocation->macroDebugMap.find(key) == pInvocation->macroDebugMap.end()) {
         return curPos;
     }
-    return pInvocation->macroDebugMap.lower_bound(key)->second;
+    return pInvocation->macroDebugMap.find(key)->second;
 }
 
 const std::string& Node::GetFullPackageName() const
