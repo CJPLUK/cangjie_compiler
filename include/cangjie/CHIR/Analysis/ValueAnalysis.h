@@ -731,7 +731,7 @@ public:
      * @param builder CHIR builder for generating IR.
      * @param isDebug flag whether print debug log.
      */
-    ValueAnalysis(const Func* func, CHIRBuilder& builder, bool isDebug = false)
+    ValueAnalysis(const Function* func, CHIRBuilder& builder, bool isDebug = false)
         : Analysis<State<ValueDomain, ValueStatePool>>(func, isDebug), builder(builder)
     {
     }
@@ -1188,10 +1188,10 @@ private:
 
     void HandleStoreToGlobal(State<ValueDomain, ValueStatePool>& state, Value* location, Value* value)
     {
-        if (this->isStable || !location->IsGlobalVarInCurPackage()) {
+        if (this->isStable || !location->IsGlobalVarWithInitializer()) {
             return;
         }
-        auto gv = VirtualCast<GlobalVar*>(location);
+        auto gv = StaticCast<GlobalVar*>(location);
         if (!gv->TestAttr(Attribute::READONLY) || globalState.programState.Find(gv) == globalState.programState.End()) {
             return;
         }
@@ -1291,10 +1291,10 @@ private:
             return;
         }
         auto loc = load->GetLocation();
-        if (!loc->IsGlobalVarInCurPackage()) {
+        if (!loc->IsGlobalVarWithInitializer()) {
             return state.InitToTopOrTopRef(dest, dest->GetType()->IsRef());
         }
-        auto globalVar = VirtualCast<GlobalVar*>(loc);
+        auto globalVar = StaticCast<GlobalVar*>(loc);
         if (!globalVar->TestAttr(Attribute::READONLY)) {
             return state.InitToTopOrTopRef(dest, dest->GetType()->IsRef());
         }

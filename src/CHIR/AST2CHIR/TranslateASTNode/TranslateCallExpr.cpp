@@ -384,7 +384,7 @@ void Translator::TranslateTrivialArgsWithSugar(
              * if `foo` is instantiated by `Bool`, then new instantiated func `foo_Bool` is global func,
              * not a member func, so instantiated func `x.0` is also a global func.
              */
-            if (auto funcBase = DynamicCast<FuncBase*>(defaultValueFunc); funcBase &&
+            if (auto funcBase = DynamicCast<Function*>(defaultValueFunc); funcBase &&
                 funcBase->GetParentCustomTypeDef() == nullptr) {
                 thisInstType = nullptr;
             }

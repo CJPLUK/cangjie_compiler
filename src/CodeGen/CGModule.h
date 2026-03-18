@@ -138,7 +138,7 @@ public:
     void GenCodeGenAddedMetadata() const;
 #endif
     CGFunction* GetOrInsertCGFunction(const CHIR::Value* func, bool forWrapper = false);
-    CGValue* GetOrInsertGlobalVariable(const CHIR::Value* chirGV);
+    CGValue* GetOrInsertGlobalVariable(const CHIR::GlobalVar* chirGV);
     llvm::GlobalVariable* GetOrCreateGlobalVariable(
         llvm::Constant* constVal, const std::string& gvContent, bool isTuple);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND

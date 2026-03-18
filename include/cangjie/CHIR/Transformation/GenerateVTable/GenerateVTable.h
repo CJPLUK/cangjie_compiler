@@ -58,15 +58,15 @@ public:
     void UpdateFuncCall();
 
 private:
-    FuncBase* GetMutFuncWrapper(const Type& thisType, const std::vector<Value*>& args,
-        const std::vector<Type*>& instTypeArgs, Type& retType, const FuncBase& callee);
+    Function* GetMutFuncWrapper(const Type& thisType, const std::vector<Value*>& args,
+        const std::vector<Type*>& instTypeArgs, Type& retType, const Function& callee);
 
     const Package& package;
     const std::vector<CustomTypeDef*>& candidateDefs;
     CHIRBuilder& builder;
     const GlobalOptions& opts;
     std::string passName;
-    std::unordered_map<std::string, FuncBase*> mutFuncWrappers;
+    std::unordered_map<std::string, Function*> mutFuncWrappers;
 };
 } // namespace CHIR
 } // namespace Cangjie

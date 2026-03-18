@@ -21,7 +21,7 @@ using namespace Cangjie;
 using namespace Cangjie::CHIR;
 
 namespace {
-bool CalleeIsMutFuncFromParent(Type* thisType, FuncBase* callee, const Func& topLevelFunc)
+bool CalleeIsMutFuncFromParent(Type* thisType, Function* callee, const Function& topLevelFunc)
 {
     // thisType must be Struct
     if (thisType == nullptr || !thisType->StripAllRefs()->IsStruct()) {
@@ -133,8 +133,8 @@ void GenerateVTable::CreateMutFuncWrapper()
     mutFuncWrappers = wrapper.GetWrappers();
 }
 
-FuncBase* GenerateVTable::GetMutFuncWrapper(const Type& thisType, const std::vector<Value*>& args,
-    const std::vector<Type*>& instTypeArgs, Type& retType, const FuncBase& callee)
+Function* GenerateVTable::GetMutFuncWrapper(const Type& thisType, const std::vector<Value*>& args,
+    const std::vector<Type*>& instTypeArgs, Type& retType, const Function& callee)
 {
     std::vector<Type*> paramTypes;
     for (auto arg : args) {
@@ -166,14 +166,14 @@ void GenerateVTable::UpdateFuncCall()
         } else if (auto dyExprE = DynamicCast<DynamicDispatchWithException*>(&e)) {
             e.Set<VirMethodOffset>(dyExprE->GetVirtualMethodOffset(&builder));
         } else if (auto apply = DynamicCast<Apply*>(&e)) {
-            auto callee = DynamicCast<FuncBase*>(apply->GetCallee());
+            auto callee = DynamicCast<Function*>(apply->GetCallee());
             if (CalleeIsMutFuncFromParent(apply->GetThisType(), callee, *e.GetTopLevelFunc())) {
                 auto wrapperFunc = GetMutFuncWrapper(*apply->GetThisType(), apply->GetArgs(),
                     apply->GetInstantiatedTypeArgs(), *apply->GetResult()->GetType(), *callee);
                 apply->ReplaceOperand(callee, wrapperFunc);
             }
         } else if (auto applyE = DynamicCast<ApplyWithException*>(&e)) {
-            auto callee = DynamicCast<FuncBase*>(applyE->GetCallee());
+            auto callee = DynamicCast<Function*>(applyE->GetCallee());
             if (CalleeIsMutFuncFromParent(applyE->GetThisType(), callee, *e.GetTopLevelFunc())) {
                 auto wrapperFunc = GetMutFuncWrapper(*applyE->GetThisType(), applyE->GetArgs(),
                     applyE->GetInstantiatedTypeArgs(), *applyE->GetResult()->GetType(), *callee);

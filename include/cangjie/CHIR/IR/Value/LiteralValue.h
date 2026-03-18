@@ -18,7 +18,6 @@ enum ConstantValueKind : uint8_t {
     KIND_STRING,
     KIND_UNIT,
     KIND_NULL,
-    // Specially, Func is also a kind of constant value in CHIR thus can be bound to a variable by `Constant` expression
     KIND_FUNC
 };
 

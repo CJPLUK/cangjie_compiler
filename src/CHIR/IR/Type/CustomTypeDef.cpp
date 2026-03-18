@@ -26,14 +26,14 @@
 
 using namespace Cangjie::CHIR;
 
-void CustomTypeDef::AddMethod(FuncBase* method, [[maybe_unused]] bool recordOrder)
+void CustomTypeDef::AddMethod(Function* method, [[maybe_unused]] bool recordOrder)
 {
     CJC_NULLPTR_CHECK(method);
     method->declaredParent = this;
     methods.emplace_back(method);
 }
 
-void CustomTypeDef::AddStaticMemberVar(GlobalVarBase* variable)
+void CustomTypeDef::AddStaticMemberVar(GlobalVar* variable)
 {
     CJC_NULLPTR_CHECK(variable);
     variable->declaredParent = this;
@@ -216,7 +216,7 @@ void CustomTypeDef::PrintVTable(std::stringstream& ss) const
     ss << "}\n";
 }
 
-std::pair<FuncBase*, bool> CustomTypeDef::GetExpectedFunc(
+std::pair<Function*, bool> CustomTypeDef::GetExpectedFunc(
     const std::string& funcName, FuncType& funcType, bool isStatic,
     std::unordered_map<const GenericType*, Type*> replaceTable,
     std::vector<Type*>& funcInstTypeArgs, CHIRBuilder& builder, bool checkAbstractMethod) const
@@ -247,12 +247,7 @@ std::pair<FuncBase*, bool> CustomTypeDef::GetExpectedFunc(
         if (originalFuncParamTys.size() != instParamTys.size()) {
             continue;
         }
-        std::vector<GenericType*> genericTypeParams;
-        if (auto func = DynamicCast<Func*>(method)) {
-            genericTypeParams = func->GetGenericTypeParams();
-        } else {
-            genericTypeParams = StaticCast<ImportedFunc*>(method)->GetGenericTypeParams();
-        }
+        auto genericTypeParams = method->GetGenericTypeParams();
         if (genericTypeParams.size() != funcInstTypeArgs.size()) {
             continue;
         }
@@ -274,7 +269,7 @@ std::pair<FuncBase*, bool> CustomTypeDef::GetExpectedFunc(
             return {method, true};
         }
     }
-    auto failed = std::pair<FuncBase*, bool>{nullptr, false};
+    auto failed = std::pair<Function*, bool>{nullptr, false};
     if (!checkAbstractMethod) {
         return failed;
     }
@@ -398,7 +393,7 @@ std::vector<ClassType*> CustomTypeDef::GetSuperTypesRecusively(CHIRBuilder& buil
     return inheritanceList;
 }
 
-void CustomTypeDef::SetMethods(const std::vector<FuncBase*>& items)
+void CustomTypeDef::SetMethods(const std::vector<Function*>& items)
 {
     for (auto m : methods) {
         m->declaredParent = nullptr;
@@ -409,7 +404,7 @@ void CustomTypeDef::SetMethods(const std::vector<FuncBase*>& items)
     methods = items;
 }
 
-void CustomTypeDef::SetStaticMemberVars(const std::vector<GlobalVarBase*>& vars)
+void CustomTypeDef::SetStaticMemberVars(const std::vector<GlobalVar*>& vars)
 {
     for (auto v : staticVars) {
         v->declaredParent = nullptr;
@@ -420,7 +415,7 @@ void CustomTypeDef::SetStaticMemberVars(const std::vector<GlobalVarBase*>& vars)
     staticVars = vars;
 }
 
-std::vector<FuncBase*> CustomTypeDef::GetMethods() const
+std::vector<Function*> CustomTypeDef::GetMethods() const
 {
     return methods;
 }
@@ -467,7 +462,7 @@ void CustomTypeDef::SetVTable(VTableInDef&& table)
 }
 
 void CustomTypeDef::UpdateVtableItem(ClassType& srcClassTy,
-    size_t index, FuncBase* newFunc, Type* newParentTy, const std::string newName)
+    size_t index, Function* newFunc, Type* newParentTy, const std::string newName)
 {
     vtable.UpdateItemInTypeVTable(srcClassTy, index, newFunc, newParentTy, newName);
 }
@@ -545,17 +540,17 @@ AttributeInfo CustomTypeDef::GetAttributeInfo() const
     return attributeInfo;
 }
 
-FuncBase* CustomTypeDef::GetVarInitializationFunc() const
+Function* CustomTypeDef::GetVarInitializationFunc() const
 {
     return varInitializationFunc;
 }
 
-void CustomTypeDef::SetVarInitializationFunc(FuncBase* func)
+void CustomTypeDef::SetVarInitializationFunc(Function* func)
 {
     varInitializationFunc = func;
 }
 
-std::vector<GlobalVarBase*> CustomTypeDef::GetStaticMemberVars() const
+std::vector<GlobalVar*> CustomTypeDef::GetStaticMemberVars() const
 {
     return staticVars;
 }

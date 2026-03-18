@@ -152,8 +152,8 @@ public:
 
 protected:
     llvm::MDTuple* GenerateInstanceFieldMetadata(const CHIR::MemberVarInfo& field, size_t idx);
-    llvm::MDTuple* GenerateStaticFieldMetadata(const CHIR::GlobalVarBase& staticField);
-    llvm::MDTuple* GenerateMethodMetadata(const CHIR::FuncBase& method, bool isFromInterface = false);
+    llvm::MDTuple* GenerateStaticFieldMetadata(const CHIR::GlobalVar& staticField);
+    llvm::MDTuple* GenerateMethodMetadata(const CHIR::Function& method, bool isFromInterface = false);
     llvm::MDTuple* GenerateAttrsMetadata(const CHIR::AttributeInfo& attrs, ExtraAttribute extraAttr,
         const std::string& gettingAnnotationMethod, uint8_t hasSRetMode = SRetMode::NO_SRET,
         const std::string& enumKind = "", bool isUnknownSize = false) const;

@@ -49,7 +49,7 @@ public:
     void CreateGlobalVar(const CHIR::GlobalVar& variable);
     void CreateAnonymousTypeForGenericType(llvm::GlobalVariable* typeTemplate, const CHIR::Type& ty);
 
-    void SetSubprogram(const CHIR::Func* func, llvm::Function* function);
+    void SetSubprogram(const CHIR::Function* func, llvm::Function* function);
     void FinalizeSubProgram(llvm::Function& function);
     void EmitDeclare(const CHIR::Debug& debugNode, llvm::BasicBlock& curBB, bool pointerWrapper = false);
     void EmitUnBoxDeclare(const CHIR::Expression& exprNode, const CHIR::Type& ty, const std::string& name,

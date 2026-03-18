@@ -36,7 +36,6 @@ class GlobalOptions;
 
 namespace CHIR {
 class CHIRBuilder;
-class ImportedValue;
 } // namespace CHIR
 
 namespace CodeGen {
@@ -145,7 +144,7 @@ public:
         return *llvmContext;
     }
 
-    CHIR::FuncBase* GetImplicitUsedFunc(const std::string& funcMangledName)
+    CHIR::Function* GetImplicitUsedFunc(const std::string& funcMangledName)
     {
         return cgPkgContext.GetImplicitUsedFunc(funcMangledName);
     }
@@ -185,9 +184,9 @@ public:
         }
 
         if (chirValue.IsFuncWithBody()) {
-            auto chirFunc = const_cast<CHIR::Func*>(DynamicCast<const CHIR::Func*>(&chirValue));
+            auto chirFunc = const_cast<CHIR::Function*>(DynamicCast<const CHIR::Function*>(&chirValue));
             return subCHIRPackage.chirFuncs.find(chirFunc) == subCHIRPackage.chirFuncs.end();
-        } else if (chirValue.IsGlobalVarInCurPackage()) {
+        } else if (chirValue.IsGlobalVarWithInitializer()) {
             auto chirGV = const_cast<CHIR::GlobalVar*>(DynamicCast<const CHIR::GlobalVar*>(&chirValue));
             return subCHIRPackage.chirGVs.find(chirGV) == subCHIRPackage.chirGVs.end();
         }

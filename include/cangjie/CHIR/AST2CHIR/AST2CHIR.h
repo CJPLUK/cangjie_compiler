@@ -195,7 +195,7 @@ public:
         return package;
     }
 
-    std::unordered_set<Func*>&& GetSrcCodeImportedFuncs()
+    std::unordered_set<Function*>&& GetSrcCodeImportedFuncs()
     {
         return std::move(srcCodeImportedFuncs);
     }
@@ -205,12 +205,12 @@ public:
         return std::move(srcCodeImportedVars);
     }
 
-    std::unordered_map<std::string, FuncBase*>&& GetImplicitFuncs()
+    std::unordered_map<std::string, Function*>&& GetImplicitFuncs()
     {
         return std::move(implicitFuncs);
     }
 
-    std::vector<FuncBase*>&& GetInitFuncsForConstVar()
+    std::vector<Function*>&& GetInitFuncsForConstVar()
     {
         for (auto f : initFuncsForAnnoFactory) {
             initFuncsForConstVar.push_back(f);
@@ -223,7 +223,7 @@ public:
         return std::move(maybeUnreachable);
     }
 
-    std::vector<std::pair<const AST::Decl*, Func*>>&& GetAnnoFactoryFuncs()
+    std::vector<std::pair<const AST::Decl*, Function*>>&& GetAnnoFactoryFuncs()
     {
         return std::move(annoFactoryFuncs);
     }
@@ -288,7 +288,7 @@ private:
     void CreateCustomTypeDef(const AST::Decl& decl, bool isImported);
     void TranslateAllCustomTypeTy();
     void TranslateNominalDecls(const AST::Package& pkg);
-    void SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, FuncBase& chirFunc);
+    void SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, Function& chirFunc);
 
     void FlatternPattern(const AST::Pattern& pattern, bool isLocalConst);
     void CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalConst);
@@ -325,7 +325,7 @@ private:
 
     Translator CreateTranslator();
     /* Micro refactoring for CJMP. */
-    void TranslateFuncParams(const AST::FuncDecl& funcDecl, Func& func) const;
+    void TranslateFuncParams(const AST::FuncDecl& funcDecl, Function& func) const;
     void TranslateVecDecl(const std::vector<Ptr<const AST::Decl>>& decls, Translator& trans) const;
 
     /* Add methods for CJMP. */
@@ -333,8 +333,7 @@ private:
     bool TryToDeserializeCHIR();
     // Check whether the decl is deserialized for CJMP.
     bool MaybeDeserialized(const AST::Decl& decl) const;
-    // Try to get deserialized node from package including CustomTypeDef (excluding Extend), Func, GlobalVar,
-    // ImportedValue.
+    // Try to get deserialized node from package including CustomTypeDef (excluding Extend), Function, GlobalVar.
     template<typename T>
     T* TryGetDeserialized(const AST::Decl& decl)
     {
@@ -363,7 +362,7 @@ private:
     void BuildDeserializedTable();
 
     // Reset specific func for CJMP.
-    void ResetSpecificFunc(const AST::FuncDecl& funcDecl, Func& func);
+    void ResetSpecificFunc(const AST::FuncDecl& funcDecl, Function& func);
     // Check whether the decl need be translated for CJMP.
     inline bool NeedTranslate(const AST::Decl& decl) const
     {
@@ -390,9 +389,9 @@ private:
     std::vector<Ptr<AST::Node>> allTopLevelNodes;
     /** @brief all files that after sorting in this package */
     std::vector<AST::File*> pkgFiles;
-    std::unordered_map<std::string, FuncBase*> implicitFuncs;
-    std::vector<FuncBase*> initFuncsForConstVar;
-    std::vector<Func*> initFuncsForAnnoFactory;
+    std::unordered_map<std::string, Function*> implicitFuncs;
+    std::vector<Function*> initFuncsForConstVar;
+    std::vector<Function*> initFuncsForAnnoFactory;
     std::unordered_map<Block*, Terminator*> maybeUnreachable;
 
     std::string outputPath;
@@ -450,7 +449,7 @@ private:
     ElementList<Ptr<const AST::FuncDecl>> localConstFuncs;
 
     // anno factory funcs
-    std::vector<std::pair<const AST::Decl*, Func*>> annoFactoryFuncs;
+    std::vector<std::pair<const AST::Decl*, Function*>> annoFactoryFuncs;
 
     // File and its containing vars map. Note that the static vars initialized in `static init func`
     // are not included here
@@ -465,7 +464,7 @@ private:
     std::unordered_map<std::string, CustomTypeDef*> deserializedDefs;
     std::unordered_map<std::string, Value*> deserializedVals;
 
-    std::unordered_set<Func*> srcCodeImportedFuncs;
+    std::unordered_set<Function*> srcCodeImportedFuncs;
     std::unordered_set<GlobalVar*> srcCodeImportedVars;
 
     bool creatingLocalConstVarSignature{false};

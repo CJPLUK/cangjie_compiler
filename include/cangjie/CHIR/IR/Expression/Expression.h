@@ -196,7 +196,7 @@ public:
      *
      * @return The top-level func.
      */
-    Func* GetTopLevelFunc() const;
+    Function* GetTopLevelFunc() const;
 
     // ===--------------------------------------------------------------------===//
     // Operand
@@ -319,7 +319,7 @@ protected:
 
     ExprKind kind;                        // Expression kind.
     std::vector<Value*> operands;         // The operands.
-    std::vector<BlockGroup*> blockGroups; // The regions of special expression, such as Func.
+    std::vector<BlockGroup*> blockGroups; // The regions of special expression, such as Function.
     Block* parent;                        // The owner basicblock of this expression.
     LocalVar* result = nullptr;           // The result.
 };
@@ -1252,7 +1252,7 @@ private:
  * value type includes:
  *      1. Int, UInt, Float, Rune, Bool, Unit, Nothing
  *      2. Enum, Struct
- *      3. Tuple, VArray, Func, CPointer, CString
+ *      3. Tuple, VArray, Function, CPointer, CString
  * reference type includes:
  *      1. Class&, Array&
  *      2. BoxType&
@@ -1286,7 +1286,7 @@ private:
  * value type includes:
  *      1. Int, UInt, Float, Rune, Bool, Unit, Nothing
  *      2. Enum, Struct
- *      3. Tuple, VArray, Func, CPointer, CString
+ *      3. Tuple, VArray, Function, CPointer, CString
  * reference type includes:
  *      1. Class&, Array&
  *      2. BoxType&
@@ -2153,7 +2153,9 @@ private:
 private:
     std::string identifier;        // the mangledName of nested function or lambda.
     std::string srcCodeIdentifier; // the name of nested function or lambda.
-    FuncBody body;
+    std::vector<Parameter*> params;
+    LocalVar* retValue{nullptr};
+    BlockGroup* body{nullptr};
     FuncType* funcTy;
     bool isLocalFunc{false};
     std::vector<GenericType*> genericTypeParams;
@@ -2234,7 +2236,7 @@ public:
     Value* GetSpawnArg() const;
 
     bool IsExecuteClosure() const;
-    void SetExecuteClosure(FuncBase& func);
+    void SetExecuteClosure(Function& func);
 
     // ===--------------------------------------------------------------------===//
     // Before Optimization
@@ -2251,7 +2253,7 @@ public:
     /**
      * @brief Get the member method `executeClosure` in class Future.
      */
-    FuncBase* GetExecuteClosure() const;
+    Function* GetExecuteClosure() const;
 
     // ===--------------------------------------------------------------------===//
     // Others
@@ -2270,7 +2272,7 @@ private:
      * @brief After optimization, backend will use `executeClosure` to create new thread, not `Future` object.
      * `executeClosure` is member method in class `Future` which is declared in std.core
      */
-    FuncBase* executeClosure{nullptr};
+    Function* executeClosure{nullptr};
 };
 
 /**

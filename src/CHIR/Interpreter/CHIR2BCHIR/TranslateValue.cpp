@@ -37,7 +37,7 @@ void CHIR2BCHIR::TranslateValue(Context& ctx, const Value& value)
         PushOpCodeWithAnnotations(ctx, OpCode::NULLPTR, value);
     } else if (value.IsFuncWithBody()) {
         PushOpCodeWithAnnotations<true>(ctx, OpCode::FUNC, value, UINT32_MAX);
-    } else if (Is<GlobalVarBase>(value) || value.IsImportedFunc()) {
+    } else if (Is<GlobalVar>(value) || value.IsImportedFunc()) {
         // global vars and imported vars will be resolved during linking
         auto mangledName = value.GetIdentifierWithoutPrefix();
         if (mangledName == CHIR::GV_PKG_INIT_ONCE_FLAG) {

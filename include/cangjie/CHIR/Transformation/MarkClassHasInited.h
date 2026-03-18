@@ -36,8 +36,8 @@ public:
 private:
     void AddHasInitedFlagToClassDef(ClassDef& classDef);
     void AddGuardToFinalizer(ClassDef& classDef);
-    void AssignHasInitedFlagToFalseInConstructorHead(Func& constructor);
-    void AssignHasInitedFlagToTrueInConstructorExit(Func& constructor);
+    void AssignHasInitedFlagToFalseInConstructorHead(Function& constructor);
+    void AssignHasInitedFlagToTrueInConstructorExit(Function& constructor);
 
 private:
     CHIRBuilder& builder;

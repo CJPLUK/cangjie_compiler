@@ -95,7 +95,7 @@ ClassType* ClassDef::GetSuperClassTy() const
     return superClassTy;
 }
 
-FuncBase* ClassDef::GetFinalizer() const
+Function* ClassDef::GetFinalizer() const
 {
     for (auto m : methods) {
         if (m->GetFuncKind() == FuncKind::FINALIZER) {
@@ -149,7 +149,7 @@ void ClassDef::PrintComment(std::stringstream& ss) const
     ss << "isAnnotation: " << BoolToString(isAnnotation);
 }
 
-void ClassDef::AddMethod(FuncBase* method, bool recordOrder)
+void ClassDef::AddMethod(Function* method, bool recordOrder)
 {
     CustomTypeDef::AddMethod(method);
     auto mangledName = method->GetIdentifierWithoutPrefix();

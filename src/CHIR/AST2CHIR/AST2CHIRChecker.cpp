@@ -260,9 +260,9 @@ bool CheckInterface(const ClassDef& chirNode)
 
 const CustomTypeDef* GetParentCustomTypeDef(const Value& value)
 {
-    if (auto func = DynamicCast<FuncBase>(&value)) {
+    if (auto func = DynamicCast<Function>(&value)) {
         return func->GetParentCustomTypeDef();
-    } else if (auto var = DynamicCast<GlobalVarBase>(&value)) {
+    } else if (auto var = DynamicCast<GlobalVar>(&value)) {
         return var->GetParentCustomTypeDef();
     }
     return nullptr;
@@ -486,7 +486,7 @@ bool CheckStruct(
 
 bool CheckFunc(const Cangjie::AST::FuncDecl& decl, const Value& chirNode)
 {
-    if (!Is<FuncBase>(chirNode)) {
+    if (!Is<Function>(chirNode)) {
         Errorln(chirNode.GetIdentifier() + " is expected to be a func.");
         return false;
     }
@@ -514,7 +514,7 @@ bool CheckFunc(const Cangjie::AST::FuncDecl& decl, const Value& chirNode)
 
 bool CheckVar(const Cangjie::AST::VarDecl& decl, const Value& chirNode)
 {
-    if (!Is<GlobalVarBase>(chirNode)) {
+    if (!Is<GlobalVar>(chirNode)) {
         Errorln(chirNode.GetIdentifier() + " is expected to be a globalVar.");
         return false;
     }

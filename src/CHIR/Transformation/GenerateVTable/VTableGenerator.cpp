@@ -52,7 +52,7 @@ std::unordered_map<const GenericType*, Type*> GetInstMapFromDefAndExtends(const 
     return replaceTable;
 }
 
-bool FuncMayBeInVtable(const FuncBase& func)
+bool FuncMayBeInVtable(const Function& func)
 {
     if (func.IsConstructor() || func.IsFinalizer()) {
         return false;
@@ -139,9 +139,9 @@ VTableGenerator::VTableGenerator(CHIRBuilder& builder)
 {
 }
 
-std::vector<FuncBase*> VTableGenerator::GetAllMethods(const Type& ty)
+std::vector<Function*> VTableGenerator::GetAllMethods(const Type& ty)
 {
-    std::vector<FuncBase*> methods;
+    std::vector<Function*> methods;
     // all methods belonging to some type, include methods in class/sturct/enum/interface/extend
     if (auto customTy = DynamicCast<const CustomType*>(&ty); customTy) {
         auto other = customTy->GetCustomTypeDef()->GetMethods();
@@ -155,9 +155,9 @@ std::vector<FuncBase*> VTableGenerator::GetAllMethods(const Type& ty)
     return methods;
 }
 
-std::vector<FuncBase*> VTableGenerator::GetAllMethods(const CustomTypeDef& def)
+std::vector<Function*> VTableGenerator::GetAllMethods(const CustomTypeDef& def)
 {
-    std::vector<FuncBase*> allMethods;
+    std::vector<Function*> allMethods;
     if (auto extendDef = DynamicCast<const ExtendDef*>(&def); extendDef) {
         if (const auto ty = extendDef->GetExtendedType(); ty) {
             allMethods = GetAllMethods(*ty);
@@ -168,7 +168,7 @@ std::vector<FuncBase*> VTableGenerator::GetAllMethods(const CustomTypeDef& def)
     return allMethods;
 }
 
-void VTableGenerator::CollectCurDefMethodsMayBeInVtable(const CustomTypeDef& def, std::vector<FuncBase*>& publicFuncs)
+void VTableGenerator::CollectCurDefMethodsMayBeInVtable(const CustomTypeDef& def, std::vector<Function*>& publicFuncs)
 {
     for (auto func : GetAllMethods(def)) {
         if (FuncMayBeInVtable(*func)) {
@@ -198,7 +198,7 @@ VirtualMethodInfo VTableGenerator::CreateVirtualFuncInfo(const AbstractMethodInf
 }
 
 VirtualMethodInfo VTableGenerator::CreateVirtualFuncInfo(
-    FuncBase& method, Type& originalParentType, const std::unordered_map<const GenericType*, Type*>& replaceTable)
+    Function& method, Type& originalParentType, const std::unordered_map<const GenericType*, Type*>& replaceTable)
 {
     auto originalFuncType = StaticCast<FuncType*>(method.GetType());
     auto originalParamTypes = originalFuncType->GetParamTypes();
@@ -300,7 +300,7 @@ void VTableGenerator::MergeVtable(ClassType& instParentTy, VTableInDef& vtable)
     auto replaceTable = GetInstMapFromDefAndExtends(instParentTy);
     auto parentDef = instParentTy.GetClassDef();
     // not include abstract methods
-    std::vector<FuncBase*> publicAndProtectedFuncs;
+    std::vector<Function*> publicAndProtectedFuncs;
     CollectCurDefMethodsMayBeInVtable(*parentDef, publicAndProtectedFuncs);
 
     std::unordered_map<std::string, VirtualMethodInfo> newMethodsInVTable;
@@ -415,7 +415,7 @@ std::unordered_map<const GenericType*, Type*> VTableGenerator::GetInstMapFromDef
 }
 
 void VTableGenerator::CollectMethodsFromAncestorInterfaceMayBeInVTable(
-    const CustomTypeDef& curDef, std::vector<FuncBase*>& methods)
+    const CustomTypeDef& curDef, std::vector<Function*>& methods)
 {
     for (auto parent : curDef.GetImplementedInterfaceDefs()) {
         CollectCurDefMethodsMayBeInVtable(*parent, methods);
@@ -423,9 +423,9 @@ void VTableGenerator::CollectMethodsFromAncestorInterfaceMayBeInVTable(
     }
 }
 
-std::vector<FuncBase*> VTableGenerator::CollectMethodsIncludeParentsMayBeInVtable(const CustomTypeDef& curDef)
+std::vector<Function*> VTableGenerator::CollectMethodsIncludeParentsMayBeInVtable(const CustomTypeDef& curDef)
 {
-    std::vector<FuncBase*> methods;
+    std::vector<Function*> methods;
     // scan methods from all ancestors
     CollectMethodsFromAncestorInterfaceMayBeInVTable(curDef, methods);
     if (auto clsDef = DynamicCast<const ClassDef*>(&curDef)) {

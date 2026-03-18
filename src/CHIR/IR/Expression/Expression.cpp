@@ -278,7 +278,7 @@ BlockGroup* Expression::GetParentBlockGroup() const
     return parent->GetParentBlockGroup();
 }
 
-Func* Expression::GetTopLevelFunc() const
+Function* Expression::GetTopLevelFunc() const
 {
     if (auto blockGroup = GetParentBlockGroup(); blockGroup != nullptr) {
         return blockGroup->GetTopLevelFunc();
@@ -1701,7 +1701,7 @@ Value* Spawn::GetClosure() const
     return operands[0];
 }
 
-FuncBase* Spawn::GetExecuteClosure() const
+Function* Spawn::GetExecuteClosure() const
 {
     return executeClosure;
 }
@@ -1711,7 +1711,7 @@ bool Spawn::IsExecuteClosure() const
     return executeClosure != nullptr;
 }
 
-void Spawn::SetExecuteClosure(FuncBase& func)
+void Spawn::SetExecuteClosure(Function& func)
 {
     executeClosure = &func;
 }
@@ -2205,13 +2205,13 @@ std::string GetInstantiateValue::ToString([[maybe_unused]] size_t indent) const
 
 void Lambda::InitBody(BlockGroup& newBody)
 {
-    CJC_ASSERT(body.body == nullptr);
+    CJC_ASSERT(body == nullptr);
     CJC_ASSERT(blockGroups.empty());
     // newBody -> lambda
     newBody.SetOwnerExpression(*this);
 
     // lambda -> newBody
-    body.body = &newBody;
+    body = &newBody;
     blockGroups.emplace_back(&newBody);
 }
 
@@ -2222,18 +2222,18 @@ FuncType* Lambda::GetFuncType() const
 
 BlockGroup* Lambda::GetBody() const
 {
-    return body.GetBody();
+    return body;
 }
 
 void Lambda::RemoveBody()
 {
     blockGroups.clear();
-    body.RemoveBody();
+    body = nullptr;
 }
 
 Block* Lambda::GetEntryBlock() const
 {
-    return body.GetBody()->GetEntryBlock();
+    return body->GetEntryBlock();
 }
 
 std::string Lambda::GetIdentifier() const
@@ -2257,23 +2257,24 @@ std::string Lambda::GetSrcCodeIdentifier() const
 
 void Lambda::AddParam(Parameter& arg)
 {
-    body.AddParam(arg);
+    params.emplace_back(&arg);
     arg.SetOwnerLambda(this);
 }
 
 size_t Lambda::GetNumOfParams() const
 {
-    return body.GetParams().size();
+    return params.size();
 }
 
 Parameter* Lambda::GetParam(size_t index) const
 {
-    return body.GetParam(index);
+    CJC_ASSERT(index < params.size());
+    return params[index];
 }
 
 const std::vector<Parameter*>& Lambda::GetParams() const
 {
-    return body.GetParams();
+    return params;
 }
 
 const std::vector<GenericType*>& Lambda::GetGenericTypeParams() const
@@ -2284,12 +2285,12 @@ const std::vector<GenericType*>& Lambda::GetGenericTypeParams() const
 void Lambda::SetReturnValue(LocalVar& ret)
 {
     ret.SetRetValue(true);
-    body.SetReturnValue(ret);
+    retValue = &ret;
 }
 
 LocalVar* Lambda::GetReturnValue() const
 {
-    return body.GetReturnValue();
+    return retValue;
 }
 
 bool Lambda::IsLocalFunc() const
@@ -2309,9 +2310,9 @@ Lambda* Lambda::GetParamDftValHostFunc() const
 
 void Lambda::RemoveSelfFromBlock()
 {
-    if (auto blockGroup = body.GetBody()) {
-        blockGroup->ClearBlockGroup();
-        body.RemoveBody();
+    if (body != nullptr) {
+        body->ClearBlockGroup();
+        body = nullptr;
     }
 
     Expression::RemoveSelfFromBlock();

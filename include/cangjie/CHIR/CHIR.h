@@ -95,16 +95,16 @@ public:
         return builderList;
     }
 
-    std::unordered_map<std::string, CHIR::FuncBase*> GetImplicitFuncs() const
+    std::unordered_map<std::string, CHIR::Function*> GetImplicitFuncs() const
     {
         return implicitFuncs;
     }
 
-    std::vector<CHIR::FuncBase*> GetConstVarInitFuncs() const
+    std::vector<CHIR::Function*> GetConstVarInitFuncs() const
     {
         return initFuncsForConstVar;
     }
-    const std::vector<std::pair<const AST::Decl*, Func*>>& GetAnnoFactoryFuncs() const
+    const std::vector<std::pair<const AST::Decl*, Function*>>& GetAnnoFactoryFuncs() const
     {
         return annoFactoryFuncs;
     }
@@ -210,16 +210,16 @@ private:
     // any change in incremental compilation, rollback is required.
     std::set<std::string> ccOutFuncsRawMangle;
     class DiagAdapter diag;
-    std::unordered_set<Func*> srcCodeImportedFuncs;
+    std::unordered_set<Function*> srcCodeImportedFuncs;
     std::unordered_set<GlobalVar*> srcCodeImportedVars;
     std::unordered_set<ClassDef*> uselessClasses;
-    std::unordered_set<Func*> uselessLambda;
-    std::unordered_map<std::string, FuncBase*> implicitFuncs;
-    std::vector<CHIR::FuncBase*> initFuncsForConstVar;
+    std::unordered_set<Function*> uselessLambda;
+    std::unordered_map<std::string, Function*> implicitFuncs;
+    std::vector<CHIR::Function*> initFuncsForConstVar;
     std::unordered_map<Block*, Terminator*> maybeUnreachable;
     /// Whether this CHIR convertor is translating Annotations
     bool isComputingAnnos{false};
-    std::vector<std::pair<const AST::Decl*, Func*>> annoFactoryFuncs;
+    std::vector<std::pair<const AST::Decl*, Function*>> annoFactoryFuncs;
     AST2CHIRNodeMap<CustomTypeDef> globalNominalCache;
 };
 } // namespace Cangjie::CHIR

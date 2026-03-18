@@ -24,7 +24,7 @@ void ReplaceCustomTypeDefVtable(CustomTypeDef& def, const std::unordered_map<Val
         for (auto& it : vtableIt.GetModifiableVirtualMethods()) {
             auto res = symbol.find(it.GetVirtualMethod());
             if (res != symbol.end()) {
-                it.SetVirtualMethod(Cangjie::VirtualCast<FuncBase*>(res->second));
+                it.SetVirtualMethod(Cangjie::StaticCast<Function*>(res->second));
             }
         }
     }
@@ -67,7 +67,7 @@ void ReplaceMethodAndStaticVar(
         for (size_t i = 0; i < methods.size(); ++i) {
             auto res = it.second.find(methods[i]);
             if (res != it.second.end()) {
-                methods[i] = Cangjie::VirtualCast<FuncBase*>(res->second);
+                methods[i] = Cangjie::StaticCast<Function*>(res->second);
             }
         }
         it.first->SetMethods(methods);
@@ -77,22 +77,18 @@ void ReplaceMethodAndStaticVar(
         for (size_t i = 0; i < staticVars.size(); ++i) {
             auto res = it.second.find(staticVars[i]);
             if (res != it.second.end()) {
-                staticVars[i] = Cangjie::VirtualCast<GlobalVarBase*>(res->second);
+                staticVars[i] = Cangjie::StaticCast<GlobalVar*>(res->second);
             }
         }
         it.first->SetStaticMemberVars(staticVars);
 
         for (auto& it2 : it.second) {
-            if (auto func = Cangjie::DynamicCast<Func*>(it2.first)) {
-                func->DestroySelf();
-            } else {
-                Cangjie::VirtualCast<GlobalVarBase*>(it2.first)->DestroySelf();
-            }
+            Cangjie::StaticCast<GlobalValue*>(it2.first)->DestroySelf();
         }
     }
 }
 
-bool IsEmptyInitFunc(Func& func)
+bool IsEmptyInitFunc(Function& func)
 {
     if (func.GetFuncKind() != Cangjie::CHIR::FuncKind::GLOBALVAR_INIT) {
         return false;
@@ -123,9 +119,9 @@ std::unordered_map<ClassDef*, std::unordered_set<CustomTypeDef*>> CollectSubClas
 }
 
 void RemoveFromPackage(Package& package,
-    const std::unordered_set<Func*>& toBeRemovedFuncs, const std::unordered_set<GlobalVar*>& toBeRemovedVars)
+    const std::unordered_set<Function*>& toBeRemovedFuncs, const std::unordered_set<GlobalVar*>& toBeRemovedVars)
 {
-    std::vector<Func*> globalFuncs;
+    std::vector<Function*> globalFuncs;
     for (auto func : package.GetGlobalFuncs()) {
         if (toBeRemovedFuncs.find(func) != toBeRemovedFuncs.end()) {
             continue;
@@ -151,12 +147,12 @@ void RemoveFromPackage(Package& package,
 }
 
 ReplaceSrcCodeImportedVal::ReplaceSrcCodeImportedVal(
-    Package& package, std::unordered_map<std::string, FuncBase*>& implicitFuncs, CHIRBuilder& builder)
+    Package& package, std::unordered_map<std::string, Function*>& implicitFuncs, CHIRBuilder& builder)
     : package(package), implicitFuncs(implicitFuncs), builder(builder)
 {
 }
 
-void ReplaceSrcCodeImportedVal::CreateSrcImportedFuncSymbol(Func& fn)
+void ReplaceSrcCodeImportedVal::CreateSrcImportedFuncSymbol(Function& fn)
 {
     auto genericParamTy = fn.GetGenericTypeParams();
     auto pkgName = fn.GetPackageName();
@@ -164,7 +160,7 @@ void ReplaceSrcCodeImportedVal::CreateSrcImportedFuncSymbol(Func& fn)
     auto mangledName = fn.GetIdentifierWithoutPrefix();
     auto srcCodeName = fn.GetSrcCodeIdentifier();
     auto rawMangledName = fn.GetRawMangledName();
-    auto importedFunc = builder.CreateImportedVarOrFunc<ImportedFunc>(
+    auto importedFunc = builder.CreateImportedFuncSig(
         funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy);
     importedFunc->AppendAttributeInfo(fn.GetAttributeInfo());
     importedFunc->SetFuncKind(fn.GetFuncKind());
@@ -184,13 +180,13 @@ void ReplaceSrcCodeImportedVal::CreateSrcImportedVarSymbol(GlobalVar& gv)
     auto packageName = gv.GetPackageName();
     auto ty = gv.GetType();
     auto importedVar =
-        builder.CreateImportedVarOrFunc<ImportedVar>(ty, mangledName, srcCodeName, rawMangledName, packageName);
+        builder.CreateImportedGlobalVar(ty, mangledName, srcCodeName, rawMangledName, packageName);
     importedVar->AppendAttributeInfo(gv.GetAttributeInfo());
     importedVar->Set<LinkTypeInfo>(gv.Get<LinkTypeInfo>());
     srcCodeImportedVarMap.emplace(&gv, importedVar);
 }
 
-void ReplaceSrcCodeImportedVal::CreateSrcImpotedValueSymbol(const std::unordered_set<Func*>& srcCodeImportedFuncs,
+void ReplaceSrcCodeImportedVal::CreateSrcImportedValueSymbol(const std::unordered_set<Function*>& srcCodeImportedFuncs,
     const std::unordered_set<GlobalVar*>& srcCodeImportedVars)
 {
     for (auto func : srcCodeImportedFuncs) {
@@ -198,7 +194,7 @@ void ReplaceSrcCodeImportedVal::CreateSrcImpotedValueSymbol(const std::unordered
     }
     for (auto func : builder.GetCurPackage()->GetGlobalFuncs()) {
         if (auto genericDecl = func->GetGenericDecl(); genericDecl && genericDecl->IsFuncWithBody()) {
-            auto importedFunc = srcCodeImportedFuncMap.find(StaticCast<Func*>(genericDecl));
+            auto importedFunc = srcCodeImportedFuncMap.find(StaticCast<Function*>(genericDecl));
             if (importedFunc != srcCodeImportedFuncMap.end()) {
                 func->SetGenericDecl(*importedFunc->second);
             }
@@ -206,7 +202,7 @@ void ReplaceSrcCodeImportedVal::CreateSrcImpotedValueSymbol(const std::unordered
     }
     for (auto& it : srcCodeImportedFuncMap) {
         if (auto hostFunc = it.second->GetParamDftValHostFunc()) {
-            auto importedFunc = srcCodeImportedFuncMap.find(StaticCast<Func*>(hostFunc));
+            auto importedFunc = srcCodeImportedFuncMap.find(StaticCast<Function*>(hostFunc));
             CJC_ASSERT(importedFunc != srcCodeImportedFuncMap.end());
             it.second->SetParamDftValHostFunc(*importedFunc->second);
         }
@@ -219,10 +215,10 @@ void ReplaceSrcCodeImportedVal::CreateSrcImpotedValueSymbol(const std::unordered
     }
 }
 
-std::unordered_set<Func*> ReplaceSrcCodeImportedVal::RemoveUselessDefFromCC(
-    const std::unordered_set<ClassDef*>& uselessClasses, const std::unordered_set<Func*>& uselessLambda)
+std::unordered_set<Function*> ReplaceSrcCodeImportedVal::RemoveUselessDefFromCC(
+    const std::unordered_set<ClassDef*>& uselessClasses, const std::unordered_set<Function*>& uselessLambda)
 {
-    std::unordered_set<Func*> toBeRemovedFuncs;
+    std::unordered_set<Function*> toBeRemovedFuncs;
     for (auto lambda : uselessLambda) {
         for (auto user : lambda->GetUsers()) {
             user->RemoveSelfFromBlock();
@@ -236,7 +232,7 @@ std::unordered_set<Func*> ReplaceSrcCodeImportedVal::RemoveUselessDefFromCC(
             for (auto user : func->GetUsers()) {
                 user->RemoveSelfFromBlock();
             }
-            auto funcWithBody = StaticCast<Func*>(func);
+            auto funcWithBody = StaticCast<Function*>(func);
             funcWithBody->DestroySelf();
             toBeRemovedFuncs.emplace(funcWithBody);
         }
@@ -252,7 +248,7 @@ std::unordered_set<Func*> ReplaceSrcCodeImportedVal::RemoveUselessDefFromCC(
     return toBeRemovedFuncs;
 }
 
-void ReplaceSrcCodeImportedVal::ReplaceSrcCodeImportedFuncUsers(std::unordered_set<Func*>& toBeRemovedFuncs,
+void ReplaceSrcCodeImportedVal::ReplaceSrcCodeImportedFuncUsers(std::unordered_set<Function*>& toBeRemovedFuncs,
     std::unordered_map<CustomTypeDef*, std::unordered_map<Value*, Value*>>& replaceTable)
 {
     for (auto& it : srcCodeImportedFuncMap) {
@@ -276,7 +272,7 @@ void ReplaceSrcCodeImportedVal::ReplaceSrcCodeImportedFuncUsers(std::unordered_s
 }
 
 void ReplaceSrcCodeImportedVal::ReplaceSrcCodeImportedVarUsers(
-    std::unordered_set<Func*>& toBeRemovedFuncs, std::unordered_set<GlobalVar*>& toBeRemovedVars,
+    std::unordered_set<Function*>& toBeRemovedFuncs, std::unordered_set<GlobalVar*>& toBeRemovedVars,
     std::unordered_map<CustomTypeDef*, std::unordered_map<Value*, Value*>>& replaceTable)
 {
     for (auto& it : srcCodeImportedVarMap) {
@@ -302,12 +298,12 @@ void ReplaceSrcCodeImportedVal::ReplaceSrcCodeImportedVarUsers(
     }
 }
 
-void ReplaceSrcCodeImportedVal::Run(const std::unordered_set<Func*>& srcCodeImportedFuncs,
+void ReplaceSrcCodeImportedVal::Run(const std::unordered_set<Function*>& srcCodeImportedFuncs,
     const std::unordered_set<GlobalVar*>& srcCodeImportedVars, const std::unordered_set<ClassDef*>& uselessClasses,
-    const std::unordered_set<Func*>& uselessLambda)
+    const std::unordered_set<Function*>& uselessLambda)
 {
     // 1. create imported value symbol
-    CreateSrcImpotedValueSymbol(srcCodeImportedFuncs, srcCodeImportedVars);
+    CreateSrcImportedValueSymbol(srcCodeImportedFuncs, srcCodeImportedVars);
 
     // 2. remove useless def that created in closure conversion
     auto toBeRemovedFuncs = RemoveUselessDefFromCC(uselessClasses, uselessLambda);

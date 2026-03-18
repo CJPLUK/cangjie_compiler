@@ -397,9 +397,9 @@ void GenSubCHIRPackage(CGModule& cgMod)
     auto& subCHIRPkg = cgMod.GetCGContext().GetSubCHIRPackage();
     EmitTIOrTTForCustomDefs(cgMod);
     EmitGlobalVariableIR(cgMod, std::vector<CHIR::GlobalVar*>(subCHIRPkg.chirGVs.begin(), subCHIRPkg.chirGVs.end()));
-    EmitFunctionIR(cgMod, std::vector<CHIR::Func*>(subCHIRPkg.chirFuncs.begin(), subCHIRPkg.chirFuncs.end()));
+    EmitFunctionIR(cgMod, std::vector<CHIR::Function*>(subCHIRPkg.chirFuncs.begin(), subCHIRPkg.chirFuncs.end()));
     EmitImportedCFuncIR(cgMod,
-        std::vector<CHIR::ImportedFunc*>(subCHIRPkg.chirImportedCFuncs.begin(), subCHIRPkg.chirImportedCFuncs.end()));
+        std::vector<CHIR::Function*>(subCHIRPkg.chirImportedCFuncs.begin(), subCHIRPkg.chirImportedCFuncs.end()));
     if (subCHIRPkg.mainModule) {
         EmitCJSDKVersion(cgMod);
         EmitMain(cgMod);

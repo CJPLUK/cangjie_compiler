@@ -19,7 +19,7 @@ public:
     void RunOnPackage(const Package& package, size_t threadNum);
 
 private:
-    void RunOnFunc(const Func& func);
+    void RunOnFunc(const Function& func);
 
 private:
     DiagAdapter& diag;

@@ -35,7 +35,7 @@ class EnumDef;
 class ExtendDef;
 struct EnumCtorInfo;
 class StructDef;
-class FuncBase;
+class Function;
 class ClassType;
 class CHIRBuilder;
 class GenericType;
@@ -390,7 +390,7 @@ public:
     bool IsEqualOrInstantiatedTypeOf(const Type& genericRelatedType, CHIRBuilder& builder,
         std::set<std::pair<const Type*, const Type*>>* visited = nullptr) const;
 
-    virtual std::vector<FuncBase*> GetDeclareAndExtendMethods(CHIRBuilder& builder) const;
+    virtual std::vector<Function*> GetDeclareAndExtendMethods(CHIRBuilder& builder) const;
 
     virtual const std::vector<ExtendDef*>& GetExtends(CHIRBuilder* builder = nullptr) const;
 
@@ -458,8 +458,8 @@ public:
     const std::vector<ExtendDef*>& GetExtends(CHIRBuilder* builder = nullptr) const override;
     void AddExtend(ExtendDef& extend);
 
-    std::vector<FuncBase*> GetExtendMethods() const;
-    std::vector<FuncBase*> GetDeclareAndExtendMethods(CHIRBuilder& builder) const override;
+    std::vector<Function*> GetExtendMethods() const;
+    std::vector<Function*> GetDeclareAndExtendMethods(CHIRBuilder& builder) const override;
 
 protected:
     std::vector<ExtendDef*> extends;
@@ -715,7 +715,7 @@ public:
      * @param checkAbstractMethod Indicates whether to check for an abstract method.
      * @return A pair containing the expected function and a boolean flag.
      */
-    std::pair<FuncBase*, bool> GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
+    std::pair<Function*, bool> GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
         std::vector<Type*>& funcInstTypeArgs, CHIR::CHIRBuilder& builder, bool checkAbstractMethod);
 
     /**
@@ -734,7 +734,7 @@ public:
      * @param builder The CHIR builder used for building the methods.
      * @return A vector of declared and extended methods.
      */
-    std::vector<FuncBase*> GetDeclareAndExtendMethods(CHIRBuilder& builder) const override;
+    std::vector<Function*> GetDeclareAndExtendMethods(CHIRBuilder& builder) const override;
 
     virtual void ResetAllInstantiatedType()
     {
@@ -1155,7 +1155,7 @@ const static std::unordered_map<Type::TypeKind, std::string> TYPEKIND_TO_STRING{
     {Type::TypeKind::TYPE_BOOLEAN, "Bool"}, {Type::TypeKind::TYPE_UNIT, "Unit"},
     {Type::TypeKind::TYPE_NOTHING, "Nothing"}, {Type::TypeKind::TYPE_TUPLE, "Tuple"},
     {Type::TypeKind::TYPE_BOXTYPE, "BoxType"}, {Type::TypeKind::TYPE_STRUCT, "Struct"},
-    {Type::TypeKind::TYPE_ENUM, "Enum"}, {Type::TypeKind::TYPE_CLASS, "Class"}, {Type::TypeKind::TYPE_FUNC, "Func"},
+    {Type::TypeKind::TYPE_ENUM, "Enum"}, {Type::TypeKind::TYPE_CLASS, "Class"}, {Type::TypeKind::TYPE_FUNC, "Function"},
     {Type::TypeKind::TYPE_RAWARRAY, "RawArray"}, {Type::TypeKind::TYPE_VARRAY, "VArray"},
     {Type::TypeKind::TYPE_CPOINTER, "CPointer"}, {Type::TypeKind::TYPE_CSTRING, "CString"},
     {Type::TypeKind::TYPE_GENERIC, "GenericType"}, {Type::TypeKind::TYPE_VOID, "Void"},

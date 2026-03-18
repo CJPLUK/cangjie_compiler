@@ -329,7 +329,7 @@ Cangjie::CHIR::Value* IVal2CHIR::ConvertArrayToChir(
 }
 
 void ConstEvalPass::RunOnPackage(Package& package,
-    const std::vector<CHIR::FuncBase*>& initFuncsForConstVar, std::vector<Bchir>& bchirPackages)
+    const std::vector<CHIR::Function*>& initFuncsForConstVar, std::vector<Bchir>& bchirPackages)
 {
     RunInterpreter(package, bchirPackages, initFuncsForConstVar,
         [this](auto& package, auto& interpreter, auto& linker) {
@@ -338,7 +338,7 @@ void ConstEvalPass::RunOnPackage(Package& package,
 }
 
 void ConstEvalPass::RunInterpreter(Package& package, std::vector<Bchir>& bchirPackages,
-    const std::vector<CHIR::FuncBase*>& initFuncsForConstVar,
+    const std::vector<CHIR::Function*>& initFuncsForConstVar,
     std::function<void(Package&, BCHIRInterpreter&, BCHIRLinker&)> onSuccess)
 {
     Utils::ProfileRecorder::Start("Constant Evaluation", "CHIR2BCHIR for const-eval");
@@ -388,7 +388,7 @@ void ConstEvalPass::ReplaceGlobalConstantInitializers(
 {
     Utils::ProfileRecorder recorder("Constant Evaluation", "Replace Global Constants");
     auto allFuncs = package.GetGlobalFuncs();
-    std::vector<Func*> funcsToBeRemoved;
+    std::vector<Function*> funcsToBeRemoved;
     std::unordered_set<Expression*> expressionsToBeRemoved;
     auto it = allFuncs.begin();
     while (it != allFuncs.end()) {
@@ -428,7 +428,7 @@ void ConstEvalPass::ReplaceGlobalConstantInitializers(
 }
 
 std::optional<Cangjie::CHIR::BlockGroup*> ConstEvalPass::CreateNewInitializer(
-    Func& oldInitializer, const BCHIRInterpreter& interpreter, const BCHIRLinker& linker, const Package& package)
+    Function& oldInitializer, const BCHIRInterpreter& interpreter, const BCHIRLinker& linker, const Package& package)
 {
     BlockGroup* newBody = nullptr;
     if (ci.invocation.globalOptions.enIncrementalCompilation) {
@@ -442,10 +442,10 @@ std::optional<Cangjie::CHIR::BlockGroup*> ConstEvalPass::CreateNewInitializer(
                 continue;
             }
             auto location = StaticCast<const Store*>(expr)->GetLocation();
-            if (!location->IsGlobalVarInCurPackage()) {
+            if (!location->IsGlobalVarWithInitializer()) {
                 continue;
             }
-            auto global = VirtualCast<GlobalVar*>(location);
+            auto global = StaticCast<GlobalVar*>(location);
             auto varId = linker.GetGVARId(global->GetIdentifierWithoutPrefix());
             CJC_ASSERT(varId != -1);
             auto& val = interpreter.PeekValueOfGlobal(static_cast<unsigned>(varId));
@@ -485,7 +485,7 @@ std::optional<Cangjie::CHIR::BlockGroup*> ConstEvalPass::CreateNewInitializer(
 }
 
 void ConstEvalPass::PrintDebugMessage(
-    const DebugLocation& loc, const Func& oldInit, const std::optional<BlockGroup*>& newInit) const
+    const DebugLocation& loc, const Function& oldInit, const std::optional<BlockGroup*>& newInit) const
 {
     auto file = FileUtil::GetFileName(loc.GetAbsPath());
     std::string begin =

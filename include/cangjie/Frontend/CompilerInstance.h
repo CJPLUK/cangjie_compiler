@@ -75,11 +75,11 @@ public:
     std::vector<CHIR::Package*> GetAllCHIRPackages() const;
     CHIR::Package* GetCurrentCHIRPackage() const;
 
-    void SetImplicitFuncs(const std::unordered_map<std::string, CHIR::FuncBase*>& funcs);
-    std::unordered_map<std::string, CHIR::FuncBase*> GetImplicitFuncs() const;
+    void SetImplicitFuncs(const std::unordered_map<std::string, CHIR::Function*>& funcs);
+    std::unordered_map<std::string, CHIR::Function*> GetImplicitFuncs() const;
 
-    void SetConstVarInitFuncs(const std::vector<CHIR::FuncBase*>& funcs);
-    std::vector<CHIR::FuncBase*> GetConstVarInitFuncs() const;
+    void SetConstVarInitFuncs(const std::vector<CHIR::Function*>& funcs);
+    std::vector<CHIR::Function*> GetConstVarInitFuncs() const;
 
     CHIR::ConstAnalysisWrapper& GetConstAnalysisResultRef();
     const CHIR::ConstAnalysisWrapper& GetConstAnalysisResult() const;
@@ -93,9 +93,9 @@ private:
     CHIR::CHIRContext cctx;
     std::vector<CHIR::Package*> chirPkgs;
     // used by codegen
-    std::unordered_map<std::string, CHIR::FuncBase*> implicitFuncs;
+    std::unordered_map<std::string, CHIR::Function*> implicitFuncs;
     // used by interpreter
-    std::vector<CHIR::FuncBase*> initFuncsForConstVar;
+    std::vector<CHIR::Function*> initFuncsForConstVar;
     // only for AnalysisWrapper
     CHIR::CHIRBuilder builder{cctx, 0};
     // provide the capability and results of constant analysis, used by cjlint

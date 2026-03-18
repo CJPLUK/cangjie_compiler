@@ -774,7 +774,7 @@ public:
     Value* GetSpawnArg() const;
 
     bool IsExecuteClosure() const;
-    void SetExecuteClosure(FuncBase& func);
+    void SetExecuteClosure(Function& func);
 
     // ===--------------------------------------------------------------------===//
     // Before Optimization
@@ -789,11 +789,11 @@ public:
     Value* GetClosure() const;
 
     /**
-     * @brief Get the FuncBase* of execute closure.
+     * @brief Get the Function* of execute closure.
      *
      * @return nullptr if not exist.
      */
-    FuncBase* GetExecuteClosure() const;
+    Function* GetExecuteClosure() const;
 
     // ===--------------------------------------------------------------------===//
     // Others
@@ -813,7 +813,7 @@ private:
      * @brief After optimization, backend will use `executeClosure` to create new thread, not `Future` object.
      * `executeClosure` is member method in class `Future` which is declared in std.core
      */
-    FuncBase* executeClosure{nullptr};
+    Function* executeClosure{nullptr};
 };
 } // namespace Cangjie::CHIR
 #endif // CANGJIE_CHIR_EXPRESSION_H

@@ -31,7 +31,7 @@ static void ReplaceAll(std::string& str, const std::string& o, const std::string
     }
 }
 
-void CHIRPrinter::PrintCFG(const Func& func, const std::string& path)
+void CHIRPrinter::PrintCFG(const Function& func, const std::string& path)
 {
     std::fstream fout;
     std::string id = func.GetIdentifierWithoutPrefix();

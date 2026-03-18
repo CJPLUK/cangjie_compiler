@@ -106,7 +106,7 @@ std::unordered_map<const GenericType*, Type*> CollectReplaceTableFromAllParents(
 }
 } // namespace
 
-void WrapMutFunc::CreateMutFuncWrapper(FuncBase* rawFunc, CustomTypeDef& curDef, ClassType& srcClassTy)
+void WrapMutFunc::CreateMutFuncWrapper(Function* rawFunc, CustomTypeDef& curDef, ClassType& srcClassTy)
 {
     // create the wrapper func
     auto replaceTable = CollectReplaceTableFromAllParents(curDef, srcClassTy, builder);
@@ -122,27 +122,25 @@ void WrapMutFunc::CreateMutFuncWrapper(FuncBase* rawFunc, CustomTypeDef& curDef,
     auto pkgName = curDef.GetPackageName();
 
     bool isImported = curDef.TestAttr(Attribute::IMPORTED);
-    FuncBase* funcBase = nullptr;
+    Function* func = nullptr;
     if (isImported) {
-        funcBase = builder.CreateImportedVarOrFunc<ImportedFunc>(wrapperFuncTy, funcIdentifier, "", "", pkgName);
+        func = builder.CreateImportedFuncSig(wrapperFuncTy, funcIdentifier, "", "", pkgName);
     } else {
-        funcBase = builder.CreateFunc(INVALID_LOCATION, wrapperFuncTy, funcIdentifier, "", "", pkgName);
+        func = builder.CreateFuncWithBody(INVALID_LOCATION, wrapperFuncTy, funcIdentifier, "", "", pkgName);
     }
-    wrapperFuncs.emplace(funcIdentifier, funcBase);
-    CJC_NULLPTR_CHECK(funcBase);
+    wrapperFuncs.emplace(funcIdentifier, func);
+    CJC_NULLPTR_CHECK(func);
 
-    funcBase->Set<WrappedRawMethod>(rawFunc);
-    funcBase->AppendAttributeInfo(rawFunc->GetAttributeInfo());
-    funcBase->DisableAttr(Attribute::VIRTUAL);
-    funcBase->EnableAttr(Attribute::NO_REFLECT_INFO);
-    curDef.AddMethod(funcBase);
+    func->Set<WrappedRawMethod>(rawFunc);
+    func->AppendAttributeInfo(rawFunc->GetAttributeInfo());
+    func->DisableAttr(Attribute::VIRTUAL);
+    func->EnableAttr(Attribute::NO_REFLECT_INFO);
+    curDef.AddMethod(func);
 
     if (isImported) {
         return;
     }
 
-    auto func = DynamicCast<Func*>(funcBase);
-    CJC_NULLPTR_CHECK(func);
     // create the func body
     BlockGroup* body = builder.CreateBlockGroup(*func);
     func->InitBody(*body);
@@ -225,7 +223,7 @@ WrapMutFunc::WrapMutFunc(CHIRBuilder& b) : builder(b)
 {
 }
 
-std::unordered_map<std::string, FuncBase*>&& WrapMutFunc::GetWrappers()
+std::unordered_map<std::string, Function*>&& WrapMutFunc::GetWrappers()
 {
     return std::move(wrapperFuncs);
 }

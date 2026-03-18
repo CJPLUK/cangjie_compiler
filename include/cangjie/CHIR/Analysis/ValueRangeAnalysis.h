@@ -127,7 +127,7 @@ public:
      * @param isDebug flag whether print debug log.
      * @param diag reporter to report warning or error.
      */
-    RangeAnalysis(const Func* func, CHIRBuilder& builder, bool isDebug, const Ptr<DiagAdapter>& diag);
+    RangeAnalysis(const Function* func, CHIRBuilder& builder, bool isDebug, const Ptr<DiagAdapter>& diag);
 
     ~RangeAnalysis() override;
 

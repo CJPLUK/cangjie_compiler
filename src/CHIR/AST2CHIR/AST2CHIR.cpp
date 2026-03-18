@@ -255,12 +255,10 @@ void AST2CHIR::SetInitFuncForStaticVar()
         }
         CJC_ASSERT(skipedStaticVar->astKind == AST::ASTKind::VAR_DECL);
         // Also set the init func here
-        if (auto skipedStaticVarInCHIR = DynamicCast<GlobalVar*>(skipedStaticVarVal)) {
-            auto staticInitFuncInAST = staticInitFuncInfoMap.at(skipedStaticVar->outerDecl).staticInitFunc;
-            auto staticInitFuncInCHIR = DynamicCast<Func*>(globalCache.Get(*staticInitFuncInAST));
-            CJC_NULLPTR_CHECK(staticInitFuncInCHIR);
-            skipedStaticVarInCHIR->SetInitFunc(*staticInitFuncInCHIR);
-        }
+        auto skipedStaticVarInCHIR = StaticCast<GlobalVar*>(skipedStaticVarVal);
+        auto staticInitFuncInAST = staticInitFuncInfoMap.at(skipedStaticVar->outerDecl).staticInitFunc;
+        auto staticInitFuncInCHIR = StaticCast<Function*>(globalCache.Get(*staticInitFuncInAST));
+        skipedStaticVarInCHIR->SetInitFunc(*staticInitFuncInCHIR);
     }
 }
 
@@ -344,7 +342,7 @@ void AST2CHIR::SetGenericDecls() const
                 if (chirIns == nullptr) {
                     continue;
                 }
-                VirtualCast<FuncBase*>(chirIns)->SetGenericDecl(*VirtualCast<FuncBase*>(chirGeneric));
+                StaticCast<Function*>(chirIns)->SetGenericDecl(*StaticCast<Function*>(chirGeneric));
             }
         }
     }
@@ -399,7 +397,7 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
     Utils::ProfileRecorder::Start("TranslateAllDecls", "SetCompileTimeValueFlag");
     for (auto func : package->GetGlobalFuncs()) {
         if (func->TestAttr(Attribute::CONST)) {
-            SetCompileTimeValueFlagRecursivly(*func);
+            SetCompileTimeValueFlagRecursively(*func);
         }
     }
     Utils::ProfileRecorder::Stop("TranslateAllDecls", "SetCompileTimeValueFlag");

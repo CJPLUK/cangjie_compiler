@@ -13,12 +13,11 @@
 using namespace Cangjie::CHIR;
 
 namespace {
-std::vector<FuncBase*> GetAllGlobalFuncs(const Package& package)
+std::vector<Function*> GetAllGlobalFuncs(const Package& package)
 {
-    std::vector<FuncBase*> result;
-    for (auto val : package.GetImportedVarAndFuncs()) {
-        auto func = Cangjie::DynamicCast<ImportedFunc*>(val);
-        if (func == nullptr || !ReturnTypeShouldBeVoid(*func)) {
+    std::vector<Function*> result;
+    for (auto func : package.GetImportedFunctions()) {
+        if (!ReturnTypeShouldBeVoid(*func)) {
             continue;
         }
         result.emplace_back(func);
@@ -87,8 +86,8 @@ void OptFuncRetType::Unit2Void()
         CJC_ASSERT(func->GetReturnType()->IsUnit());
         LocalVar* oldRet = nullptr;
         // 2. change the return type to Void
-        if (auto f = DynamicCast<Func>(func)) {
-            oldRet = f->GetReturnValue();
+        if (func->IsFuncWithBody()) {
+            oldRet = func->GetReturnValue();
             CJC_NULLPTR_CHECK(oldRet);
         }
         func->ReplaceReturnValue(nullptr, builder);
