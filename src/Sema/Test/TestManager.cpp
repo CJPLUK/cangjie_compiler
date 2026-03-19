@@ -661,11 +661,11 @@ void TestManager::HandleDeclsToExportForTest(std::vector<Ptr<Package>> pkgs) con
     for (auto& pkg : pkgs) {
         BaseMangler mangler;
         auto manglerCtx = mangler.PrepareContextForPackage(pkg);
+        mangler.CollectLocalDecls(*manglerCtx, *pkg);
         auto isInExtend = false;
 
-        Walker(pkg, Walker::GetNextWalkerID(), [&mangler, &manglerCtx, &isInExtend](auto node) {
+        Walker(pkg, Walker::GetNextWalkerID(), [&mangler, &isInExtend](auto node) {
             if (auto ed = As<ASTKind::EXTEND_DECL>(node); ed && !ed->TestAttr(Attribute::IMPORTED)) {
-                manglerCtx->SaveExtend2CurFile(ed->curFile, ed);
                 isInExtend = true;
             }
             if (auto d = As<ASTKind::DECL>(node); d &&
