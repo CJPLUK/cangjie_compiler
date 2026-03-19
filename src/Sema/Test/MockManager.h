@@ -26,6 +26,7 @@ enum class MockKind : uint8_t;
 class MockManager {
 public:
     explicit MockManager(ImportManager& importManager, TypeManager& typeManager, const Ptr<MockUtils> mockUtils);
+    void LoadMockLibDecls();
 
     struct GeneratedClassResult {
         Ptr<AST::ClassDecl> classDecl;
@@ -60,8 +61,6 @@ private:
     std::map<std::string, OwnedPtr<AST::ClassDecl>> mockedClassDecls;
     std::map<Ptr<AST::ClassLikeDecl>, int> instantiationCounters;
     std::map<Ptr<const AST::FuncDecl>, bool> defaultForTypePresence;
-
-    Ptr<AST::ClassDecl> objectDecl;
 
     Ptr<AST::InterfaceDecl> callHandlerDecl;
     Ptr<AST::InterfaceDecl> mockedInterfaceDecl;

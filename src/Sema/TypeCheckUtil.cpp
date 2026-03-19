@@ -1121,10 +1121,10 @@ OwnedPtr<GenericParamDecl> CreateGenericParamDecl(Decl& decl, TypeManager& typeM
     return CreateGenericParamDecl(decl, "T", typeManager);
 }
 
-Ptr<FuncDecl> GenerateGetTypeForTypeParamIntrinsic(Package& pkg, TypeManager& typeManager, Ptr<Ty> strTy)
+Ptr<FuncDecl> GenerateGetTypeForTypeParamIntrinsic(Package& pkg, TypeManager& typeManager)
 {
     auto file = pkg.files[0].get();
-    auto retTy = IS_GENERIC_INSTANTIATION_ENABLED ? strTy : typeManager.GetCStringTy();
+    auto retTy = typeManager.GetCStringTy();
     auto funcTy = typeManager.GetFunctionTy({}, retTy);
     auto decl = MakeOwned<FuncDecl>();
     auto funcBody = MakeOwned<FuncBody>();
