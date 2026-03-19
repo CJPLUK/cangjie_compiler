@@ -9,6 +9,7 @@
 
 #include "cangjie/Basic/Linkage.h"
 #include "cangjie/CHIR/IR/DebugLocation.h"
+#include "cangjie/CHIR/IR/Type/Type.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 #include <map>
 #include <memory>
@@ -21,7 +22,6 @@
 namespace Cangjie::CHIR {
 
 class FuncBase;
-class FuncType;
 
 struct Annotation {
     Annotation() = default;
