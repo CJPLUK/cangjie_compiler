@@ -237,6 +237,7 @@ AbstractMethodInfo CHIRDeserializer::CHIRDeserializerImpl::Create(const PackageF
 template <>
 VirtualMethodInfo CHIRDeserializer::CHIRDeserializerImpl::Create(const PackageFormat::VirtualMethodInfo* obj)
 {
+    CJC_NULLPTR_CHECK(obj->funcName());
     auto condition = FuncSigInfo {
         .funcName = obj->funcName()->str(),
         .funcType = GetType<FuncType>(obj->sigType()),
