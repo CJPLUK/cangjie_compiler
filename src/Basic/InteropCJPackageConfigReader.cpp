@@ -14,6 +14,7 @@
 
 #include "cangjie/Basic/InteropCJPackageConfigReader.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/Utils/FileUtil.h"
 #include <iostream>
 #include <stdexcept>
 
@@ -613,10 +614,11 @@ bool ParsePackageConfigurations(toml::Table& tbl, InteropCJPackageConfigReader& 
 
 bool InteropCJPackageConfigReader::Parse(const std::string& filePath)
 {
+    auto normalizedFilePath = FileUtil::NormalizePath(filePath);
     try {
-        std::ifstream file(filePath);
+        std::ifstream file(normalizedFilePath);
         if (!file.is_open()) {
-            std::cerr << "Error: Cannot open configuration file." << filePath << std::endl;
+            std::cerr << "Error: Cannot open configuration file." << normalizedFilePath << std::endl;
             return false;
         }
 
@@ -631,7 +633,7 @@ bool InteropCJPackageConfigReader::Parse(const std::string& filePath)
             return false;
         }
 
-        toml::Table tbl = toml::parseFile(filePath).value.as<toml::Table>();
+        toml::Table tbl = toml::parseFile(normalizedFilePath).value.as<toml::Table>();
 
         ParseDefaultConfig(tbl, *this);
 
