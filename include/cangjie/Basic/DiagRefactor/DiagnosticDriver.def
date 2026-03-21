@@ -57,7 +57,7 @@ ERROR(driver_unsupported_target_cpu, "cpu type '%s' is not supported for the cur
 ERROR(driver_require_chir_directory, "expected one chir path to build")
 ERROR(driver_require_experimental, "compilation with input object files is currently experimental and requires the --experimental flag to be enabled")
 ERROR(driver_static_dystd_conflict, "options --static and --dy-std are mutually exclusive")
-
+ERROR(driver_target_lto_unsupported, "%s does not support LTO.")
 
 // condition compilation arg error and warnings
 ERROR(driver_cfg_value_err, "user defined condition should be like: k1=v1,k2=v2 or <directory path of cfg.toml>")
