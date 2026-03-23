@@ -103,7 +103,7 @@ bool IsGBK(const std::string& data)
             return false;
         }
         unsigned char dataII = static_cast<unsigned char>(data[i + 1]);
-        if (dataI >= 0x81 && dataI <= 0xfe && dataII >= 0x40 && dataII <= 0xfe && dataII != 0xf7) {
+        if (dataI >= 0x81 && dataI <= 0xfe && dataII >= 0x40 && dataII <= 0xfe && dataII != 0x7f) {
             i += 2; // A character contains 2 bytes.
             continue;
         } else {
