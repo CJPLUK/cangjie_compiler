@@ -1741,6 +1741,8 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
         case EXCLUSIVE_SCOPE:
             ret = IntrinsicKind_EXCLUSIVE_SCOPE;
             break;
+        case GET_JSLAMBDA_ADDR:
+            ret = IntrinsicKind_GET_JSLAMBDA_ADDR;
             // no defalut here, due to we need use compiler to check all value be handled.
     }
     return ret;

@@ -1753,6 +1753,9 @@ IntrinsicKind DeSerialize(const PackageFormat::IntrinsicKind& kind)
         case IntrinsicKind_EXCLUSIVE_SCOPE:
             ret = EXCLUSIVE_SCOPE;
             break;
+        case IntrinsicKind_GET_JSLAMBDA_ADDR:
+            ret = GET_JSLAMBDA_ADDR;
+            break;
     }
     return ret;
 }

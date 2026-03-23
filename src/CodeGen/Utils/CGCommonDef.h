@@ -208,6 +208,7 @@ const std::unordered_map<CHIR::IntrinsicKind, llvm::Intrinsic::ID> INTRINSIC_KIN
     {CHIR::IntrinsicKind::CREATE_EXPORT_HANDLE, llvm::Intrinsic::cj_create_export_handle},
     {CHIR::IntrinsicKind::GET_EXPORTED_REF, llvm::Intrinsic::cj_get_exported_ref},
     {CHIR::IntrinsicKind::REMOVE_EXPORTED_REF, llvm::Intrinsic::cj_remove_exported_ref},
+    {CHIR::IntrinsicKind::GET_JSLAMBDA_ADDR, llvm::Intrinsic::cj_get_lambda_addr},
     // math
     {CHIR::IntrinsicKind::ABS, llvm::Intrinsic::abs}, {CHIR::IntrinsicKind::POW, llvm::Intrinsic::pow},
     {CHIR::IntrinsicKind::POWI, llvm::Intrinsic::powi}, {CHIR::IntrinsicKind::FABS, llvm::Intrinsic::fabs},
