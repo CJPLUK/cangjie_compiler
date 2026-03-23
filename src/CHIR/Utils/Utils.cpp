@@ -1497,8 +1497,6 @@ bool VirMethodParamTypeIsMatched(const Type& type1, const Type& type2)
     if ((type1.IsGeneric() || type1.IsRef() || type1.IsCJFunc()) &&
         (type2.IsGeneric() || type2.IsRef() || type2.IsCJFunc())) {
         return true;
-    } else if (type1.IsStructArray() && type2.IsStructArray()) {
-        return true;
     } else {
         return TypeIsMatched(type1, type2);
     }
@@ -1513,9 +1511,6 @@ bool VirMethodReturnTypeIsMatched(const Type& type1, const Type& type2)
     // in fact, there can't be ref type in parent virtual method, but a func type in child virtual method
     // but we don't care about this kind of case here, let ir checker do
     if ((type1.IsRef() || type1.IsCJFunc()) && (type2.IsRef() || type2.IsCJFunc())) {
-        return true;
-    }
-    if (type1.IsStructArray() && type2.IsStructArray()) {
         return true;
     }
     return TypeIsMatched(type1, type2);

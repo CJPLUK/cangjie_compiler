@@ -1302,7 +1302,7 @@ llvm::Instruction* IRBuilder2::CallIntrinsicGetVTableFunc(
     return CreateCall(func, {CreateBitCast(ti, i8Ptr), introTypeIdx, funcOffset, CreateBitCast(introTI, i8Ptr)});
 }
 
-// parameters = {i8 any addrspace* dst, i8 addrspace(1)* src, TypeInfo* ti}
+// parameters = {i8 addrspace(1)* dst, i8 addrspace(1)* src, TypeInfo* ti}
 llvm::Instruction* IRBuilder2::CallIntrinsicAssignGeneric(const std::vector<llvm::Value*>& parameters)
 {
     CJC_ASSERT(parameters.size() == 3U);
