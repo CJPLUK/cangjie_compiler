@@ -142,11 +142,17 @@ llvm::Value* IRBuilder2::CreateLoad(const CGValue& cgVal, const llvm::Twine& nam
         auto ti = CreateTypeInfo(ori);
         auto payloadSize = GetLayoutSize_32(ori);
         auto tmp = CallIntrinsicAllocaGeneric({ti, payloadSize});
-        if (GetCGContext().GetBasePtrOf(cgVal.GetRawValue()) ||
-            cgVal.GetRawValue()->getType()->getPointerAddressSpace() == 0U) {
-            CreateMemCpy(GetPayloadFromObject(tmp), llvm::MaybeAlign(), *cgVal, llvm::MaybeAlign(), payloadSize);
+        auto basePtr = GetCGContext().GetBasePtrOf(cgVal.GetRawValue());
+        auto addrSpace = cgVal.GetRawValue()->getType()->getPointerAddressSpace();
+        if (basePtr == nullptr) {
+            if (addrSpace == 1U) {
+                CallIntrinsicAssignGeneric({tmp, *cgVal, ti});
+            } else {
+                CallGCWriteGenericPayload({tmp, *cgVal, payloadSize});
+            }
         } else {
-            CallIntrinsicAssignGeneric({tmp, *cgVal, ti});
+            CJC_ASSERT(addrSpace == 1U);
+            CallGCReadGeneric({tmp, basePtr, *cgVal, payloadSize});
         }
         return tmp;
     }
