@@ -1169,6 +1169,7 @@ std::string GlobalOptions::GetSharedLibraryExtension(Triple::OSType osType)
         case Triple::OSType::WINDOWS:
             return ".dll";
         case Triple::OSType::DARWIN:
+        case Triple::OSType::IOS:
             return ".dylib";
         case Triple::OSType::LINUX:
         case Triple::OSType::UNKNOWN:
