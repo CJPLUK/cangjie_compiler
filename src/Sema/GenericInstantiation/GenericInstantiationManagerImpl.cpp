@@ -281,12 +281,14 @@ Ptr<Decl> GetMemberByOffset(const Decl& decl, size_t offset)
 void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pkg)
 {
     this->curPkg = &pkg;
-    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "instantiate");
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "RecordExtend");
     // Collect extend decls by usage.
     RecordExtend(*curPkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "RecordExtend");
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager::PrepareToMock");
     testManager->PrepareToMock(*curPkg);
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager::PrepareToMock");
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "instantiate");
     if (curPkg->TestAttr(Attribute::INCRE_COMPILE)) {
         InstantiateForIncrementalPackage();
     } else {
@@ -299,7 +301,6 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager::HandleCreateMock");
     testManager->HandleCreateMock(*curPkg);
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager::HandleCreateMock");
-
     // Do not perform rearrange, validation and deletion if errors generated.
     if (diag.GetErrorCount() != 0) {
         return;
@@ -318,12 +319,21 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
     if (diag.GetErrorCount() != 0) {
         return;
     }
-    Utils::ProfileRecorder recorder("GenericInstantiatePackage", "cleanup");
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "UpdateInstantiatedExtendMap");
     UpdateInstantiatedExtendMap();
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "UpdateInstantiatedExtendMap");
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "UpdateInstantiatedDeclsLinkage");
     UpdateInstantiatedDeclsLinkage(pkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "UpdateInstantiatedDeclsLinkage");
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "ClearImportedUnusedInstantiatedDecls");
     ClearImportedUnusedInstantiatedDecls();
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "ClearImportedUnusedInstantiatedDecls");
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "ValidateUsedNodes");
     ValidateUsedNodes(diag, pkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "ValidateUsedNodes");
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "UnsetBoxStatus");
     UnsetBoxStatus(pkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "UnsetBoxStatus");
 }
 
 void GIM::GenericInstantiationManagerImpl::RecordExtend(AST::Node& node)

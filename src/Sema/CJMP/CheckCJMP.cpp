@@ -28,6 +28,7 @@
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 #include <algorithm>
 #include <optional>
 
@@ -298,6 +299,7 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
 // PrepareTypeCheck for CJMP
 void MPTypeCheckerImpl::PrepareTypeCheck4CJMP(Package& pkg)
 {
+    Utils::ProfileRecorder recorder("PrepareTypeCheck", "PrepareTypeCheck4CJMP");
     if (!compilePlatform) {
         return;
     }

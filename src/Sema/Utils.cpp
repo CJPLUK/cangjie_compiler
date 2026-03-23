@@ -21,6 +21,7 @@
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 namespace Cangjie {
 using namespace AST;
@@ -222,6 +223,7 @@ void DiagRecursiveConstructorCall(DiagnosticEngine& diag, const std::vector<Ptr<
 // desugar primary ctor before cjmp customDef merging
 void TypeChecker::TypeCheckerImpl::CheckPrimaryCtorBeforeMerge(Node &root)
 {
+    Utils::ProfileRecorder recorder("PrepareTypeCheck", "CheckPrimaryCtorBeforeMerge");
     // Create by cjogen is not need to add default construct.
     if (root.TestAttr(Attribute::TOOL_ADD)) {
         return;

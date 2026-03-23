@@ -28,6 +28,7 @@
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/Utils.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
 using namespace TypeCheckUtil;
@@ -817,6 +818,7 @@ void TypeChecker::TypeCheckerImpl::ResolveDecls(ASTContext& ctx)
 
 void TypeChecker::TypeCheckerImpl::ResolveTypeAlias(const std::vector<Ptr<ASTContext>>& contexts)
 {
+    Utils::ProfileRecorder recorder("PreCheck", "ResolveTypeAlias");
     auto setTypAliasFunc = [this](ASTContext& ctx, TypeAliasDecl& tad) { return SetTypeAliasDeclTy(ctx, tad); };
     auto substituteFunc = [this](ASTContext&, TypeAliasDecl& tad) { return SubstituteTypeAliasForAlias(tad); };
     // Resolve all targets for typeAlias decls.
@@ -1988,16 +1990,21 @@ void TypeChecker::TypeCheckerImpl::CollectDeclsWithMember(Ptr<Package> pkg, ASTC
 
 void TypeChecker::TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& contexts)
 {
+    Utils::ProfileRecorder recorder("Pre TypeCheck", "PreCheck");
     // NOTE: PreCheck should not contains any 'Synthesize' call.
+    Utils::ProfileRecorder::Start("PreCheck", "CheckRedefinition");
     for (auto& ctx : contexts) {
         // Stage 1. Check redefinition except functions and build all pkgs declMap to accelerate look up.
         CheckRedefinition(*ctx);
     }
-
+    Utils::ProfileRecorder::Stop("PreCheck", "CheckRedefinition");
+ 	 
+    Utils::ProfileRecorder::Start("PreCheck", "ResolveDecls");
     for (auto& ctx : contexts) {
         // Stage 2: Set decl sema type without checking inside the decl body.
         ResolveDecls(*ctx);
     }
+    Utils::ProfileRecorder::Stop("PreCheck", "ResolveDecls");
     // Resolve type alias separately after all user-defined type resolved.
     ResolveTypeAlias(contexts);
 
@@ -2006,11 +2013,13 @@ void TypeChecker::TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& 
     // First part does not need sema check.
     // Collect all imported non-source extends before checking each package.
     BuildImportedExtendMap();
+    Utils::ProfileRecorder::Start("PreCheck", "PreCheckUsage");
     for (auto& ctx : contexts) {
         // Phase: check annotation for FFI.
         PreCheckAnnoForFFI(*ctx->curPackage);
         PreCheckUsage(*ctx, *ctx->curPackage);
     }
+    Utils::ProfileRecorder::Stop("PreCheck", "PreCheckUsage");
     PreCheckAllExtendInterface();
     // CHIR's closure conversion cannot be used without 'Object' class.
     // If '-no-prelude' is given, should check dependencies of class.
