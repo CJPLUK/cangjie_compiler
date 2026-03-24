@@ -402,7 +402,6 @@ private:
     bool isComputingAnnos{};
     CHIR::Package* package{nullptr};
     bool failure{false};
-    std::set<std::string> dependencyPkg;
 
     // ======================== Imported Pkg Top-Level Decl Part ======================== //
 

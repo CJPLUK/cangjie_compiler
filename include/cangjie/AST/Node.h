@@ -954,6 +954,8 @@ struct Decl : Node {
     Ptr<Decl> genericDecl{nullptr};     /**< Pointer to generic declaration if it is an instantiated one. */
     Linkage linkage{Linkage::EXTERNAL}; /**< The linkage of a decl. Default: external */
     bool doNotExport{false};            /**< If the flag is true, the Decl will not be exported. */
+    /**< Whether the imported declaration is used. Only valid for declarations with IMPORTED attribute. */
+    bool isUsedImports{false};
     Ptr<Decl> specificImplementation;
     mutable std::vector<Ptr<const Decl>> dependencies; /**< Variables that the current one depends on */
 

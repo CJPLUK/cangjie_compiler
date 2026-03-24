@@ -797,8 +797,14 @@ void CompilerInstance::ManglingHelpFunction(const BaseMangler& baseMangler)
     // Collect all top-level decls
     std::vector<DeclAndPackageName> topDecls;
     auto deduplicatedEmplace = [&topDecls](AST::Decl* decl, std::string pkgName) {
-        if (std::find(topDecls.begin(), topDecls.end(), std::make_pair(decl, pkgName)) == topDecls.end()) {
-            topDecls.emplace_back(decl, pkgName);
+        if (!decl->TestAttr(AST::Attribute::IMPORTED)) {
+            if (std::find(topDecls.begin(), topDecls.end(), std::make_pair(decl, pkgName)) == topDecls.end()) {
+                topDecls.emplace_back(decl, pkgName);
+            }
+            return;
+        }
+        if (decl->isUsedImports) {
+            topDeclsSet.insert(std::make_pair(decl, pkgName));
         }
     };
 

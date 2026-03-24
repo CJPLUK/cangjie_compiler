@@ -56,7 +56,7 @@ CHIR::Function* CGPkgContext::GetImplicitUsedFunc(const std::string& funcMangled
 {
     auto funcs = chirData.GetImplicitFuncs();
     auto it = funcs.find(funcMangledName);
-    CJC_ASSERT(it != funcs.end());
+    CJC_ASSERT_WITH_MSG(it != funcs.end(), funcMangledName + " is not found in implicit used functions");
     return it->second;
 }
 

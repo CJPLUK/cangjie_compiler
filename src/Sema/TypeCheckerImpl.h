@@ -1710,6 +1710,25 @@ private:
     bool ChkIfAvailableExpr(ASTContext& ctx, AST::Ty& ty, AST::IfAvailableExpr& ie);
     Ptr<AST::Ty> SynIfAvailableExpr(ASTContext& ctx, AST::IfAvailableExpr& iae);
 
+    /**
+     * @brief mark imported declarations depended by the current package as used.
+     * @param pkg the source package to analyze the dependencies.
+     */
+    void MarkUsedPackageInFile(Ptr<AST::Package> pkg);
+    /**
+     * @brief analyze whether Node is being used or recursively analyze its dependencies.
+     * @param node the node to be analyzed.
+     * @param walkerId the current dependency analysis walker ID.
+     */
+    void MarkUsedNode(Ptr<AST::Node> node, unsigned walkerId);
+    /**
+     * @brief analyze whether decl is being used or recursively analyze its dependencies.
+     * @param decl the declaration to be analyzed.
+     * @param walkerId the current dependency analysis walker ID.
+     * @return the visit action to continue the traversal.
+     */
+    AST::VisitAction MarkUsedDecl(Ptr<AST::Decl> decl, unsigned walkerId);
+
     /** Members */
     Promotion promotion;
     TypeManager& typeManager;
