@@ -1205,21 +1205,12 @@ void StructInheritanceChecker::CheckAccessVisibility(const Decl& parent, const D
     }
 }
 
-static size_t GenericsCount(const Decl& decl)
-{
-    auto generic = decl.GetGeneric();
-    if (!generic) {
-        return 0;
-    }
-    return generic->typeParameters.size();
-}
-
 namespace Cangjie {
 void CheckGenericTypeBoundsMapped(const Decl& parent, const Decl& child,
     std::vector<std::unordered_set<Ptr<Ty>>> parentBounds, std::vector<std::unordered_set<Ptr<Ty>>> childBounds,
     DiagnosticEngine& diag, TypeManager& typeManager)
 {
-    if (GenericsCount(parent) != GenericsCount(child)) {
+    if (parent.GetGenericsCount() != child.GetGenericsCount()) {
         diag.Diagnose(child, DiagKind::sema_generic_member_type_argument_different, child.identifier.Val());
         return;
     }
