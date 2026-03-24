@@ -818,7 +818,6 @@ void TestManager::PrepareToMock(AST::Package& pkg)
     if (pkg.files.empty()) {
         return;
     }
-
     // FIXME: Load decls lazy
     if (mockUtils) {
         mockUtils->LoadStdDecls();

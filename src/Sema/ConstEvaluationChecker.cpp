@@ -8,6 +8,7 @@
 
 #include "Diags.h"
 #include "TypeCheckUtil.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -913,6 +914,7 @@ private:
 
 void TypeChecker::TypeCheckerImpl::CheckConstEvaluation(Package& pkg)
 {
+    Utils::ProfileRecorder recorder("Post TypeCheck", "CheckConstEvaluation");
     ConstEvaluationChecker(diag, pkg).Check();
 }
 } // namespace Cangjie

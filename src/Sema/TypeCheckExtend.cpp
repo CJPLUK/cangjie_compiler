@@ -18,6 +18,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
 using namespace TypeCheckUtil;
@@ -271,6 +272,7 @@ void TypeChecker::TypeCheckerImpl::CheckSpecializationExtendDupImstantation(cons
 
 void TypeChecker::TypeCheckerImpl::PreCheckAllExtendInterface()
 {
+    Utils::ProfileRecorder recorder("PreCheck", "PreCheckAllExtendInterface");
     // Check extend decls of primitive types in stable order.
     std::set<Ptr<Ty>, CmpTyByName> keys;
     std::for_each(typeManager.builtinTyToExtendMap.begin(), typeManager.builtinTyToExtendMap.end(),
@@ -411,6 +413,7 @@ void TypeChecker::TypeCheckerImpl::BuildExtendMap(ASTContext& ctx)
 
 void TypeChecker::TypeCheckerImpl::BuildImportedExtendMap()
 {
+    Utils::ProfileRecorder recorder("PreCheck", "BuildImportedExtendMap");
     std::unordered_set<Ptr<ExtendDecl>> allExtends;
     // Collect all imported extends.
     auto emplaceExtend = [&allExtends](const OwnedPtr<Decl>& decl) {

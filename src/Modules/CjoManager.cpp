@@ -20,6 +20,7 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/ModulesUtils.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -320,6 +321,7 @@ bool CjoManager::LoadFilesOfCommonPart(Ptr<Package> pkg)
 
 void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packages, bool fromLsp) const
 {
+    Utils::ProfileRecorder recorder("ResolveImportedPackages", "LoadPackageDeclsOnDemand");
     // Add all directly imported package's loader.
     std::queue<Ptr<CjoManagerImpl::PackageInfo>> q;
     for (auto pkg : packages) {
@@ -349,6 +351,7 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
         }
     }
 
+    Utils::ProfileRecorder::Start("LoadPackageDeclsOnDemand", "LoadPackageDecls");
     while (!q.empty()) {
         auto cur = q.front();
         q.pop();
@@ -369,10 +372,13 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
             }
         }
     }
+    Utils::ProfileRecorder::Stop("LoadPackageDeclsOnDemand", "LoadPackageDecls");
 
+    Utils::ProfileRecorder::Start("LoadPackageDeclsOnDemand", "LoadRefs");
     for (auto loader : loaders) {
         loader->LoadRefs();
     }
+    Utils::ProfileRecorder::Stop("LoadPackageDeclsOnDemand", "LoadRefs");
 
     // For LSP, packages are only used to indexing, so no need to substitute TypeAliasTy.
     if (!fromLsp) {
@@ -423,6 +429,7 @@ void CjoManagerImpl::ReplaceTypeAliasInNode(Ptr<Node> node)
 
 void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package>>& srcPackages)
 {
+    Utils::ProfileRecorder recorder("LoadPackageDeclsOnDemand", "SubstituteImportedTypeAliasTy");
     for (auto& pkgName2PkgInfo : GetPackageNameMap()) {
         // For cjlint tool could have more than one src-package.
         bool isSrcPackage = Utils::In(srcPackages,
