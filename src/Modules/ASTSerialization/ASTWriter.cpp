@@ -220,6 +220,8 @@ void CollectFullExportParamDecl(
     CJC_ASSERT(!fd.funcBody->paramLists.empty());
     bool fullExport = fd.isConst || fd.isInline || fd.isFrozen || IsDefaultImplementation(fd) ||
         IsGenericInCommonSerialization(serializingCommon, fd);
+    // Common replaced with specific. Even @Frozen need to be skipped, because specific will be fullExport'ed.
+    fullExport &= !fd.IsCommonMatchedWithSpecific();
 
     if (fullExport) {
         decls.emplace_back(&fd);
@@ -476,7 +478,8 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
         if (IsGenericInCommonSerialization(this->serializingCommon, *d)) {
             return true;
         }
-        // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls
+        // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls.
+        // Common `decl` members are exported because they can be accessed from specific nominative.
         if (!config.exportForIncr && !decl.TestAttr(Attribute::COMMON) && !isInstMemberVar &&
             d->linkage == Linkage::INTERNAL) {
             return false;
