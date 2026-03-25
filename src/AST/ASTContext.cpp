@@ -138,11 +138,11 @@ bool ASTContext::IsNodeInOriginalMacroCallNodes(AST::Decl& decl) const
     }
     for (auto& originalMacroCallNode : decl.curFile->originalMacroCallNodes) {
         if (originalMacroCallNode.get()->astKind != ASTKind::MACRO_EXPAND_DECL) {
-            return false;
+            continue;
         }
         auto med = StaticAs<ASTKind::MACRO_EXPAND_DECL>(originalMacroCallNode.get());
         if (!med->invocation.decl.get() || med->invocation.decl->astKind != AST::ASTKind::ENUM_DECL) {
-            return false;
+            continue;
         }
         auto enumNode = StaticAs<ASTKind::ENUM_DECL>(med->invocation.decl.get());
         for (auto& constructor : enumNode->constructors) {

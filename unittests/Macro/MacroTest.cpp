@@ -432,6 +432,20 @@ TEST_F(MacroTest, DISABLED_NoErrorInLSPMacro)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
+TEST_F(MacroTest, DISABLED_NoErrorInDeriveEnum)
+{
+    auto src = srcPath + "derive_enum2.cj";
+    invocation.globalOptions.enableMacroInLSP = true;
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::SEMA);
+ 
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+    Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
+}
+
 TEST_F(MacroTest, DISABLED_MacroCall_HighLight_LSP)
 {
     std::string command = "cd " + definePath + " && cjc define3.cj --compile-macro";
