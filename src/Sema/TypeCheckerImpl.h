@@ -700,6 +700,9 @@ private:
     void DiagnoseForUnaryExpr(ASTContext& ctx, AST::UnaryExpr& ue);
     void DiagnoseForUnaryExprWithTarget(ASTContext& ctx, AST::UnaryExpr& ue, AST::Ty& target);
     bool ChkBinaryExpr(ASTContext& ctx, AST::Ty& target, AST::BinaryExpr& be);
+    bool ChkOperatorFuncIfTyCannotBeInferred(ASTContext& ctx, AST::BinaryExpr& be);
+    bool TryCheckOperatorOverload(ASTContext& ctx, AST::Ty* target, AST::BinaryExpr& be);
+    bool TrySynthesizeOperatorOverload(ASTContext& ctx, AST::BinaryExpr& be);
     Ptr<AST::Ty> SynBinaryExpr(ASTContext& ctx, AST::BinaryExpr& be);
     Ptr<AST::Ty> SynIncOrDecExpr(ASTContext& ctx, AST::IncOrDecExpr& ide);
     bool ChkIncOrDecExpr(ASTContext& ctx, AST::Ty& target, AST::IncOrDecExpr& ide);
