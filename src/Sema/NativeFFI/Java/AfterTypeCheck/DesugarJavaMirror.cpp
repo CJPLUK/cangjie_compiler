@@ -206,6 +206,7 @@ void JavaDesugarManager::InsertJavaMirrorFinalizer(ClassDecl& mirror)
     fd->funcBody->funcDecl = fd.get();
     fd->fullPackageName = mirror.fullPackageName;
     fd->outerDecl = Ptr(&mirror);
+    fd->curFile = curFile;
 
     mirror.body->decls.emplace_back(std::move(fd));
 }
@@ -301,6 +302,7 @@ void JavaDesugarManager::InsertJavaRefGetterWithBody(ClassDecl& decl)
     fd->funcBody->funcDecl = fd.get();
     fd->funcBody->parentClassLike = &decl;
     fd->outerDecl = &decl;
+    fd->curFile = decl.curFile;
 
     decl.body->decls.emplace_back(std::move(fd));
 }
@@ -817,6 +819,7 @@ void JavaDesugarManager::InsertJStringOfStringCtor(ClassDecl& decl, bool doStub)
     fd->EnableAttr(
         Attribute::PUBLIC, Attribute::JAVA_MIRROR,
         Attribute::CONSTRUCTOR, Attribute::IN_CLASSLIKE);
+    fd->curFile = decl.curFile;
     generatedCtor = fd.get();
     decl.body->decls.emplace_back(std::move(fd));
 }
