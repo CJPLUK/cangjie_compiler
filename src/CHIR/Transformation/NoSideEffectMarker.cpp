@@ -24,13 +24,10 @@ void NoSideEffectMarker::Run()
             }
         }
     }
-    for (Value* value : package.GetImportedVarAndFuncs()) {
-        if (value->IsImportedVar()) {
-            continue;
-        }
+    for (auto func : package.GetImportedFunctions()) {
         for (auto element : functionWhiteList) {
-            if (IsExpectedFunction(*VirtualCast<FuncBase*>(value), element)) {
-                value->EnableAttr(Attribute::NO_SIDE_EFFECT);
+            if (IsExpectedFunction(*func, element)) {
+                func->EnableAttr(Attribute::NO_SIDE_EFFECT);
             }
         }
     }

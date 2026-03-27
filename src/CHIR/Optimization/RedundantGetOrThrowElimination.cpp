@@ -23,7 +23,7 @@ void RedundantGetOrThrowElimination::RunOnPackage(const Ptr<const Package>& pack
     }
 }
 
-void RedundantGetOrThrowElimination::RunOnFunc(const Ptr<const Func>& func, bool isDebug) const
+void RedundantGetOrThrowElimination::RunOnFunc(const Ptr<const Function>& func, bool isDebug) const
 {
     auto analysis = std::make_unique<GetOrThrowResultAnalysis>(func, isDebug);
     auto engine = Engine<GetOrThrowResultDomain>(func, std::move(analysis));

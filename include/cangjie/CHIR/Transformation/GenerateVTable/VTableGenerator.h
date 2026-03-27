@@ -25,13 +25,13 @@ public:
 
 private:
     void MergeVtable(ClassType& instParentTy, VTableInDef& vtable);
-    void CollectCurDefMethodsMayBeInVtable(const CustomTypeDef& def, std::vector<FuncBase*>& publicFuncs);
-    std::vector<FuncBase*> GetAllMethods(const CustomTypeDef& def);
-    std::vector<FuncBase*> GetAllMethods(const Type& ty);
+    void CollectCurDefMethodsMayBeInVtable(const CustomTypeDef& def, std::vector<Function*>& publicFuncs);
+    std::vector<Function*> GetAllMethods(const CustomTypeDef& def);
+    std::vector<Function*> GetAllMethods(const Type& ty);
     VirtualMethodInfo CreateVirtualFuncInfo(const AbstractMethodInfo& method,
         Type& originalParentType, const std::unordered_map<const GenericType*, Type*>& replaceTable);
     VirtualMethodInfo CreateVirtualFuncInfo(
-        FuncBase& method, Type& originalParentType, const std::unordered_map<const GenericType*, Type*>& replaceTable);
+        Function& method, Type& originalParentType, const std::unordered_map<const GenericType*, Type*>& replaceTable);
     bool UpdateVtable(VirtualMethodInfo& curFuncInfo, VTableInDef& vtable);
     bool IsSigTypeMatched(const VirtualMethodInfo& curFuncInfo, const VirtualMethodInfo& funcInfoInVtable);
     bool VirtualFuncShouldAddToVTableInItsOwnParent(ClassType& ownParent, ClassType& alreadyIn);
@@ -41,9 +41,9 @@ private:
     std::unordered_map<std::string, VirtualMethodInfo> CollectAllPublicAndProtectedMethods(const CustomTypeDef& curDef);
     std::unordered_map<const GenericType*, Type*> GetInstMapFromDefIncludeParents(
         const CustomTypeDef& def, const Type& curType);
-    std::vector<FuncBase*> CollectMethodsIncludeParentsMayBeInVtable(const CustomTypeDef& curDef);
+    std::vector<Function*> CollectMethodsIncludeParentsMayBeInVtable(const CustomTypeDef& curDef);
     void CollectMethodsFromAncestorInterfaceMayBeInVTable(
-        const CustomTypeDef& curDef, std::vector<FuncBase*>& methods);
+        const CustomTypeDef& curDef, std::vector<Function*>& methods);
 
 private:
     CHIRBuilder& builder;

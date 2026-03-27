@@ -53,7 +53,7 @@ bool HasGenericTypeArg(const CHIR::Type& type)
 } // namespace
 
 CGType* CGTypeMgr::GetConcreteCGTypeFor(CGModule& cgMod, const CHIR::Type& chirType,
-    const CGType::TypeExtraInfo& extraInfo, const CHIR::FuncBase* chirFunc)
+    const CGType::TypeExtraInfo& extraInfo, const CHIR::Function* chirFunc)
 {
     CGType* cgType = nullptr;
     auto& cgCtx = cgMod.GetCGContext();
@@ -182,7 +182,7 @@ CGType* CGType::GetOrCreateWithNode(CGModule& cgModule, const CHIR::Value* chirN
     CGType* cgType = nullptr;
     if (DynamicCast<const CHIR::LocalVar*>(chirNode)) {
         cgType = CGTypeMgr::GetConcreteCGTypeFor(cgModule, *chirTy, TypeExtraInfo{0, true, false, false, {}});
-    } else if (auto fb = DynamicCast<const CHIR::FuncBase*>(chirNode)) {
+    } else if (auto fb = DynamicCast<const CHIR::Function*>(chirNode)) {
         TypeExtraInfo typeExtraInfo(0, false, false, allowBasePtr, {});
         typeExtraInfo.forWrapper = forWrapper;
         for (auto gt : fb->GetGenericTypeParams()) {

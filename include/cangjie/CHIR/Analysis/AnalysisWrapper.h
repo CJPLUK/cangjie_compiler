@@ -66,7 +66,7 @@ public:
      * @return result of analysis per function
      */
     template <typename... Args>
-    std::unique_ptr<Results<TDomain>> RunOnFunc(const Func* func, bool isDebug, Args&&... args)
+    std::unique_ptr<Results<TDomain>> RunOnFunc(const Function* func, bool isDebug, Args&&... args)
     {
         auto analysis = std::make_unique<TAnalysis>(func, builder, isDebug, std::forward<Args>(args)...);
         auto engine = Engine<TDomain>(func, std::move(analysis));
@@ -78,7 +78,7 @@ public:
      * @param func function to return analysis result
      * @return analysis result
      */
-    Results<TDomain>* CheckFuncResult(const Func* func)
+    Results<TDomain>* CheckFuncResult(const Function* func)
     {
         if (auto it = resultsMap.find(func); it != resultsMap.end()) {
             return it->second.get();
@@ -100,7 +100,7 @@ public:
      * @param func function to clear analysis result
      * @return whether clear is happened
      */
-    bool InvalidateAnalysisResult(const Func* func)
+    bool InvalidateAnalysisResult(const Function* func)
     {
         if (auto it = resultsMap.find(func); it != resultsMap.end()) {
             resultsMap.erase(it);
@@ -153,7 +153,7 @@ private:
         }
     }
 
-    bool ShouldBeAnalysed(const Func& func)
+    bool ShouldBeAnalysed(const Function& func)
     {
         if constexpr (IsValueAnalysis<TAnalysis>::value) {
             if (resultsMap.find(&func) != resultsMap.end()) {
@@ -176,7 +176,7 @@ private:
         }
     }
 
-    std::unordered_map<const Func*, std::unique_ptr<Results<TDomain>>> resultsMap;
+    std::unordered_map<const Function*, std::unique_ptr<Results<TDomain>>> resultsMap;
     CHIRBuilder& builder;
 };
 

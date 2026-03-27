@@ -131,8 +131,8 @@ auto FindTargetSubCHIRPackage(const CHIR::Value& chirValue,
     return target;
 };
 
-void SplitSpecialFuncs(CHIR::Func& globalInitFunc, CHIR::Func& globalInitLiteralFunc,
-    const std::vector<CHIR::Func*>& toAnyFuncs, std::set<SubCHIRPackage, SubCHIRPackageCmp>& subCHIRPackagesSet,
+void SplitSpecialFuncs(CHIR::Function& globalInitFunc, CHIR::Function& globalInitLiteralFunc,
+    const std::vector<CHIR::Function*>& toAnyFuncs, std::set<SubCHIRPackage, SubCHIRPackageCmp>& subCHIRPackagesSet,
     std::map<std::string, std::size_t>& cache)
 {
     auto target = FindTargetSubCHIRPackage(globalInitFunc, subCHIRPackagesSet, cache);
@@ -152,7 +152,7 @@ void SplitSpecialFuncs(CHIR::Func& globalInitFunc, CHIR::Func& globalInitLiteral
     subCHIRPackagesSet.insert(std::move(targetSubCHIRPackage));
 }
 
-void SplitNormalFunc(const std::multimap<std::size_t, CHIR::Func*>& sortedChirFuncs,
+void SplitNormalFunc(const std::multimap<std::size_t, CHIR::Function*>& sortedChirFuncs,
     std::set<SubCHIRPackage, SubCHIRPackageCmp>& subCHIRPackagesSet, std::map<std::string, std::size_t>& cache)
 {
     for (auto iter = sortedChirFuncs.rbegin(); iter != sortedChirFuncs.rend(); iter++) {
@@ -170,19 +170,17 @@ void SplitNormalFunc(const std::multimap<std::size_t, CHIR::Func*>& sortedChirFu
 void SplitForeign(const CHIR::Package& chirPkg, std::set<SubCHIRPackage, SubCHIRPackageCmp>& subCHIRPackagesSet,
     std::map<std::string, std::size_t>& cache)
 {
-    for (auto importedValue : chirPkg.GetImportedVarAndFuncs()) {
-        if (!importedValue->TestAttr(CHIR::Attribute::FOREIGN) ||
-            importedValue->GetSourcePackageName() != chirPkg.GetName()) {
+    for (auto importedFunc : chirPkg.GetImportedFunctions()) {
+        if (!importedFunc->TestAttr(CHIR::Attribute::FOREIGN) ||
+            importedFunc->GetPackageName() != chirPkg.GetName()) {
             continue;
         }
-        auto foreign = DynamicCast<CHIR::ImportedFunc*>(importedValue);
-        CJC_NULLPTR_CHECK(foreign);
-        auto target = FindTargetSubCHIRPackage(*foreign, subCHIRPackagesSet, cache);
+        auto target = FindTargetSubCHIRPackage(*importedFunc, subCHIRPackagesSet, cache);
         auto targetSubCHIRPackage = subCHIRPackagesSet.extract(target);
         auto& subCHIRPackage = targetSubCHIRPackage.value();
-        subCHIRPackage.chirForeigns.emplace(foreign);
+        subCHIRPackage.chirForeigns.emplace(importedFunc);
         subCHIRPackage.exprNumInChirFuncs += 1;
-        cache.emplace(foreign->GetIdentifierWithoutPrefix(), subCHIRPackage.subCHIRPackageIdx);
+        cache.emplace(importedFunc->GetIdentifierWithoutPrefix(), subCHIRPackage.subCHIRPackageIdx);
         subCHIRPackagesSet.insert(std::move(targetSubCHIRPackage));
     }
 }
@@ -202,10 +200,10 @@ void CHIRSplitter::SplitCHIRFuncs(std::vector<SubCHIRPackage>& subCHIRPackages)
     auto globalInitFunc = chirPkg.GetPackageInitFunc();
     std::string globalInitFuncName = globalInitFunc->GetIdentifierWithoutPrefix();
     // init func must have suffix iiHv, index 4 is the start of ii. 2 is the length of il.
-    auto globalInitLiteralFunc = VirtualCast<CHIR::Func*>(const_cast<CGPkgContext&>(cgPkgCtx).FindCHIRGlobalValue(
+    auto globalInitLiteralFunc = StaticCast<CHIR::Function*>(const_cast<CGPkgContext&>(cgPkgCtx).FindCHIRGlobalValue(
         globalInitFuncName.replace(globalInitFuncName.size() - 4, 2, "il")));
-    std::vector<CHIR::Func*> toAnyFuncs{};
-    std::multimap<std::size_t, CHIR::Func*> sortedChirFuncs{};
+    std::vector<CHIR::Function*> toAnyFuncs{};
+    std::multimap<std::size_t, CHIR::Function*> sortedChirFuncs{};
     for (auto chirFunc : chirPkg.GetGlobalFuncs()) {
         if (chirPkg.GetName() == REFLECT_PACKAGE_NAME && chirFunc->GetSrcCodeIdentifier() == "toAny") {
             toAnyFuncs.emplace_back(chirFunc);
@@ -321,20 +319,18 @@ void CHIRSplitter::SplitCHIRGlobalVars(std::vector<SubCHIRPackage>& subCHIRPacka
 
 void CHIRSplitter::SplitCHIRImportedCFuncs(std::vector<SubCHIRPackage>& subCHIRPackages)
 {
-    for (auto importedValue : cgPkgCtx.GetCHIRPackage().GetImportedVarAndFuncs()) {
+    for (auto importedFunc : cgPkgCtx.GetCHIRPackage().GetImportedFunctions()) {
         // We only process imported non-public CFunc here,
         // whether it's explicitly imported, implicitly imported, or a foreign function.
-        if (importedValue->IsImportedVar() || !StaticCast<CHIR::FuncType*>(importedValue->GetType())->IsCFunc() ||
-            (!importedValue->TestAttr(CHIR::Attribute::PRIVATE) &&
-             !importedValue->TestAttr(CHIR::Attribute::FOREIGN))) {
+        if (!importedFunc->GetFuncType()->IsCFunc() ||
+            (!importedFunc->TestAttr(CHIR::Attribute::PRIVATE) &&
+            !importedFunc->TestAttr(CHIR::Attribute::FOREIGN))) {
             continue;
         }
-        auto importedCFunc = DynamicCast<CHIR::ImportedFunc*>(importedValue);
-        CJC_NULLPTR_CHECK(importedCFunc);
-        auto iter = subCHIRPackagesCache.importedCFuncsCache.find(importedCFunc->GetIdentifierWithoutPrefix());
+        auto iter = subCHIRPackagesCache.importedCFuncsCache.find(importedFunc->GetIdentifierWithoutPrefix());
         auto idx = iter == subCHIRPackagesCache.importedCFuncsCache.cend() ? (index++ % splitNum) : iter->second;
-        subCHIRPackages[idx].chirImportedCFuncs.emplace(importedCFunc);
-        subCHIRPackagesCache.importedCFuncsCache.emplace(importedCFunc->GetIdentifierWithoutPrefix(), idx);
+        subCHIRPackages[idx].chirImportedCFuncs.emplace(importedFunc);
+        subCHIRPackagesCache.importedCFuncsCache.emplace(importedFunc->GetIdentifierWithoutPrefix(), idx);
     }
 }
 

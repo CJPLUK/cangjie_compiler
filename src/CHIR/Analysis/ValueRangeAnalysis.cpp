@@ -106,7 +106,7 @@ template <> RangeValueDomain HandleNonNullLiteralValue<RangeValueDomain>(const L
     }
 }
 
-RangeAnalysis::RangeAnalysis(const Func* func, CHIRBuilder& builder, bool isDebug, const Ptr<DiagAdapter>& diag)
+RangeAnalysis::RangeAnalysis(const Function* func, CHIRBuilder& builder, bool isDebug, const Ptr<DiagAdapter>& diag)
     : ValueAnalysis(func, builder, isDebug), diag(diag)
 {
 }

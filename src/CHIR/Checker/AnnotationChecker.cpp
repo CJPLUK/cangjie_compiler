@@ -18,7 +18,7 @@ struct AnnotationInfo {
     AST::Annotation* anno;        // non-const for write back annotation result after consteval
     std::vector<GlobalVar*> vars; // one global variable for each element in the argument `target` array;
                                   // empty if no argument is provided
-    std::vector<Func*> funcs;     // init funcs of vars, to be called in file init function
+    std::vector<Function*> funcs;     // init funcs of vars, to be called in file init function
 };
 
 // custom annotation defined on a decl
@@ -224,7 +224,7 @@ private:
     {
         auto annoTargetNum = StaticCast<ArrayLit&>(*anno.args[0]->expr).children.size();
         std::vector<GlobalVar*> vars(annoTargetNum);
-        std::vector<Func*> funcs(annoTargetNum);
+        std::vector<Function*> funcs(annoTargetNum);
         for (size_t i{0}; i < annoTargetNum; ++i) {
             auto var = CreateAnnotationVar(decl, anno, i);
             auto func = CreateAnnoVarInit(*var, anno, i);
@@ -243,7 +243,7 @@ private:
         auto annotationTargetType = tr.TranslateType(*expr.ty);
         auto varType = bd.GetType<RefType>(annotationTargetType);
         auto srcCodeIdentifier = decl.identifier.Val() + ANNOTATION_VAR_POSTFIX + std::to_string(i);
-        auto var = bd.CreateGlobalVar(
+        auto var = bd.CreateGlobalVarWithInit(
             std::move(loc), varType, varname, std::move(srcCodeIdentifier), varname, decl.fullPackageName);
         var->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
         var->EnableAttr(Attribute::COMPILER_ADD);
@@ -270,7 +270,7 @@ private:
 #endif
     }
 
-    Func* CreateAnnoVarInit(GlobalVar& var, AST::Annotation& anno, size_t i)
+    Function* CreateAnnoVarInit(GlobalVar& var, AST::Annotation& anno, size_t i)
     {
         auto funcname = GetAnnotationTargetElementInitName(var);
         auto& expr = *StaticCast<AST::ArrayLit>(*anno.args[0]->expr).children[i];
@@ -345,7 +345,7 @@ void Translator::CollectValueAnnotation(const Decl& decl)
 }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-void GlobalVarInitializer::InsertAnnotationVarInitInto(Func& packageInit)
+void GlobalVarInitializer::InsertAnnotationVarInitInto(Function& packageInit)
 {
     for (auto& info : g_annoInfo) {
         for (auto init : info.second.funcs) {
@@ -434,7 +434,7 @@ private:
     // check map, from Annotation class to AnnotationTarget
     std::unordered_map<const ClassDef*, AnnotationTarget> checkMap;
 
-    static unsigned GetUnsignedValFromInit(const Func& func)
+    static unsigned GetUnsignedValFromInit(const Function& func)
     {
         // the init func after consteval shall be
         // %1: unsigned64 = ConstantInt(xxx)

@@ -330,8 +330,8 @@ public:
      */
     template <typename Iterator = SimpleIterator, typename PreActionFuncTy, typename ArgT = ArgTOf<PreActionFuncTy>,
         typename = std::enable_if_t<std::is_same<RetTOf<PreActionFuncTy>, VisitResult>::value>,
-        typename = std::enable_if_t<!std::is_same<ArgT, Func&>::value>>
-    static void Visit(const Func& root, PreActionFuncTy pre)
+        typename = std::enable_if_t<!std::is_same<ArgT, Function&>::value>>
+    static void Visit(const Function& root, PreActionFuncTy pre)
     {
         Visit(*root.GetBody(), pre);
     }
@@ -347,9 +347,9 @@ public:
     template <typename Iterator = SimpleIterator, typename PreActionFuncTy, typename PostActionFuncTy,
         typename ArgT = ArgTOf<PreActionFuncTy>,
         typename = std::enable_if_t<std::is_same<RetTOf<PreActionFuncTy>, VisitResult>::value &&
-            std::is_same<RetTOf<PostActionFuncTy>, VisitResult>::value && !std::is_same<ArgT, Func&>::value &&
+            std::is_same<RetTOf<PostActionFuncTy>, VisitResult>::value && !std::is_same<ArgT, Function&>::value &&
             std::is_same<ArgTOf<PostActionFuncTy>, ArgT>::value>>
-    static void Visit(const Func& root, PreActionFuncTy pre, PostActionFuncTy post)
+    static void Visit(const Function& root, PreActionFuncTy pre, PostActionFuncTy post)
     {
         Visit(*root.GetBody(), pre, post);
     }

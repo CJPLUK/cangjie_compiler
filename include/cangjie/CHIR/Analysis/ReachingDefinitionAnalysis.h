@@ -83,7 +83,7 @@ public:
      * @brief constructor for reaching definition analysis.
      * @param func function to analyse.
      */
-    explicit ReachingDefinitionAnalysis(const Func* func);
+    explicit ReachingDefinitionAnalysis(const Function* func);
 
     /// reaching definition analysis destructor.
     ~ReachingDefinitionAnalysis() final

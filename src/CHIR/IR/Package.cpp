@@ -41,7 +41,7 @@ void Package::AddGlobalVar(GlobalVar* item)
     globalVars.emplace_back(item);
 }
 
-Func* Package::TryGetGlobalFunc(const std::string identifier)
+Function* Package::TryGetGlobalFunc(const std::string identifier)
 {
     for (auto func : globalFuncs) {
         if (func->GetIdentifier() == identifier) {
@@ -52,7 +52,7 @@ Func* Package::TryGetGlobalFunc(const std::string identifier)
     return nullptr;
 }
 
-void Package::AddGlobalFunc(Func* item)
+void Package::AddGlobalFunc(Function* item)
 {
     globalFuncs.emplace_back(item);
 }
@@ -77,27 +77,22 @@ std::vector<EnumDef*> Package::GetEnums() const
     return enums;
 }
 
-void Package::SetPackageInitFunc(Func* func)
+void Package::SetPackageInitFunc(Function* func)
 {
     packageInitFunc = func;
 }
 
-void Package::SetPackageLiteralInitFunc(Func* func)
+void Package::SetPackageLiteralInitFunc(Function* func)
 {
     packageLiteralInitFunc = func;
 }
 
-Func* Package::GetPackageLiteralInitFunc() const
+Function* Package::GetPackageLiteralInitFunc() const
 {
     return packageLiteralInitFunc;
 }
 
-void Package::SetImportedVarAndFuncs(std::vector<ImportedValue*>&& items)
-{
-    importedVarAndFuncs = std::move(items);
-}
-
-Func* Package::GetPackageInitFunc() const
+Function* Package::GetPackageInitFunc() const
 {
     return packageInitFunc;
 }
@@ -186,11 +181,6 @@ void Package::AddImportedStruct(StructDef* item)
 {
     importedStructs.emplace_back(item);
 }
-    
-std::vector<ImportedValue*> Package::GetImportedVarAndFuncs() const
-{
-    return importedVarAndFuncs;
-}
 
 std::vector<ExtendDef*> Package::GetExtends() const
 {
@@ -217,7 +207,7 @@ void Package::AddStruct(StructDef* item)
     structs.emplace_back(item);
 }
 
-void Package::SetGlobalFuncs(const std::vector<Func*>& funcs)
+void Package::SetGlobalFuncs(const std::vector<Function*>& funcs)
 {
     globalFuncs = funcs;
 }
@@ -227,7 +217,7 @@ void Package::SetGlobalVars(std::vector<GlobalVar*>&& vars)
     std::swap(globalVars, vars);
 }
 
-std::vector<Func*> Package::GetGlobalFuncs() const
+std::vector<Function*> Package::GetGlobalFuncs() const
 {
     return globalFuncs;
 }
@@ -244,8 +234,11 @@ std::string Package::ToString() const
     ss << "packageAccessLevel: " << PackageAccessLevelToString(pkgAccessLevel) << "\n";
     ss << "packageInitFunc: " << GetPackageInitFunc()->GetIdentifier() << "\n";
     ss << "\n==========================imports===============================\n";
-    for (auto& it : importedVarAndFuncs) {
-        ss << GetImportedValueStr(*it) << "\n";
+    for (auto& it : importedGlobalVars) {
+        ss << GetImportedVarStr(*it) << "\n";
+    }
+    for (auto& it : importedFuncs) {
+        ss << GetImportedFuncStr(*it) << "\n";
     }
     ss << "\n\n";
     for (auto& it : importedStructs) {
@@ -285,9 +278,34 @@ std::string Package::ToString() const
     return ss.str();
 }
 
-void Package::AddImportedVarAndFunc(ImportedValue* item)
+void Package::AddImportedGlobalVar(GlobalVar* item)
 {
-    importedVarAndFuncs.emplace_back(item);
+    importedGlobalVars.emplace_back(item);
+}
+
+void Package::SetImportedGlobalVars(std::vector<GlobalVar*>&& items)
+{
+    importedGlobalVars = std::move(items);
+}
+
+std::vector<GlobalVar*> Package::GetImportedGlobalVars() const
+{
+    return importedGlobalVars;
+}
+
+void Package::AddImportedFunction(Function* item)
+{
+    importedFuncs.emplace_back(item);
+}
+
+void Package::SetImportedFunctions(std::vector<Function*>&& items)
+{
+    importedFuncs = std::move(items);
+}
+
+std::vector<Function*> Package::GetImportedFunctions() const
+{
+    return importedFuncs;
 }
 
 void Package::Dump() const

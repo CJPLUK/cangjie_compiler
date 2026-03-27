@@ -351,7 +351,7 @@ Value* Translator::TranslateGlobalOrLocalFuncRef(const AST::RefExpr& refExpr, Va
 {
     auto outerDeclaredTypes = GetOutDefDeclaredTypes(originalFunc);
     // 1. get inst types of outer custom type from current func's parent type
-    if (originalFunc.IsFunc() && VirtualCast<FuncBase*>(&originalFunc)->IsMemberFunc() &&
+    if (originalFunc.IsFunc() && StaticCast<Function*>(&originalFunc)->IsMemberFunc() &&
         GetCurrentFunc() && GetCurrentFunc()->GetParentCustomTypeDef() != nullptr) {
         /* orginalFunc may be defined in interface, try to get inst Types from current custom type
             interface I<T, U, V, W> {
@@ -369,7 +369,7 @@ Value* Translator::TranslateGlobalOrLocalFuncRef(const AST::RefExpr& refExpr, Va
             1. get (T, U, V, W) from visiable generic types of I
             2. replace with inst types get from me' custom type B<T>, we got results (Int32, T, Int64, T).
         */
-        auto originCustomDef = VirtualCast<FuncBase*>(&originalFunc)->GetParentCustomTypeDef();
+        auto originCustomDef = StaticCast<Function*>(&originalFunc)->GetParentCustomTypeDef();
         auto curFunc = GetCurrentFunc();
         CJC_NULLPTR_CHECK(curFunc);
         auto parentFuncCustomDef = curFunc->GetParentCustomTypeDef();

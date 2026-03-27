@@ -48,7 +48,7 @@ public:
      * @param newBodyOuterFunction func that encloses new body to decide this type conversion,
      *  use apply's top level function if nullptr
      */
-    void GetInstMapFromApply(const Apply& apply, const FuncBase* newBodyOuterFunction = nullptr);
+    void GetInstMapFromApply(const Apply& apply, const Function* newBodyOuterFunction = nullptr);
 
     static void ReplaceExprOperands(std::vector<Block*>& blocks, const std::unordered_map<Value*, Value*>& valueMap);
 private:

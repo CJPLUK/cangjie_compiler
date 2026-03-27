@@ -24,7 +24,7 @@ void ArrayLambdaOpt::RunOnPackage(const Ptr<const Package>& package, bool isDebu
     }
 }
 
-void ArrayLambdaOpt::RunOnFunc(const Ptr<Func>& func, bool isDebug)
+void ArrayLambdaOpt::RunOnFunc(const Ptr<Function>& func, bool isDebug)
 {
     auto preAcation = [this, isDebug](Expression& expr) {
         if (auto constVal = CheckCanRewriteLambda(&expr); constVal) {
@@ -58,7 +58,7 @@ Ptr<Constant> ArrayLambdaOpt::CheckCanRewriteLambda(const Ptr<Expression>& expr)
     if (!callee->IsFuncWithBody()) {
         return nullptr;
     }
-    if (!IsExpectedFunction(*VirtualCast<Func*>(callee), ARRAY_INIT_FUNC_INFO)) {
+    if (!IsExpectedFunction(*StaticCast<Function*>(callee), ARRAY_INIT_FUNC_INFO)) {
         return nullptr;
     }
 

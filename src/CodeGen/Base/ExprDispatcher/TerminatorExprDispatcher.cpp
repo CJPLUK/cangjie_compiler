@@ -33,9 +33,8 @@ llvm::Value* HandleExitExpression(IRBuilder2& irBuilder, const CHIR::Exit& exitE
     if (cgCtx.debugValue) {
         CJC_ASSERT(cgCtx.GetCompileOptions().enableCompileDebug);
         auto thisValue = irBuilder.GetInsertCGFunction()->GetArgByIndexFromCHIR(0);
-        auto curCHIRFunc = DynamicCast<const CHIR::Func*>(&irBuilder.GetInsertCGFunction()->GetOriginal());
-        CJC_NULLPTR_CHECK(curCHIRFunc);
-        auto thisTy = curCHIRFunc->GetParam(0)->GetType();
+        const auto& curCHIRFunc = StaticCast<const CHIR::Function&>(irBuilder.GetInsertCGFunction()->GetOriginal());
+        auto thisTy = curCHIRFunc.GetParam(0)->GetType();
         auto cgType = CGType::GetOrCreate(cgMod, thisTy);
         auto thisCGValue = CGValue(thisValue, cgType);
         auto payload = irBuilder.GetPayloadFromObject(cgCtx.debugValue);

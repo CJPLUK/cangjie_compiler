@@ -243,7 +243,7 @@ llvm::MDTuple* MetadataInfo::GenerateInstanceFieldMetadata(const CHIR::MemberVar
         .CreateMDTuple();
 }
 
-llvm::MDTuple* MetadataInfo::GenerateStaticFieldMetadata(const CHIR::GlobalVarBase& staticField)
+llvm::MDTuple* MetadataInfo::GenerateStaticFieldMetadata(const CHIR::GlobalVar& staticField)
 {
     llvm::LLVMContext& llvmCtx = module.GetLLVMContext();
     return MetadataVector(llvmCtx)
@@ -257,7 +257,7 @@ llvm::MDTuple* MetadataInfo::GenerateStaticFieldMetadata(const CHIR::GlobalVarBa
         .CreateMDTuple();
 }
 
-llvm::MDTuple* MetadataInfo::GenerateMethodMetadata(const CHIR::FuncBase& method, bool isFromInterface)
+llvm::MDTuple* MetadataInfo::GenerateMethodMetadata(const CHIR::Function& method, bool isFromInterface)
 {
     llvm::LLVMContext& llvmCtx = module.GetLLVMContext();
     CJC_ASSERT(method.GetType()->IsFunc());
@@ -268,32 +268,15 @@ llvm::MDTuple* MetadataInfo::GenerateMethodMetadata(const CHIR::FuncBase& method
     MetadataVector methodMD(llvmCtx);
     methodMD.Concat(methodName).Concat(retTypeInfo).Concat(methodLinkageName);
     auto extraAttr = isFromInterface ? ExtraAttribute::METHOD_FROM_INTERFACE : ExtraAttribute::METHOD;
-    if (method.IsFuncWithBody()) {
-        auto methodValue = StaticCast<CHIR::Func*>(&method);
-        CJC_NULLPTR_CHECK(methodValue);
-        uint8_t hasSRetMode = GetSRetMode(*funcType->GetReturnType(), *module.GetOrInsertCGFunction(methodValue));
-        methodMD
-            .Concat(method.TestAttr(CHIR::Attribute::STATIC)
-                    ? GenerateParametersMetadata(methodValue->GetParams())
-                    : GenerateParametersMetadata(methodValue->GetParams(), true))
-            .Concat(GenerateParametersMetadata(methodValue->GetGenericTypeParams()))
-            .Concat(GenerateAttrsMetadata(
-                method.GetAttributeInfo(), extraAttr, methodValue->GetAnnoInfo().mangledName, hasSRetMode));
-        (void)module.GetOrInsertCGFunction(methodValue);
-    } else {
-        auto importedMethodValue = StaticCast<CHIR::ImportedFunc*>(&method);
-        CJC_NULLPTR_CHECK(importedMethodValue);
-        uint8_t hasSRetMode =
-            GetSRetMode(*funcType->GetReturnType(), *module.GetOrInsertCGFunction(importedMethodValue));
-        methodMD
-            .Concat(method.TestAttr(CHIR::Attribute::STATIC)
-                    ? GenerateParametersMetadata(importedMethodValue->GetParamInfo())
-                    : GenerateParametersMetadata(importedMethodValue->GetParamInfo(), true))
-            .Concat(GenerateParametersMetadata(importedMethodValue->GetGenericTypeParams()))
-            .Concat(GenerateAttrsMetadata(
-                method.GetAttributeInfo(), extraAttr, importedMethodValue->GetAnnoInfo().mangledName, hasSRetMode));
-        (void)module.GetOrInsertCGFunction(importedMethodValue);
-    }
+    uint8_t hasSRetMode = GetSRetMode(*funcType->GetReturnType(), *module.GetOrInsertCGFunction(&method));
+    methodMD
+        .Concat(method.TestAttr(CHIR::Attribute::STATIC)
+                ? GenerateParametersMetadata(method.GetParams())
+                : GenerateParametersMetadata(method.GetParams(), true))
+        .Concat(GenerateParametersMetadata(method.GetGenericTypeParams()))
+        .Concat(GenerateAttrsMetadata(
+            method.GetAttributeInfo(), extraAttr, method.GetAnnoInfo().mangledName, hasSRetMode));
+    (void)module.GetOrInsertCGFunction(&method);
     return methodMD.CreateMDTuple();
 }
 

@@ -23,23 +23,23 @@ file_identifier "CHIR";
 // 8   SEALED,               Mark whether a declaration is a sealed one.
 // 9   FOREIGN,              Mark whether a declaration is a foreign one.
 // 10  MUT,                  Mark whether a declaration is a mutable one.
-// 11  FINAL,                Mark a Func override a parent class's func, and this func self does not have VIRTUAL Attribute.
+// 11  FINAL,                Mark a Function override a parent class's func, and this func self does not have VIRTUAL Attribute.
 // 12  OPERATOR,             Mark whether a declaration is a operator one.
 // 13  JAVA,                 Mark whether a node is foreign call.
 // 14  READONLY,             'let x = xxx', 'x' enable READONLY attribute
 // 15  CONST,                correspond `const` keyword in Cangjie source code.
 // 16  IMPORTED,             Mark whether variable、func、enum、struct、class is imported from other package.
-// 17  GENERIC_INSTANTIATED, Mark whether a `GlobalVar/Func/Type` is instantiated.
+// 17  GENERIC_INSTANTIATED, Mark whether a `GlobalVar/Function/Type` is instantiated.
 // 18  NO_DEBUG_INFO,        Mark a `Value` doesn't contain debug info, like line/column number.
 // 19  GENERIC,              Mark a declaration is generic
-// 20  INTERNAL,             GlobalVar/Func/Enum/Class/Struct/Interface is visible in current and sub package.
+// 20  INTERNAL,             GlobalVar/Function/Enum/Class/Struct/Interface is visible in current and sub package.
 // 21  COMPILER_ADD,         Mark a `Value` is added by compiler, like "copied default func from interface".
 // compiler attribute
 // 22  NO_REFLECT_INFO,      Mark a `Value` is't used by `reflect` feature.
-// 23  NO_INLINE,            Mark a Func can't be inlined.
+// 23  NO_INLINE,            Mark a Function can't be inlined.
 // 24  NON_RECOMPILE,        only used in `ImportedValue` in incremental compilation, indicate this ImportedValue is converted from a decl in current package that is not recompiled.
 // 25  UNREACHABLE,          Mark a Block is unreachable.
-// 26  NO_SIDE_EFFECT,       Mark a Func does't have side effect.
+// 26  NO_SIDE_EFFECT,       Mark a Function does't have side effect.
 
 enum CHIRTypeKind: uint8 {
   INVALID,
@@ -317,8 +317,6 @@ enum ValueKind: uint8 {
   LITERAL,
   GLOBALVAR,
   PARAMETER,
-  IMPORTED_FUNC,
-  IMPORTED_VAR,
   LOCALVAR,
   FUNC,
   BLOCK,
@@ -399,14 +397,19 @@ table LocalVar {
   srcCodeIdentifier: string(shared);
 }
 
-table GlobalVar {
+// Shared by Function and GlobalVar (maps to C++ GlobalValue)
+table GlobalValue {
   base: Value;
-  rawMangledName: string(shared);
   srcCodeIdentifier: string(shared);
+  rawMangledName: string(shared);
   packageName: string(shared);
-  defaultInitVal: uint32; // use values id
-  associatedInitFunc: uint32; // use values id
   declaredParent: uint32; // use defs id
+}
+
+table GlobalVar {
+  base: GlobalValue;
+  // LiteralValue or Function (GLOBALVAR_INIT), 0 for none or imported var
+  initializer: uint32; // use values id
 }
 
 enum FuncKind: uint8 {
@@ -427,18 +430,9 @@ enum FuncKind: uint8 {
   INSTANCEVAR_INIT
 }
 
-table ImportedValue {
-  base: Value;
-}
+table Function {
+  base: GlobalValue;
 
-table ImportedFunc {
-  base: ImportedValue;
-
-  // func base
-  srcCodeIdentifier: string(shared);
-  rawMangledName: string(shared);
-  packageName: string(shared);
-  declaredParent: uint32; // use defs id
   genericDecl: uint32; // use values id
   funcKind: FuncKind;
   isFastNative: bool;
@@ -454,17 +448,17 @@ table ImportedFunc {
   originalLambdaFuncType: uint32; // use types id. declared type, including `this` type and return type, there may be generic type in it.
   originalLambdaGenericTypeParams: [uint32]; // use types id
   genericTypeParams: [uint32]; // use types id
-  paramDftValHostFunc: uint32; // use values id 
+  paramDftValHostFunc: uint32; // use values id
 
-  paramInfo: [AbstractMethodParam];
-}
+  body: uint32; // use values id, 0 for imported func
+  params: [uint32]; // use values id (signature params for imported func, body params for func with body)
+  retVal: uint32; // use values id
 
-table ImportedVar {
-  base: ImportedValue;
-  packageName: string(shared);
-  srcCodeIdentifier: string(shared);
-  rawMangledName: string(shared);
-  declaredParent: uint32; // use defs id
+  propLoc: DebugLocation;
+
+  localId: uint64;
+  blockId: uint64;
+  blockGroupId: uint64;
 }
 
 table Block {
@@ -482,43 +476,6 @@ table BlockGroup {
   blocks: [uint32];  // use values id
   ownedFunc: uint32;  // use values id
   ownedExpression: uint32;  // use exprs id
-}
-
-table Func {
-  base: Value;
-
-  // func base
-  srcCodeIdentifier: string(shared);
-  rawMangledName: string(shared);
-  packageName: string(shared);
-  declaredParent: uint32; // use defs id
-  genericDecl : uint32; // use values id
-  funcKind: FuncKind;
-  isFastNative: bool;
-  isCFFIWrapper: bool;
-  // originalLambdaInfo : FuncSigInfo
-  // 1. when lambda is lifted to global func, its generic type params and func type may be changed,
-  //  but cjdb need original type to show
-  //  e.g. func foo<T1>() {
-  //      func goo<T2>() {} // this lambda will be lifted to global func
-  //  }
-  //  after being lifted, global func `goo` is as follow:
-  //  func goo<T1, T2>(env: class&) {}
-  originalLambdaFuncType: uint32; // use types id. declared type, including `this` type and return type, there may be generic type in it.
-  originalLambdaGenericTypeParams: [uint32]; // use types id
-  genericTypeParams: [uint32]; // use types id
-  paramDftValHostFunc: uint32; // use values id 
-
-  // FuncBody
-  body: uint32; // use values id
-  params: [uint32]; // use values id
-  retVal: uint32; // use values id
-
-  propLoc: DebugLocation;
-
-  localId: uint64;
-  blockId: uint64;
-  blockGroupId: uint64;
 }
 
 enum CustomDefKind: uint8 {
@@ -1586,9 +1543,7 @@ union ValueElem {
   Parameter,
   LocalVar,
   GlobalVar,
-  Func,
-  ImportedVar,
-  ImportedFunc,
+  Function,
   Block,
   BlockGroup,
 }
@@ -1617,7 +1572,7 @@ table CHIRPackage {
   defs: [CustomTypeDefElem];
   packageInitFunc: uint32;  // use values id
   phase: Phase;
-  packageLiteralInitFunc: uint32;  // use valueID (Func)
+  packageLiteralInitFunc: uint32;  // use valueID (Function)
   maxImportedValueId: uint32;
   maxImportedStructId: uint32;
   maxImportedClassId: uint32;

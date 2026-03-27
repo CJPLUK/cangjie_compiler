@@ -75,7 +75,7 @@ bool LambdaInline::IsLambdaPassToEasyFunc(const Lambda& lambda) const
         return false;
     }
     // 2. judge lambda is only used in one callee apply.
-    auto func = VirtualCast<Func*>(apply->GetCallee());
+    auto func = StaticCast<Function*>(apply->GetCallee());
     CJC_ASSERT(index < func->GetParams().size());
     auto lambdaArg = func->GetParams()[index];
     auto lambdaArgUsers = GetNonDebugUsers(*lambdaArg);

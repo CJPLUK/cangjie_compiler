@@ -196,7 +196,7 @@ void FlatForInExpr::RunOnBlockGroup(BlockGroup& blockGroup)
     }
 }
 
-void FlatForInExpr::RunOnFunc(Func& func)
+void FlatForInExpr::RunOnFunc(Function& func)
 {
     bool isCommonFunctionWithoutBody = func.TestAttr(Attribute::COMMON) && !func.GetBody();
     if (isCommonFunctionWithoutBody) {

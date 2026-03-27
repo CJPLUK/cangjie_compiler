@@ -21,7 +21,7 @@ namespace Cangjie {
 namespace CHIR {
 class Value;
 class CHIRBuilder;
-class FuncBase;
+class Function;
 } // namespace CHIR
 namespace CodeGen {
 class CGContext;
@@ -453,7 +453,7 @@ private:
 class CGTypeMgr {
 public:
     static CGType* GetConcreteCGTypeFor(CGModule& cgMod, const CHIR::Type& chirType,
-        const CGType::TypeExtraInfo& extraInfo = {}, const CHIR::FuncBase* chirFunc = nullptr);
+        const CGType::TypeExtraInfo& extraInfo = {}, const CHIR::Function* chirFunc = nullptr);
 };
 } // namespace CodeGen
 } // namespace Cangjie

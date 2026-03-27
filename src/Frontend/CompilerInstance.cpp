@@ -1206,22 +1206,22 @@ CHIR::Package* CHIRData::GetCurrentCHIRPackage() const
     return chirPkgs[0];
 }
 
-void CHIRData::SetImplicitFuncs(const std::unordered_map<std::string, CHIR::FuncBase*>& funcs)
+void CHIRData::SetImplicitFuncs(const std::unordered_map<std::string, CHIR::Function*>& funcs)
 {
     implicitFuncs = funcs;
 }
 
-std::unordered_map<std::string, CHIR::FuncBase*> CHIRData::GetImplicitFuncs() const
+std::unordered_map<std::string, CHIR::Function*> CHIRData::GetImplicitFuncs() const
 {
     return implicitFuncs;
 }
 
-void CHIRData::SetConstVarInitFuncs(const std::vector<CHIR::FuncBase*>& funcs)
+void CHIRData::SetConstVarInitFuncs(const std::vector<CHIR::Function*>& funcs)
 {
     initFuncsForConstVar = funcs;
 }
 
-std::vector<CHIR::FuncBase*> CHIRData::GetConstVarInitFuncs() const
+std::vector<CHIR::Function*> CHIRData::GetConstVarInitFuncs() const
 {
     return initFuncsForConstVar;
 }

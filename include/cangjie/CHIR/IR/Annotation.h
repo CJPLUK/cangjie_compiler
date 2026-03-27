@@ -20,7 +20,7 @@
 
 namespace Cangjie::CHIR {
 
-class FuncBase;
+class Function;
 class FuncType;
 
 struct Annotation {
@@ -151,11 +151,11 @@ private:
 struct WrappedRawMethod : public Annotation {
 public:
     explicit WrappedRawMethod() = default;
-    explicit WrappedRawMethod(FuncBase* method) : rawMethod(method)
+    explicit WrappedRawMethod(Function* method) : rawMethod(method)
     {
     }
 
-    static FuncBase* Extract(const WrappedRawMethod* input)
+    static Function* Extract(const WrappedRawMethod* input)
     {
         return input->rawMethod;
     }
@@ -168,7 +168,7 @@ public:
     std::string ToString() override;
 
 private:
-    FuncBase* rawMethod{nullptr};
+    Function* rawMethod{nullptr};
 };
 
 /**
