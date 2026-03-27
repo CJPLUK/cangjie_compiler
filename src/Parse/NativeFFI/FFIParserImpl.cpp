@@ -41,7 +41,7 @@ bool IsLitString(Ptr<Expr> expr)
 
 } // namespace
 
-void DiagConflictingAnnos(DiagnosticEngine &diag, Annotation &first, Annotation &second)
+void DiagConflictingAnnos(DiagnosticEngine &diag, Annotation &first, Annotation &second, const std::string& onStr)
 {
     auto minPos = first.begin < second.begin ? first.begin : second.begin;
     auto maxPos = first.end > second.end ? first.end : second.end;
@@ -49,7 +49,7 @@ void DiagConflictingAnnos(DiagnosticEngine &diag, Annotation &first, Annotation 
     diag.DiagnoseRefactor(
         DiagKindRefactor::parse_conflict_annotation,
         MakeRange(minPos, maxPos),
-        first.identifier, second.identifier);
+        first.identifier, second.identifier, onStr);
 }
 
 void FFIParserImpl::CheckAnnotationsConflict(const PtrVector<Annotation>& annos) const
@@ -68,7 +68,12 @@ void FFIParserImpl::CheckAnnotationsConflict(const PtrVector<Annotation>& annos)
     // report diag only in relation with first annotation
     auto first = *candidates.begin();
     for (auto conflicted = std::next(candidates.begin()); conflicted != candidates.end(); ++conflicted) {
-        DiagConflictingAnnos(p.diag, *first, **conflicted);
+        if (first->identifier == (*conflicted)->identifier) {
+            // duplicated builtin annotations are reported with a different diagnostic
+            continue;
+        }
+        auto& lah = p.lookahead;
+        DiagConflictingAnnos(p.diag, *first, **conflicted, lah.Value());
     }
 }
 
