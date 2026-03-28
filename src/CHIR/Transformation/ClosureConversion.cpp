@@ -3023,6 +3023,56 @@ void ClosureConversion::ModifyTypeMismatchInExpr()
     }
 }
 
+void ClosureConversion::ModifyTypeMismatchInFunc(Function& func, size_t paramIndex)
+{
+    // 1. create $Auto_Env_wrapper def
+    auto param = func.GetParam(paramIndex);
+    auto paramType = param->GetType()->StripAllRefs();
+    auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*StaticCast<ClassType*>(paramType));
+
+    // 2. create $Auto_Env_wrapper object
+    auto parentBlock = func.GetBody()->GetEntryBlock();
+    auto autoEnvWrapperType = autoEnvWrapperDef->GetType();
+    auto autoEnvWrapperRefType = builder.GetType<RefType>(autoEnvWrapperType);
+    auto allocate = builder.CreateExpression<Allocate>(autoEnvWrapperRefType, autoEnvWrapperType, parentBlock);
+    parentBlock->InsertExprIntoHead(*allocate);
+
+    // 3. store member var
+    auto memberVar = param;
+    auto storeMemberVar = builder.CreateExpression<StoreElementRef>(
+        builder.GetUnitTy(), memberVar, allocate->GetResult(), std::vector<uint64_t>{0}, parentBlock);
+    storeMemberVar->MoveAfter(allocate);
+
+    // 4. typecast from $Auto_Env_xxx_wrapper to $Auto_Env_InstBase
+    auto typecast = builder.CreateExpression<TypeCast>(param->GetType(), allocate->GetResult(), parentBlock);
+    typecast->MoveAfter(storeMemberVar);
+
+    // 5. replace user
+    ReplaceOperandWithAutoEnvWrapperClass(*param, *typecast->GetResult(), {storeMemberVar});
+}
+
+void ClosureConversion::ModifyTypeMismatchInVTable()
+{
+    for (auto func : package.GetGlobalFuncs()) {
+        if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
+            continue;
+        }
+        auto rawFuncType = func->Get<OverrideSrcFuncType>();
+        if (rawFuncType == nullptr) {
+            continue;
+        }
+        auto rawParamTypes = rawFuncType->GetParamTypes();
+        auto paramTypes = func->GetFuncType()->GetParamTypes();
+        CJC_ASSERT(rawParamTypes.size() == paramTypes.size());
+        for (size_t i = 0; i < rawParamTypes.size(); ++i) {
+            if (rawParamTypes[i]->StripAllRefs()->IsAutoEnvGenericBase() &&
+                paramTypes[i]->StripAllRefs()->IsAutoEnvInstBase()) {
+                ModifyTypeMismatchInFunc(*func, i);
+            }
+        }
+    }
+}
+
 void ClosureConversion::Convert()
 {
     ConvertGlobalFunctions();
@@ -3033,6 +3083,7 @@ void ClosureConversion::Convert()
     ConvertImportedFunctions();
     ConvertExpressions();
     LiftType();
+    ModifyTypeMismatchInVTable();
     ModifyTypeMismatchInExpr();
     CreateVTableForAutoEnvDef();
 }

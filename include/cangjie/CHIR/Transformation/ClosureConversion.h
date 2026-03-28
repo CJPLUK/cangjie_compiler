@@ -130,6 +130,8 @@ private:
     Function* LiftLambdaToGlobalFunc(
         ClassDef& autoEnvImplDef, Lambda& nestedFunc, const std::vector<GenericType*>& genericTypeParams,
         const std::unordered_map<const GenericType*, Type*>& instMap, const std::vector<Value*>& capturedValues);
+    void ModifyTypeMismatchInFunc(Function& func, size_t paramIndex);
+    void ModifyTypeMismatchInVTable();
     void ModifyTypeMismatchInExpr();
     void CastApplyArgAndRetIfNeed(Apply& e);
     void WrapApplyRetVal(Apply& apply);
