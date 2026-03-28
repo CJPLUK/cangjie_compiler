@@ -630,5 +630,7 @@ void ClearPackageModules(std::vector<std::unique_ptr<llvm::Module>>& packageModu
         CJC_NULLPTR_CHECK(llvmCtx);
         delete llvmCtx;
     });
+
+    Utils::FreeIdleMemoryToOS();
 }
 } // namespace Cangjie::CodeGen
