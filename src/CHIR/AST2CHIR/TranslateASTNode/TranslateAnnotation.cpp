@@ -177,7 +177,13 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
     // the specific side can directly use the serialized annotations.
     auto annosArray = decl.annotationsArray.get();
     if (decl.TestAttr(AST::Attribute::IMPORTED) || !annosArray || annosArray->children.empty() ||
-        decl.TestAttr(AST::Attribute::SPECIFIC)) {
+        decl.TestAttr(AST::Attribute::SPECIFIC) || opts.disableReflection) {
+        return {"none"};
+    }
+
+    // In OHOS environment, disable annotations for enum types
+    if (opts.target.env == Triple::Environment::OHOS && parent &&
+        parent->GetCustomKind() == CustomDefKind::TYPE_ENUM) {
         return {"none"};
     }
     auto found = annotationFuncMap.find(&decl);
