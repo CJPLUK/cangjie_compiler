@@ -1,6 +1,7 @@
-#!/bin/sh
 set -e
 . $(dirname $0)/init_env.sh
+
+. $(dirname $0)/envsetup.sh
 
 # hyperlang
 cd $WORKSPACE/cangjie_tools/hyperlangExtension/build;

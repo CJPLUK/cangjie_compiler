@@ -1,4 +1,3 @@
-#!/bin/sh
 set -e
 . $(dirname $0)/init_env.sh
 
