@@ -127,8 +127,7 @@ Function* UpdateOperatorVTable::GenerateBuiltinOverflowOperatorFunc(
     auto packageName = user.GetPackageName();
     auto funcType = isBinary ? builder.GetType<FuncType>(std::vector<Type*>{type, type}, type)
                              : builder.GetType<FuncType>(std::vector<Type*>{type}, type);
-    auto func = builder.CreateFuncWithBody(
-        INVALID_LOCATION, funcType, mangledName, std::move(rawMangledName), "", packageName);
+    auto func = builder.CreateFunction(funcType, mangledName, std::move(rawMangledName), "", packageName);
     cache[std::move(mangledName)] = func;
     func->EnableAttr(Attribute::NO_REFLECT_INFO); // because it is in extend
     func->EnableAttr(Attribute::NO_DEBUG_INFO);

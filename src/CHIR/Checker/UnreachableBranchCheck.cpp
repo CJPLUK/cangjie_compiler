@@ -30,7 +30,7 @@ std::string GetKeyWordBySourceExpr(const Branch& branch)
 void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadNum)
 {
     if (threadNum == 1) {
-        for (auto func : package.GetGlobalFuncs()) {
+        for (auto func : package.GetGlobalFuncsWithBody()) {
             /* The following code should not report warning.
             interface I {
                 func test() : Bool {
@@ -48,7 +48,7 @@ void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadN
     } else {
         Utils::TaskQueue taskQueue(threadNum);
         // Check in generic decl is not currently supported, as constant analysis does not yet support.
-        for (auto func : package.GetGlobalFuncs()) {
+        for (auto func : package.GetGlobalFuncsWithBody()) {
             if (func->Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
                 continue;
             }

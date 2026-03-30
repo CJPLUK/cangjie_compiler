@@ -387,9 +387,7 @@ void ConstEvalPass::ReplaceGlobalConstantInitializers(
     Package& package, BCHIRInterpreter& interpreter, BCHIRLinker& linker)
 {
     Utils::ProfileRecorder recorder("Constant Evaluation", "Replace Global Constants");
-    auto allFuncs = package.GetGlobalFuncs();
-    std::vector<Function*> funcsToBeRemoved;
-    std::unordered_set<Expression*> expressionsToBeRemoved;
+    auto allFuncs = package.GetGlobalFunctions();
     auto it = allFuncs.begin();
     while (it != allFuncs.end()) {
         if ((*it)->GetFuncKind() != FuncKind::GLOBALVAR_INIT || !(*it)->TestAttr(Attribute::CONST)) {
@@ -406,25 +404,21 @@ void ConstEvalPass::ReplaceGlobalConstantInitializers(
             ++it;
             continue;
         } else if (optNewBody.value() == nullptr) {
-            auto users = (*it)->GetUsers();
-            expressionsToBeRemoved.insert(users.begin(), users.end());
-            funcsToBeRemoved.emplace_back(*it);
+            for (auto user : (*it)->GetUsers()) {
+                user->RemoveSelfFromBlock();
+            }
+            (*it)->DestroySelf();
             it = allFuncs.erase(it);
         } else {
             (*optNewBody)
                 ->GetEntryBlock()
                 ->AppendExpression(builder.CreateTerminator<Exit>((*optNewBody)->GetEntryBlock()));
 
-            (*it)->DestroySelf();
-            (*it)->InitBody(**optNewBody);
+            (*it)->ReplaceBody(**optNewBody);
             ++it;
         }
     }
-
-    for (auto e : expressionsToBeRemoved) {
-        e->RemoveSelfFromBlock();
-    }
-    package.SetGlobalFuncs(allFuncs);
+    package.SetAllGlobalFuncs(std::move(allFuncs));
 }
 
 std::optional<Cangjie::CHIR::BlockGroup*> ConstEvalPass::CreateNewInitializer(

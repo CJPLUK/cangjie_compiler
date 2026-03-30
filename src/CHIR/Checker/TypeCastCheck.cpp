@@ -20,7 +20,7 @@ TypeCastCheck::TypeCastCheck(DiagAdapter& diag) : diag(diag)
 void TypeCastCheck::RunOnPackage(const Package& package, size_t threadNum)
 {
     std::vector<Function*> funcs;
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         if (!func->TestAttr(Attribute::UNSAFE)) {
             funcs.emplace_back(func);
         }

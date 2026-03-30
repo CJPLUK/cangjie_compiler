@@ -13,7 +13,7 @@ using namespace Cangjie::CHIR;
 
 void GetRefToArrayElem::RunOnPackage(const Package& package, CHIRBuilder& builder)
 {
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         RunOnFunc(*func, builder);
     }
 }

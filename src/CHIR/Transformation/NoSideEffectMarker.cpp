@@ -17,14 +17,14 @@ NoSideEffectMarker::NoSideEffectMarker(Package& package) : package(package)
 void NoSideEffectMarker::Run()
 {
     Utils::ProfileRecorder recorder("Canonicalization", "NoSideEffectMarker");
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         for (auto element : functionWhiteList) {
             if (IsExpectedFunction(*func, element)) {
                 func->EnableAttr(Attribute::NO_SIDE_EFFECT);
             }
         }
     }
-    for (auto func : package.GetImportedFunctions()) {
+    for (auto func : package.GetGlobalFuncsWithoutBody()) {
         for (auto element : functionWhiteList) {
             if (IsExpectedFunction(*func, element)) {
                 func->EnableAttr(Attribute::NO_SIDE_EFFECT);

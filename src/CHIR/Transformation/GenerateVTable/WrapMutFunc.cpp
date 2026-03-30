@@ -128,16 +128,8 @@ void WrapMutFunc::CreateMutFuncWrapper(Function& rawFunc, CustomTypeDef& curDef,
 
     auto funcIdentifier = CHIRMangling::GenerateVirtualFuncMangleName(&rawFunc, curDef, &srcClassTy, false);
     auto pkgName = curDef.GetPackageName();
-
-    bool isImported = curDef.TestAttr(Attribute::IMPORTED);
-    Function* func = nullptr;
-    if (isImported) {
-        func = builder.CreateImportedFuncSig(wrapperFuncTy, funcIdentifier, "", "", pkgName);
-    } else {
-        func = builder.CreateFuncWithBody(INVALID_LOCATION, wrapperFuncTy, funcIdentifier, "", "", pkgName);
-    }
+    auto func = builder.CreateFunction(wrapperFuncTy, funcIdentifier, "", "", pkgName);
     wrapperFuncs.emplace(funcIdentifier, func);
-    CJC_NULLPTR_CHECK(func);
 
     func->Set<WrappedRawMethod>(&rawFunc);
     func->AppendAttributeInfo(rawFunc.GetAttributeInfo());
@@ -145,10 +137,12 @@ void WrapMutFunc::CreateMutFuncWrapper(Function& rawFunc, CustomTypeDef& curDef,
     func->EnableAttr(Attribute::NO_REFLECT_INFO);
     curDef.AddMethod(func);
 
-    if (isImported) {
+    if (curDef.TestAttr(Attribute::IMPORTED)) {
+        func->EnableAttr(Attribute::IMPORTED);
         return;
     }
 
+    func->DisableAttr(Attribute::IMPORTED);
     // create the func body
     BlockGroup* body = builder.CreateBlockGroup(*func);
     func->InitBody(*body);

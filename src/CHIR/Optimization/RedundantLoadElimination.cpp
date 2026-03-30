@@ -18,7 +18,7 @@ RedundantLoadElimination::RedundantLoadElimination()
 
 void RedundantLoadElimination::RunOnPackage(const Ptr<const Package>& package, bool isDebug) const
 {
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         RunOnFunc(func, isDebug);
     }
 }

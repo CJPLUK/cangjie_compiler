@@ -334,40 +334,37 @@ Function* WrapVirtualFunc::CreateVirtualWrapperIfNeeded(const VirtualMethodInfo&
     bool isImported =
         customTypeDef.TestAttr(Attribute::IMPORTED) && parentTy.GetCustomTypeDef()->TestAttr(Attribute::IMPORTED);
     bool parentIsFromExtend = ParentDefIsFromExtend(customTypeDef, *parentTy.GetClassDef());
-    Function* funcBase = nullptr;
+    auto wrapperFunc = builder.CreateFunction(wrapperTy,
+        funcIdentifier, funcSrcIdentifier, rawMangledName, packageName, genericTable.funcGenericTypeParams);
+    wrapperFunc->Set<WrappedRawMethod>(curFunc);
+    wrapperFunc->AppendAttributeInfo(curFunc->GetAttributeInfo());
+    wrapperFunc->EnableAttr(Attribute::NO_REFLECT_INFO);
+    wrapperFunc->EnableAttr(Attribute::NO_DEBUG_INFO);
     if (isImported && !parentIsFromExtend) {
-        funcBase = builder.CreateImportedFuncSig(wrapperTy,
-            funcIdentifier, funcSrcIdentifier, rawMangledName, packageName, genericTable.funcGenericTypeParams);
+        wrapperFunc->EnableAttr(Attribute::IMPORTED);
     } else {
-        funcBase = builder.CreateFuncWithBody(INVALID_LOCATION, wrapperTy, funcIdentifier,
-            funcSrcIdentifier, "", packageName, genericTable.funcGenericTypeParams);
+        wrapperFunc->DisableAttr(Attribute::IMPORTED);
     }
-    CJC_NULLPTR_CHECK(funcBase);
-    funcBase->Set<WrappedRawMethod>(curFunc);
-    funcBase->AppendAttributeInfo(curFunc->GetAttributeInfo());
-    funcBase->EnableAttr(Attribute::NO_REFLECT_INFO);
-    funcBase->EnableAttr(Attribute::NO_DEBUG_INFO);
-    customTypeDef.AddMethod(funcBase);
+    customTypeDef.AddMethod(wrapperFunc);
     // For cjmp, try delete virutal wrapper function when final func gererated.
-    TryDeleteVirtuallWrapperFunc(customTypeDef, *funcBase, builder);
-    funcBase->Set<LinkTypeInfo>(Linkage::EXTERNAL);
+    TryDeleteVirtuallWrapperFunc(customTypeDef, *wrapperFunc, builder);
+    wrapperFunc->Set<LinkTypeInfo>(Linkage::EXTERNAL);
     if (parentIsFromExtend) {
         // weak_odr is invalid in windows, we have to set internal
         if (targetIsWin) {
-            funcBase->Set<LinkTypeInfo>(Linkage::INTERNAL);
+            wrapperFunc->Set<LinkTypeInfo>(Linkage::INTERNAL);
         } else {
-            funcBase->Set<LinkTypeInfo>(Linkage::WEAK_ODR);
+            wrapperFunc->Set<LinkTypeInfo>(Linkage::WEAK_ODR);
         }
     }
 
-    wrapperCache[std::move(funcIdentifier)] = funcBase;
+    wrapperCache[std::move(funcIdentifier)] = wrapperFunc;
     if (isImported && !parentIsFromExtend) {
-        return funcBase;
+        return wrapperFunc;
     }
     // 5. Create the function body if the raw function is not imported
-    auto func = StaticCast<Function*>(funcBase);
-    CreateWrapperFuncBody(*func, funcInfo, selfTy, genericTable);
-    return func;
+    CreateWrapperFuncBody(*wrapperFunc, funcInfo, selfTy, genericTable);
+    return wrapperFunc;
 }
 
 VirtualWrapperDepMap&& WrapVirtualFunc::GetCurVirtFuncWrapDep()

@@ -390,7 +390,7 @@ void BoxRecursionValueType::InsertBoxAndUnboxExprForRecursionValueType()
         }
         return VisitResult::CONTINUE;
     };
-    for (auto func : pkg.GetGlobalFuncs()) {
+    for (auto func : pkg.GetGlobalFuncsWithBody()) {
         Visitor::Visit(*func, visitor);
     }
 }

@@ -204,7 +204,7 @@ std::vector<AnnoInstance> CreateAnnoInstFromConstEval(const Function& func)
 AnnoMap CreateAnnoInstFromConstEvalRes(ConstEvalResult& ev)
 {
     std::unordered_map<const Decl*, std::vector<AnnoInstance>> annoInstMap{};
-    for (auto func : ev.pkg->GetGlobalFuncs()) {
+    for (auto func : ev.pkg->GetGlobalFuncsWithBody()) {
         if (func->GetFuncKind() == FuncKind::ANNOFACTORY_FUNC) {
             auto v = CreateAnnoInstFromConstEval(*func);
             if (!v.empty()) {

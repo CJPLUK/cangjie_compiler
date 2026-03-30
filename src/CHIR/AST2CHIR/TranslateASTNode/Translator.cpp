@@ -174,7 +174,7 @@ Ptr<Function> Translator::CreateEmptyGVInitFunc(const std::string& mangledName, 
         func->ReplaceBody(*blockGroup);
     } else {
         auto funcTy = builder.GetType<FuncType>(std::vector<Type*>{}, builder.GetUnitTy());
-        func = builder.CreateFuncWithBody(INVALID_LOCATION, funcTy, mangledName, identifier, rawMangledName, pkgName);
+        func = builder.CreateFunction(funcTy, mangledName, identifier, rawMangledName, pkgName);
         blockGroup = builder.CreateBlockGroup(*func);
         func->SetFuncKind(FuncKind::GLOBALVAR_INIT);
         func->EnableAttr(Attribute::NO_REFLECT_INFO);

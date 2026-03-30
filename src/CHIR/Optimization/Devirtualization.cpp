@@ -324,15 +324,16 @@ void Devirtualization::InstantiateFuncIfPossible(CHIRBuilder& builder, std::vect
         if (frozenInstFuncMap.count(newId) != 0) {
             newFunc = frozenInstFuncMap.at(newId);
         } else {
-            newFunc = builder.CreateFuncWithBody(callee->GetDebugLocation(), instFuncType, newId,
+            newFunc = builder.CreateFunction(instFuncType, newId,
                 callee->GetSrcCodeIdentifier(), callee->GetRawMangledName(), callee->GetPackageName());
-            
+            newFunc->SetDebugLocation(callee->GetDebugLocation());
             newFunc->AppendAttributeInfo(callee->GetAttributeInfo());
             newFunc->DisableAttr(Attribute::GENERIC);
             if (!apply->GetInstantiatedTypeArgs().empty()) {
                 newFunc->EnableAttr(Attribute::GENERIC_INSTANTIATED);
             }
             newFunc->Set<LinkTypeInfo>(Linkage::INTERNAL);
+            newFunc->SetGenericDecl(*callee);
 
             auto oriBlockGroup = callee->GetBody();
             BlockGroupCopyHelper helper(builder);
@@ -650,7 +651,7 @@ std::vector<Function*> Devirtualization::CollectContainInvokeExprFuncs(const Ptr
 {
     std::vector<Function*> funcs;
     // Collect functions that contain the invoke statement.
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         if (CheckFuncHasInvoke(*func->GetBody())) {
             funcs.emplace_back(func);
         }

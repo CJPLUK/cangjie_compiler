@@ -324,13 +324,13 @@ enum ValueKind: uint8 {
 }
 
 table Value {
-base: Base;
-type: uint32; // use types id
-identifier: string(shared);
-kind: ValueKind;
-valueID: uint32; // current id in values
-attributes: uint64;
-annoInfo: AnnoInfo;
+  base: Base;
+  type: uint32; // use types id
+  identifier: string(shared);
+  kind: ValueKind;
+  valueID: uint32; // current id in values
+  attributes: uint64;
+  annoInfo: AnnoInfo;
 }
 
 enum ConstantValueKind: uint8 {
@@ -403,6 +403,7 @@ table GlobalValue {
   rawMangledName: string(shared);
   packageName: string(shared);
   declaredParent: uint32; // use defs id
+  features: [string]; // features set to which declaration belongs
 }
 
 table GlobalVar {
@@ -1572,11 +1573,6 @@ table CHIRPackage {
   packageInitFunc: uint32;  // use values id
   phase: Phase;
   packageLiteralInitFunc: uint32;  // use valueID (Function)
-  maxImportedValueId: uint32;
-  maxImportedStructId: uint32;
-  maxImportedClassId: uint32;
-  maxImportedEnumId: uint32;
-  maxImportedExtendId: uint32;
 }
 
 root_type CHIRPackage;

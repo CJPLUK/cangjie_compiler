@@ -395,7 +395,7 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
 
     // step 4: set `CompileTimeValue` for lambda
     Utils::ProfileRecorder::Start("TranslateAllDecls", "SetCompileTimeValueFlag");
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         if (func->TestAttr(Attribute::CONST)) {
             SetCompileTimeValueFlagRecursively(*func);
         }

@@ -39,14 +39,14 @@ GlobalVar* Translator::TranslateCustomAnnoInstanceSig(const Expr& expr, const Fu
     name += MANGLE_COUNT_PREFIX;
     name += MangleUtils::DecimalToManglingNumber(std::to_string(i));
     auto varName = name + MANGLE_SUFFIX;
-    auto gv = builder.CreateGlobalVarWithInit(INVALID_LOCATION,
+    auto gv = builder.CreateGlobalVar(
         builder.GetType<RefType>(TranslateType(*expr.ty)), varName, varName, "", func.GetPackageName());
     gv->EnableAttr(Attribute::COMPILER_ADD);
     gv->EnableAttr(Attribute::CONST);
     gv->Set<LinkTypeInfo>(Linkage::INTERNAL);
     auto initName = std::move(name) + "iiHv";
     auto ty = builder.GetType<FuncType>(std::vector<Type*>{}, builder.GetUnitTy());
-    auto init = builder.CreateFuncWithBody(INVALID_LOCATION, ty, initName, initName, "", func.GetPackageName());
+    auto init = builder.CreateFunction(ty, initName, initName, "", func.GetPackageName());
     init->SetFuncKind(FuncKind::GLOBALVAR_INIT);
     init->Set<LinkTypeInfo>(Linkage::INTERNAL);
     init->EnableAttr(Attribute::CONST);
@@ -204,7 +204,8 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
             std::to_string(decl.begin.line) + " is " + mangledName + '\n';
         std::cout << ms;
     }
-    auto func = builder.CreateFuncWithBody(loc, funcType, mangledName, mangledName, "", decl.fullPackageName);
+    auto func = builder.CreateFunction(funcType, mangledName, mangledName, "", decl.fullPackageName);
+    func->SetDebugLocation(loc);
     func->SetFuncKind(FuncKind::ANNOFACTORY_FUNC);
     func->EnableAttr(Attribute::CONST);
     annoFactoryFuncs.emplace_back(&decl, func);

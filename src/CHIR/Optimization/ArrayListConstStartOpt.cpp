@@ -160,7 +160,7 @@ void ArrayListConstStartOpt::RewriteStartWithConstZero(Expression& oldExpr) cons
 
 void ArrayListConstStartOpt::RunOnPackage(const Ptr<const Package>& package)
 {
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         bool isArrayListIteratorFunc = InWhiteList(*func, ARRAYLIST_ITERATOR_FUNC_LIST);
         // only inline array func into arrayList and arrayListIterator func
         if (!isArrayListIteratorFunc && !InWhiteList(*func, ARRAYLIST_FUNC_LIST)) {

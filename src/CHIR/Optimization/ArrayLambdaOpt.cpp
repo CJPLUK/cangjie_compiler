@@ -19,7 +19,7 @@ ArrayLambdaOpt::ArrayLambdaOpt(CHIRBuilder& builder) : builder(builder)
 
 void ArrayLambdaOpt::RunOnPackage(const Ptr<const Package>& package, bool isDebug)
 {
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         RunOnFunc(func, isDebug);
     }
 }

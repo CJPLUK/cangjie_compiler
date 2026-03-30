@@ -194,7 +194,7 @@ template <bool ForConstEval> void CHIR2BCHIR::TranslateExtends(const Package& ch
 
 template <bool ForConstEval> void CHIR2BCHIR::TranslateGlobalVars(const Package& chirPkg)
 {
-    for (const auto gv : chirPkg.GetGlobalVars()) {
+    for (const auto gv : chirPkg.GetGlobalVarsWithInit()) {
         if constexpr (ForConstEval) {
             if (!gv->IsCompileTimeValue()) {
                 // Global variable not required for const-evaluation.
@@ -222,7 +222,7 @@ template <bool ForConstEval> void CHIR2BCHIR::TranslateGlobalVars(const Package&
 
 template <bool ForConstEval> void CHIR2BCHIR::TranslateFunctions(const Package& chirPkg)
 {
-    for (const auto f : chirPkg.GetGlobalFuncs()) {
+    for (const auto f : chirPkg.GetGlobalFuncsWithBody()) {
         auto fIdent = f->GetIdentifierWithoutPrefix();
         if (isIncremental && bchir.GetFunctions().find(fIdent) != bchir.GetFunctions().end()) {
             bchir.RemoveFunction(fIdent);

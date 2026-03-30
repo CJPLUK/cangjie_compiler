@@ -184,24 +184,34 @@ void Package::AddStruct(StructDef* item)
     structs.emplace_back(item);
 }
 
-void Package::SetGlobalFuncs(const std::vector<Function*>& funcs)
+std::vector<Function*> Package::GetGlobalFuncsWithBody(bool includeSrcCodeImported) const
 {
-    globalFuncs = funcs;
+    std::vector<Function*> funcs;
+    for (auto func : globalFuncs) {
+        if (func->GetBody() == nullptr) {
+            continue;
+        }
+        if (!includeSrcCodeImported && func->IsSrcCodeImported()) {
+            continue;
+        }
+        funcs.emplace_back(func);
+    }
+    return funcs;
 }
 
-void Package::SetGlobalVars(std::vector<GlobalVar*>&& vars)
+std::vector<GlobalVar*> Package::GetGlobalVarsWithInit(bool includeSrcCodeImported) const
 {
-    std::swap(globalVars, vars);
-}
-
-std::vector<Function*> Package::GetGlobalFuncs() const
-{
-    return globalFuncs;
-}
-
-std::vector<GlobalVar*> Package::GetGlobalVars() const
-{
-    return globalVars;
+    std::vector<GlobalVar*> vars;
+    for (auto var : globalVars) {
+        if (var->GetInitializerValue() == nullptr) {
+            continue;
+        }
+        if (!includeSrcCodeImported && var->IsSrcCodeImported()) {
+            continue;
+        }
+        vars.emplace_back(var);
+    }
+    return vars;
 }
 
 std::string Package::ToString() const
@@ -211,10 +221,10 @@ std::string Package::ToString() const
     ss << "packageAccessLevel: " << PackageAccessLevelToString(pkgAccessLevel) << "\n";
     ss << "packageInitFunc: " << GetPackageInitFunc()->GetIdentifier() << "\n";
     ss << "\n==========================imports===============================\n";
-    for (auto& it : importedGlobalVars) {
+    for (auto& it : GetGlobalVarsWithoutInit()) {
         ss << GetImportedVarStr(*it) << "\n";
     }
-    for (auto& it : importedFuncs) {
+    for (auto& it : GetGlobalFuncsWithoutBody()) {
         ss << GetImportedFuncStr(*it) << "\n";
     }
     ss << "\n\n";
@@ -248,41 +258,66 @@ std::string Package::ToString() const
         ss << it->ToString() << "\n\n";
     }
     ss << "\n==========================funcs=================================\n";
-    for (auto& it : GetGlobalFuncs()) {
+    for (auto& it : GetGlobalFuncsWithBody()) {
         ss << GetFuncStr(*it);
         ss << "\n\n";
     }
     return ss.str();
 }
 
-void Package::AddImportedGlobalVar(GlobalVar* item)
+std::vector<GlobalVar*> Package::GetGlobalVarsWithoutInit() const
 {
-    importedGlobalVars.emplace_back(item);
-}
-
-void Package::SetImportedGlobalVars(std::vector<GlobalVar*>&& items)
-{
-    importedGlobalVars = std::move(items);
-}
-
-std::vector<GlobalVar*> Package::GetImportedGlobalVars() const
-{
+    std::vector<GlobalVar*> importedGlobalVars;
+    for (auto var : globalVars) {
+        if (var->TestAttr(Attribute::IMPORTED) && !var->IsSrcCodeImported()) {
+            importedGlobalVars.emplace_back(var);
+        }
+    }
     return importedGlobalVars;
 }
 
-void Package::AddImportedFunction(Function* item)
+std::vector<Function*> Package::GetGlobalFuncsWithoutBody(bool includePureAbstract) const
 {
-    importedFuncs.emplace_back(item);
+    std::vector<Function*> funcs;
+    for (auto func : globalFuncs) {
+        if (func->GetBody() != nullptr) {
+            continue;
+        }
+        if (!includePureAbstract && func->IsPureAbstract()) {
+            continue;
+        }
+        funcs.emplace_back(func);
+    }
+    return funcs;
 }
 
-void Package::SetImportedFunctions(std::vector<Function*>&& items)
+void Package::SetAllGlobalFuncs(std::vector<Function*>&& funcs)
 {
-    importedFuncs = std::move(items);
+    globalFuncs = std::move(funcs);
 }
 
-std::vector<Function*> Package::GetImportedFunctions() const
+std::vector<Function*> Package::GetGlobalFunctions(bool includePureAbstract) const
 {
-    return importedFuncs;
+    if (includePureAbstract) {
+        return globalFuncs;
+    }
+    std::vector<Function*> funcs;
+    for (auto func : globalFuncs) {
+        if (!func->IsPureAbstract()) {
+            funcs.emplace_back(func);
+        }
+    }
+    return globalFuncs;
+}
+
+void Package::SetAllGlobalVars(std::vector<GlobalVar*>&& vars)
+{
+    globalVars = std::move(vars);
+}
+
+std::vector<GlobalVar*> Package::GetGlobalVars() const
+{
+    return globalVars;
 }
 
 void Package::Dump() const

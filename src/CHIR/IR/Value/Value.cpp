@@ -378,6 +378,11 @@ GlobalVar::GlobalVar(Type* ty, const std::string& identifier, const std::string&
 {
 }
 
+bool GlobalVar::IsSrcCodeImported() const
+{
+    return TestAttr(Attribute::IMPORTED) && initializer != nullptr;
+}
+
 bool GlobalVar::IsLocalConst() const
 {
     // lifted local const var is marked COMPILER_ADD
@@ -390,6 +395,17 @@ void GlobalVar::DestroySelf()
     if (declaredParent) {
         Utils::RemoveFromVec(declaredParent->staticVars, this);
     }
+}
+
+void GlobalVar::DestroyInitializer()
+{
+    if (auto initFunc = GetInitFunc()) {
+        for (auto user : initFunc->GetUsers()) {
+            user->RemoveSelfFromBlock();
+        }
+        initFunc->DestroySelf();
+    }
+    initializer = nullptr;
 }
 
 std::string GlobalVar::ToString() const
@@ -1053,6 +1069,16 @@ bool Function::IsVirtualFunc() const
     return TestAttr(Attribute::VIRTUAL) || TestAttr(Attribute::FINAL);
 }
 
+bool Function::IsPureAbstract() const
+{
+    return TestAttr(Attribute::ABSTRACT) && body == nullptr;
+}
+
+bool Function::IsSrcCodeImported() const
+{
+    return TestAttr(Attribute::IMPORTED) && body != nullptr;
+}
+
 Function* Function::GetGenericDecl() const
 {
     return genericDecl;
@@ -1182,6 +1208,7 @@ void Function::SetBlockGroupId(uint64_t id)
 
 void Function::DestroyFuncBody()
 {
+    retValue = nullptr;
     if (body == nullptr) {
         return;
     }
@@ -1220,7 +1247,6 @@ void Function::InitBody(BlockGroup& newBody)
 void Function::ReplaceBody(BlockGroup& newBody)
 {
     DestroyFuncBody();
-    parameters.clear();
     InitBody(newBody);
 }
 
@@ -1333,6 +1359,16 @@ const std::string& GlobalValue::GetRawMangledName() const
 void GlobalValue::SetRawMangledName(const std::string& name)
 {
     rawMangledName = name;
+}
+
+const std::set<std::string>& GlobalValue::GetFeatures() const
+{
+    return features;
+}
+
+void GlobalValue::SetFeatures(const std::set<std::string>& newFeatures)
+{
+    features = newFeatures;
 }
 
 CustomTypeDef* GlobalValue::GetParentCustomTypeDef() const

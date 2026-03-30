@@ -24,7 +24,7 @@ void DevirtualizationInfo::CollectInfo()
 {
     // Function that collect all global function which has more concrete type than
     // explicit return type in order to infer devirtualization more precise.
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         CollectReturnTypeMap(*func);
     }
 
@@ -138,7 +138,7 @@ void DevirtualizationInfo::CollectReturnTypeMap(Function& func)
 // after inline, the result type is more accuracy than before, refresh it
 void DevirtualizationInfo::FreshRetMap()
 {
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         auto res = GetRuntimeTypeFromFunc(func->GetReturnValue());
         if (res != nullptr) {
             realRuntimeRetTyMap[func] = res;

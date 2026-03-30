@@ -182,7 +182,7 @@ void GenerateVTable::UpdateFuncCall()
         }
         return VisitResult::CONTINUE;
     };
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         Visitor::Visit(*func, preVisit);
     }
 }

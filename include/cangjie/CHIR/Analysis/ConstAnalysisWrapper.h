@@ -114,7 +114,7 @@ private:
     void RunOnPackageInSerial(const Package* package, bool isDebug, Args&&... args)
     {
         SetUpGlobalVarState(*package, isDebug, std::forward<Args>(args)...);
-        for (auto func : package->GetGlobalFuncs()) {
+        for (auto func : package->GetGlobalFuncsWithBody()) {
             auto judgeRes = ChooseAnalysisStrategy(*func);
             if (judgeRes == AnalysisStrategy::ActiveStatePool) {
                 if (auto res = RunOnFuncWithPool(func, isDebug, std::forward<Args>(args)...)) {
@@ -137,7 +137,7 @@ private:
         using ResTyPool = std::unique_ptr<Results<ConstPoolDomain>>;
         std::vector<Cangjie::Utils::TaskResult<ResTy>> results;
         std::vector<Cangjie::Utils::TaskResult<ResTyPool>> resultsPool;
-        for (auto func : package->GetGlobalFuncs()) {
+        for (auto func : package->GetGlobalFuncsWithBody()) {
             auto judgeRes = ChooseAnalysisStrategy(*func);
             if (judgeRes == AnalysisStrategy::ActiveStatePool) {
                 resultsPool.emplace_back(taskQueue.AddTask<ResTyPool>(
@@ -172,7 +172,7 @@ private:
     template <typename... Args> void SetUpGlobalVarState(const Package& package, bool isDebug, Args&&... args)
     {
         ConstAnalysis<ConstStatePool>::InitialiseLetGVState(package, builder);
-        for (auto gv : package.GetGlobalVars()) {
+        for (auto gv : package.GetGlobalVarsWithInit()) {
             if (auto init = gv->GetInitFunc();
                 gv->TestAttr(Attribute::READONLY) && init && resultsMap.find(init) == resultsMap.end()) {
                 // Multiple global vars may be initialised in the same function.

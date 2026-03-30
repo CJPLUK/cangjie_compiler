@@ -149,10 +149,7 @@ Function* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
     if (func = TryGetFromCache<Value, Function>(GLOBAL_VALUE_PREFIX + mangledName, deserializedVals); func) {
         // found deserialized one
         body = builder.CreateBlockGroup(*func);
-        auto params = func->GetParams();
-        CJC_ASSERT(params.size() == 1);
         func->ReplaceBody(*body);
-        func->AddParam(*params[0]);
         func->SetDebugLocation(DebugLocation());
     } else {
         auto identifier = decl.identifier + POSTFIX;
@@ -174,7 +171,8 @@ Function* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
         auto loc = DebugLocation(TranslateLocationWithoutScope(builder.GetChirContext(), decl.begin, decl.end));
 
         auto customTypeDef = chirTy.GetGlobalNominalCache(outerDecl);
-        func = builder.CreateFuncWithBody(loc, funcType, mangledName, identifier, rawMangledName, pkgName);
+        func = builder.CreateFunction(funcType, mangledName, identifier, rawMangledName, pkgName);
+        func->SetDebugLocation(loc);
         customTypeDef->AddMethod(func);
         func->SetFuncKind(FuncKind::INSTANCEVAR_INIT);
         func->EnableAttr(Attribute::PRIVATE);

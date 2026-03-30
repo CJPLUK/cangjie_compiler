@@ -139,19 +139,14 @@ CHIR::Value* CGPkgContext::FindCHIRGlobalValue(const std::string& mangledName)
     return quickCHIRValues.Do(
         [&capturedChirPkg, &mangledName](std::unordered_map<std::string, CHIR::Value*>& object) -> CHIR::Value* {
             if (object.empty()) {
-                object.reserve(capturedChirPkg.GetGlobalFuncs().size() + capturedChirPkg.GetGlobalVars().size() +
-                    capturedChirPkg.GetImportedGlobalVars().size() + capturedChirPkg.GetImportedFunctions().size());
-                for (auto chirFunc : capturedChirPkg.GetGlobalFuncs()) {
+                auto globalFuncs = capturedChirPkg.GetGlobalFunctions();
+                auto globalVars = capturedChirPkg.GetGlobalVars();
+                object.reserve(globalFuncs.size() + globalVars.size());
+                for (auto chirFunc : globalFuncs) {
                     object.emplace(chirFunc->GetIdentifierWithoutPrefix(), chirFunc);
                 }
-                for (auto chirGv : capturedChirPkg.GetGlobalVars()) {
+                for (auto chirGv : globalVars) {
                     object.emplace(chirGv->GetIdentifierWithoutPrefix(), chirGv);
-                }
-                for (auto importedFunc : capturedChirPkg.GetImportedFunctions()) {
-                    object.emplace(importedFunc->GetIdentifierWithoutPrefix(), importedFunc);
-                }
-                for (auto importedVar : capturedChirPkg.GetImportedGlobalVars()) {
-                    object.emplace(importedVar->GetIdentifierWithoutPrefix(), importedVar);
                 }
             }
 

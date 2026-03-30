@@ -176,10 +176,9 @@ public:
     }
     Parameter* CreateParameter(Type* ty, const DebugLocation& loc, Function& parentFunc);
     Parameter* CreateParameter(Type* ty, const DebugLocation& loc, Lambda& parentLambda);
-    GlobalVar* CreateGlobalVarWithInit(const DebugLocation& loc, RefType* ty, const std::string& mangledName,
+
+    GlobalVar* CreateGlobalVar(Type* ty, const std::string& mangledName,
         const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName);
-    GlobalVar* CreateImportedGlobalVar(Type* ty, const std::string& mangledName, const std::string& srcCodeIdentifier,
-        const std::string& rawMangledName, const std::string& packageName, bool addToIR = true);
     // ===--------------------------------------------------------------------===//
     // Expression API
     // ===--------------------------------------------------------------------===//
@@ -265,13 +264,9 @@ public:
         return expr;
     }
 
-    Function* CreateFuncWithBody(const DebugLocation& loc, FuncType* funcTy, const std::string& mangledName,
+    Function* CreateFunction(FuncType* funcTy, const std::string& mangledName,
         const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
         const std::vector<GenericType*>& genericTypeParams = {});
-
-    Function* CreateImportedFuncSig(Type* funcTy, const std::string& mangledName,
-        const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
-        const std::vector<GenericType*>& genericTypeParams = {}, bool addToIR = true);
     
     // ===--------------------------------------------------------------------===//
     // StructDef API

@@ -583,13 +583,23 @@ flatbuffers::Offset<PackageFormat::LocalVar> CHIRSerializer::CHIRSerializerImpl:
 }
 
 template <>
-flatbuffers::Offset<PackageFormat::GlobalVar> CHIRSerializer::CHIRSerializerImpl::Serialize(const GlobalVar& obj)
+flatbuffers::Offset<PackageFormat::GlobalValue> CHIRSerializer::CHIRSerializerImpl::Serialize(const GlobalValue& obj)
 {
     auto valueOffset = Serialize<PackageFormat::Value>(static_cast<const Value&>(obj));
     auto declaredParent = obj.GetParentCustomTypeDef() ? GetId<CustomTypeDef>(obj.GetParentCustomTypeDef()) : 0u;
-    auto globalSymbolOffset = PackageFormat::CreateGlobalValueDirect(builder, valueOffset,
+    std::vector<flatbuffers::Offset<flatbuffers::String>> features;
+    for (const auto& name : obj.GetFeatures()) {
+        features.push_back(builder.CreateSharedString(name));
+    }
+    return PackageFormat::CreateGlobalValueDirect(builder, valueOffset,
         obj.GetSrcCodeIdentifier().data(), obj.GetRawMangledName().data(), obj.GetPackageName().data(),
-        declaredParent);
+        declaredParent, features.empty() ? nullptr : &features);
+}
+
+template <>
+flatbuffers::Offset<PackageFormat::GlobalVar> CHIRSerializer::CHIRSerializerImpl::Serialize(const GlobalVar& obj)
+{
+    auto globalSymbolOffset = Serialize<PackageFormat::GlobalValue>(static_cast<const GlobalValue&>(obj));
     uint32_t initializerId = obj.GetInitializerValue() ? GetId<Value>(obj.GetInitializerValue()) : 0;
     return PackageFormat::CreateGlobalVar(builder, globalSymbolOffset, initializerId);
 }
@@ -622,11 +632,7 @@ flatbuffers::Offset<PackageFormat::BlockGroup> CHIRSerializer::CHIRSerializerImp
 template <> flatbuffers::Offset<PackageFormat::Function> CHIRSerializer::CHIRSerializerImpl::Serialize(
     const Function& obj)
 {
-    auto valueOffset = Serialize<PackageFormat::Value>(static_cast<const Value&>(obj));
-    auto declaredParent = obj.GetParentCustomTypeDef() ? GetId<CustomTypeDef>(obj.GetParentCustomTypeDef()) : 0u;
-    auto globalSymbolOffset = PackageFormat::CreateGlobalValueDirect(builder, valueOffset,
-        obj.GetSrcCodeIdentifier().data(), obj.GetRawMangledName().data(), obj.GetPackageName().data(),
-        declaredParent);
+    auto globalSymbolOffset = Serialize<PackageFormat::GlobalValue>(static_cast<const GlobalValue&>(obj));
 
     // skip serializing genericDecl when it's imported (no body)
     uint32_t genericDecl = 0;
@@ -1747,8 +1753,7 @@ void CHIRSerializer::CHIRSerializerImpl::Save(const std::string& filename, ToCHI
     auto serializedPackage = PackageFormat::CreateCHIRPackageDirect(builder, packageName.c_str(), "",
         PackageFormat::PackageAccessLevel(accesslevel), &typeKind, &allType, &valueKind, &allValue, &exprKind,
         &allExpression, &defKind, &allCustomTypeDef, packageInitFunc, PackageFormat::Phase(phase),
-        packageLiteralInitFunc, maxImportedValueId, maxImportedStructId, maxImportedClassId, maxImportedEnumId,
-        maxImportedExtendId);
+        packageLiteralInitFunc);
 
     builder.Finish(serializedPackage);
     const uint8_t* buf = builder.GetBufferPointer();
@@ -1761,50 +1766,14 @@ void CHIRSerializer::CHIRSerializerImpl::Save(const std::string& filename, ToCHI
 
 void CHIRSerializer::CHIRSerializerImpl::Initialize()
 {
-    // imports: imported funcs then imported vars (order for maxImportedValueId)
-    for (auto value : package.GetImportedFunctions()) {
-        valueQueue.push_back(value);
-    }
-    for (auto value : package.GetImportedGlobalVars()) {
-        valueQueue.push_back(value);
-    }
-    maxImportedValueId = static_cast<uint32_t>(valueQueue.size());
-    for (auto def : package.GetImportedStructs()) {
-        defQueue.push_back(def);
-    }
-    maxImportedStructId = static_cast<uint32_t>(defQueue.size());
-    for (auto def : package.GetImportedClasses()) {
-        defQueue.push_back(def);
-    }
-    maxImportedClassId = static_cast<uint32_t>(defQueue.size());
-    for (auto def : package.GetImportedEnums()) {
-        defQueue.push_back(def);
-    }
-    maxImportedEnumId = static_cast<uint32_t>(defQueue.size());
-    for (auto def : package.GetImportedExtends()) {
-        defQueue.push_back(def);
-    }
-    maxImportedExtendId = static_cast<uint32_t>(defQueue.size());
-    // current package
     for (auto value : package.GetGlobalVars()) {
         valueQueue.push_back(value);
     }
-
-    for (auto def : package.GetStructs()) {
-        defQueue.push_back(def);
-    }
-    for (auto def : package.GetClasses()) {
-        defQueue.push_back(def);
-    }
-    for (auto def : package.GetEnums()) {
-        defQueue.push_back(def);
-    }
-    for (auto def : package.GetExtends()) {
-        defQueue.push_back(def);
-    }
-
-    for (auto value : package.GetGlobalFuncs()) {
+    for (auto value : package.GetGlobalFunctions()) {
         valueQueue.push_back(value);
+    }
+    for (auto def : package.GetAllCustomTypeDef()) {
+        defQueue.push_back(def);
     }
 
     // allocate def id earlier

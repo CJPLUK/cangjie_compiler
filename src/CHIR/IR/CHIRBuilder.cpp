@@ -109,59 +109,26 @@ Parameter* CHIRBuilder::CreateParameter(Type* ty, const DebugLocation& loc, Lamb
     return param;
 }
 
-GlobalVar* CHIRBuilder::CreateGlobalVarWithInit(const DebugLocation& loc, RefType* ty, const std::string& mangledName,
-    const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName)
-{
-    GlobalVar* globalVar = new GlobalVar(ty, "@" + mangledName, srcCodeIdentifier, rawMangledName, packageName);
-    globalVar->SetDebugLocation(loc);
-    this->allocatedValues.push_back(globalVar);
-    if (context.GetCurPackage() != nullptr) {
-        context.GetCurPackage()->AddGlobalVar(globalVar);
-    }
-    return globalVar;
-}
-
-GlobalVar* CHIRBuilder::CreateImportedGlobalVar(
+GlobalVar* CHIRBuilder::CreateGlobalVar(
     Type* ty, const std::string& mangledName, const std::string& srcCodeIdentifier,
-    const std::string& rawMangledName, const std::string& packageName, bool addToIR)
+    const std::string& rawMangledName, const std::string& packageName)
 {
     auto identifier = GLOBAL_VALUE_PREFIX + mangledName;
     auto var = new GlobalVar(ty, identifier, srcCodeIdentifier, rawMangledName, packageName);
-    var->EnableAttr(Attribute::IMPORTED);
     this->allocatedValues.push_back(var);
-    if (context.GetCurPackage() != nullptr && addToIR) {
-        context.GetCurPackage()->AddImportedGlobalVar(var);
-    }
+    context.GetCurPackage()->AddGlobalVar(var);
     return var;
 }
 
-Function* CHIRBuilder::CreateFuncWithBody(const DebugLocation& loc, FuncType* funcTy, const std::string& mangledName,
+Function* CHIRBuilder::CreateFunction(FuncType* funcTy, const std::string& mangledName,
     const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
     const std::vector<GenericType*>& genericTypeParams)
 {
     auto identifier = GLOBAL_VALUE_PREFIX + mangledName;
     auto func = new Function(
-        funcTy, GLOBAL_VALUE_PREFIX, srcCodeIdentifier, rawMangledName, packageName, genericTypeParams);
-    this->allocatedValues.push_back(func);
-    if (context.GetCurPackage() != nullptr) {
-        context.GetCurPackage()->AddGlobalFunc(func);
-    }
-    func->SetDebugLocation(loc);
-    return func;
-}
-
-Function* CHIRBuilder::CreateImportedFuncSig(Type* funcTy, const std::string& mangledName,
-    const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
-    const std::vector<GenericType*>& genericTypeParams, bool addToIR)
-{
-    auto identifier = GLOBAL_VALUE_PREFIX + mangledName;
-    auto func = new Function(
         funcTy, identifier, srcCodeIdentifier, rawMangledName, packageName, genericTypeParams);
-    func->EnableAttr(Attribute::IMPORTED);
     this->allocatedValues.push_back(func);
-    if (context.GetCurPackage() != nullptr && addToIR) {
-        context.GetCurPackage()->AddImportedFunction(func);
-    }
+    context.GetCurPackage()->AddGlobalFunc(func);
     return func;
 }
 // ===--------------------------------------------------------------------===//

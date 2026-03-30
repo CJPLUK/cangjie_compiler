@@ -79,6 +79,21 @@ void SetGlobalVarLinkageType(Value& var, const AST::VarDecl& decl, bool isLifted
     }
     var.Set<LinkTypeInfo>(decl.linkage);
 }
+
+void TryUpdateExistingValue(GlobalValue& existing, const std::set<std::string>& newFeatures)
+{
+    auto oldFeatures = existing.GetFeatures();
+    bool newIsSuperSet = std::includes(newFeatures.begin(), newFeatures.end(),
+        oldFeatures.begin(), oldFeatures.end()) && newFeatures.size() > oldFeatures.size();
+    if (!newIsSuperSet) {
+        // already existed value more specific, so no need to update
+        existing.EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    } else {
+        // will be updated as it is loaded first time
+        existing.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+        existing.SetFeatures(newFeatures);
+    }
+}
 } // namespace
 
 void AST2CHIR::AddToImplicitFuncs(AST::FuncDecl& funcDecl,
@@ -612,6 +627,7 @@ void AST2CHIR::SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, Func
     }
     if (kind == IncreKind::INCR && !astFunc.toBeCompiled) {
         chirFunc.EnableAttr(Attribute::NON_RECOMPILE);
+        chirFunc.EnableAttr(Attribute::IMPORTED);
     }
     if (astFunc.TestAttr(AST::Attribute::IN_EXTEND) || astFunc.TestAttr(AST::Attribute::UNSAFE) ||
         astFunc.TestAttr(AST::Attribute::GENERIC_INSTANTIATED) || !astFunc.TestAttr(AST::Attribute::PUBLIC)) {
@@ -623,6 +639,11 @@ void AST2CHIR::SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, Func
     if (astFunc.TestAttr(AST::Attribute::MAIN_ENTRY) || astFunc.mangledName == USER_MAIN_MANGLED_NAME ||
         astFunc.mangledName.find("rt$") == 0) {
         chirFunc.EnableAttr(Attribute::NO_INLINE);
+    }
+
+    // foreign function must be imported
+    if (astFunc.TestAttr(AST::Attribute::FOREIGN)) {
+        chirFunc.EnableAttr(Attribute::IMPORTED);
     }
 
     // 2. ----------------------- LinkageType -----------------------
@@ -689,7 +710,7 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     }
     auto srcCodeName = funcDecl.identifier;
     auto rawMangledName = funcDecl.rawMangleName;
-    fn = builder.CreateFuncWithBody(
+    fn = builder.CreateFunction(
         loc, funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy);
     // This is the logic that applied when compiling common part of package
     // Ideally such logic should be be visually discernible
@@ -736,9 +757,11 @@ void AST2CHIR::CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::Fun
     FuncType* funcTy = StaticCast<FuncType*>(fnTy);
     auto genericParamTy = GetGenericParamType(funcDecl, chirType);
     // Global or member function. Must not be nested func.
-    auto fn = builder.CreateImportedFuncSig(funcTy, funcDecl.mangledName, funcDecl.identifier,
+    auto fn = builder.CreateFunction(funcTy, funcDecl.mangledName, funcDecl.identifier,
         funcDecl.rawMangleName, funcDecl.fullPackageName, genericParamTy);
-    CJC_ASSERT(fn);
+    // in cjdb, using `expr` will generate a wrong AST decl
+    // an AST decl in imported package but without `IMPORTED` attr
+    fn->EnableAttr(Attribute::IMPORTED);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
 
     CJC_ASSERT(funcDecl.funcBody->paramLists.size() == 1);
@@ -796,12 +819,14 @@ void AST2CHIR::CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl&
     if (isGeneric) {
         TranslateFunctionGenericUpperBounds(chirType, funcDecl);
     }
-    auto fnTy = chirType.TranslateType(*funcDecl.ty);
-    fnTy = AdjustFuncType(*StaticCast<FuncType*>(fnTy), funcDecl, builder, chirType);
+    auto fnTy = StaticCast<FuncType*>(chirType.TranslateType(*funcDecl.ty));
+    fnTy = AdjustFuncType(*fnTy, funcDecl, builder, chirType);
     auto genericParamTy = GetGenericParamType(funcDecl, chirType);
-    fn = builder.CreateImportedFuncSig(fnTy, funcDecl.mangledName, funcDecl.identifier,
+    fn = builder.CreateFunction(fnTy, funcDecl.mangledName, funcDecl.identifier,
         funcDecl.rawMangleName, funcDecl.fullPackageName, genericParamTy);
-    CJC_NULLPTR_CHECK(fn);
+    // in cjdb, using `expr` will generate a wrong AST decl
+    // an AST decl in imported package but without `IMPORTED` attr
+    fn->EnableAttr(Attribute::IMPORTED);
     auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), funcDecl.begin, funcDecl.end);
     fn->SetDebugLocation(loc);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
@@ -832,9 +857,8 @@ void AST2CHIR::CreateImportedValueSignatureAndSetGlobalCache(const AST::VarDecl&
     }
     auto varType = chirType.TranslateType(*varDecl.ty);
     auto refTy = builder.GetType<RefType>(varType);
-    var = builder.CreateImportedGlobalVar(refTy, varDecl.mangledName, varDecl.identifier,
-        varDecl.rawMangleName, varDecl.fullPackageName);
-    CJC_NULLPTR_CHECK(var);
+    var = builder.CreateGlobalVar(
+        refTy, varDecl.mangledName, varDecl.identifier, varDecl.rawMangleName, varDecl.fullPackageName);
     var->AppendAttributeInfo(BuildAttr(varDecl.GetAttrs()));
     if (varDecl.IsConst()) {
         var->EnableAttr(Attribute::CONST);
@@ -864,9 +888,11 @@ void AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalCon
     auto warnPos = GetDeclLoc(builder.GetChirContext(), decl);
     Value* gv = nullptr;
     if (kind == IncreKind::INCR && !decl.toBeCompiled && !IsSrcCodeImportedGlobalDecl(decl, opts)) {
-        gv = builder.CreateImportedGlobalVar(ty, mangledName, srcCodeName, rawMangledName, packageName);
+        gv = builder.CreateGlobalVar(ty, mangledName, srcCodeName, rawMangledName, packageName);
+        gv->EnableAttr(Attribute::IMPORTED);
     } else {
-        gv = builder.CreateGlobalVarWithInit(loc, ty, mangledName, srcCodeName, rawMangledName, packageName);
+        gv = builder.CreateGlobalVar(ty, mangledName, srcCodeName, rawMangledName, packageName);
+        gv->SetDebugLocation(loc);
         if (isLocalConst) {
             // use COMPILER_ADD to mark this global const var as lifted
             gv->EnableAttr(Attribute::COMPILER_ADD);
@@ -963,7 +989,7 @@ void AST2CHIR::CreatePseudoDefForAnnoOnlyDecl(const AST::Decl& decl)
     }
     Value* val;
     if (auto func = DynamicCast<AST::FuncDecl>(&decl)) {
-        auto fn = builder.CreateFuncWithBody(INVALID_LOCATION,
+        auto fn = builder.CreateFunction(
             builder.GetType<FuncType>(
                 std::vector<Type*>{func->funcBody->paramLists[0]->params.size(), builder.GetInt64Ty()},
                 builder.GetUnitTy()),
@@ -974,8 +1000,9 @@ void AST2CHIR::CreatePseudoDefForAnnoOnlyDecl(const AST::Decl& decl)
         val = fn;
     }
     if (Is<AST::VarDecl>(&decl)) {
-        val = builder.CreateGlobalVarWithInit(tr.TranslateLocation(decl), builder.GetType<RefType>(builder.GetInt64Ty()),
+        val = builder.CreateGlobalVar(builder.GetType<RefType>(builder.GetInt64Ty()),
             decl.mangledName, decl.identifier, decl.rawMangleName, decl.fullPackageName);
+        val->SetDebugLocation(tr.TranslateLocation(decl));
     }
     // such function does not have body (because it is a pseudo func, just a hook for annoFactoryFunc).
     // skip all CHIR pass on it.
@@ -1566,10 +1593,10 @@ void AST2CHIR::BuildDeserializedTable()
     auto importedCustomDefs = package->GetAllImportedCustomTypeDef();
     BuildDeserializedVec(deserializedDefs, customDefs, importedCustomDefs);
     // build for Value
-    BuildDeserializedVec(deserializedVals, package->GetImportedFunctions());
-    BuildDeserializedVec(deserializedVals, package->GetImportedGlobalVars());
-    BuildDeserializedVec(deserializedVals, package->GetGlobalVars());
-    BuildDeserializedVec(deserializedVals, package->GetGlobalFuncs());
+    BuildDeserializedVec(deserializedVals, package->GetGlobalFuncsWithoutBody());
+    BuildDeserializedVec(deserializedVals, package->GetGlobalVarsWithoutInit());
+    BuildDeserializedVec(deserializedVals, package->GetGlobalVarsWithInit());
+    BuildDeserializedVec(deserializedVals, package->GetGlobalFuncsWithBody());
     BuildDeserializedVec(deserializedVals,
         std::vector<Function*>{package->GetPackageInitFunc(), package->GetPackageLiteralInitFunc()});
 }
@@ -1580,7 +1607,6 @@ void AST2CHIR::ResetSpecificFunc(const AST::FuncDecl& funcDecl, Function& func)
     // Reset body
     auto body = builder.CreateBlockGroup(func);
     func.ReplaceBody(*body);
-    TranslateFuncParams(funcDecl, func);
     // Reset location
     const auto& loc =
         DebugLocation(TranslateLocationWithoutScope(builder.GetChirContext(), funcDecl.begin, funcDecl.end));

@@ -35,7 +35,7 @@ VarInitCheck::VarInitCheck(DiagAdapter* diag) : diag(diag)
 void VarInitCheck::RunOnPackage(const Package* package, size_t threadNum)
 {
     std::vector<Function*> funcs;
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         if (func->GetSrcCodeIdentifier().find("__ad_") == std::string::npos &&
             func->GetSrcCodeIdentifier() != STATIC_INIT_FUNC &&
             func->GetIdentifier().find("$Mocked") == std::string::npos &&

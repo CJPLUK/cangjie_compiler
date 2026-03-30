@@ -13,24 +13,6 @@
 using namespace Cangjie::CHIR;
 
 namespace {
-std::vector<Function*> GetAllGlobalFuncs(const Package& package)
-{
-    std::vector<Function*> result;
-    for (auto func : package.GetImportedFunctions()) {
-        if (!ReturnTypeShouldBeVoid(*func)) {
-            continue;
-        }
-        result.emplace_back(func);
-    }
-    for (auto func : package.GetGlobalFuncs()) {
-        if (!ReturnTypeShouldBeVoid(*func)) {
-            continue;
-        }
-        result.emplace_back(func);
-    }
-    return result;
-}
-
 void RemoveOldRetValue(LocalVar& oldRet)
 {
     /*  remove this kind of code:
@@ -81,8 +63,10 @@ OptFuncRetType::OptFuncRetType(Package& package, CHIRBuilder& builder) : package
 void OptFuncRetType::Unit2Void()
 {
     // 1. collect all global functions that should return Void
-    auto allFuncs = GetAllGlobalFuncs(package);
-    for (auto func : allFuncs) {
+    for (auto func : package.GetGlobalFunctions()) {
+        if (!ReturnTypeShouldBeVoid(*func)) {
+            continue;
+        }
         CJC_ASSERT(func->GetReturnType()->IsUnit());
         LocalVar* oldRet = nullptr;
         // 2. change the return type to Void

@@ -24,7 +24,7 @@ FlatForInExpr::FlatForInExpr(CHIRBuilder& builder)
 
 void FlatForInExpr::RunOnPackage(const Package& package)
 {
-    for (auto& func : package.GetGlobalFuncs()) {
+    for (auto& func : package.GetGlobalFuncsWithBody()) {
         RunOnFunc(*func);
     }
 }

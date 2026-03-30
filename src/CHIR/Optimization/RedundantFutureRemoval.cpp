@@ -19,7 +19,7 @@ RedundantFutureRemoval::RedundantFutureRemoval(const Package& pkg, bool isDebug)
 
 void RedundantFutureRemoval::RunOnPackage()
 {
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         RunOnFunc(*func);
     }
 }

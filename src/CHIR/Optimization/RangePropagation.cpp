@@ -52,7 +52,7 @@ const std::vector<const Function*>& RangePropagation::GetFuncsNeedRemoveBlocks()
 
 void RangePropagation::RunOnPackage(const Ptr<const Package>& package, bool isDebug)
 {
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         RunOnFunc(func, isDebug);
     }
 }

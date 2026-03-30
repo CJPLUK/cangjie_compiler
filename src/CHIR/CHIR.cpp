@@ -501,7 +501,7 @@ void ToCHIR::RunConstantPropagation()
     } else {
         bool isDebug = opts.chirDebugOptimizer;
         bool isCJLint = ci.isCJLint;
-        std::vector<Function*> globalFuncs = chirPkg->GetGlobalFuncs();
+        std::vector<Function*> globalFuncs = chirPkg->GetGlobalFuncsWithBody();
         size_t funcNum = globalFuncs.size();
         std::vector<std::unique_ptr<CHIR::CHIRBuilder>> builderList = ConstructSubBuilders(threadNum, funcNum);
         Utils::TaskQueue taskQueue(threadNum);
@@ -544,7 +544,7 @@ void ToCHIR::RunRangePropagation()
         dce.UnreachableBlockElimination(cp.GetFuncsNeedRemoveBlocks(), opts.chirDebugOptimizer);
     } else {
         bool isDebug = opts.chirDebugOptimizer;
-        std::vector<Function*> globalFuncs = chirPkg->GetGlobalFuncs();
+        std::vector<Function*> globalFuncs = chirPkg->GetGlobalFuncsWithBody();
         size_t funcNum = globalFuncs.size();
         std::vector<std::unique_ptr<CHIR::CHIRBuilder>> builderList =
             CHIR::ToCHIR::ConstructSubBuilders(threadNum, funcNum);
@@ -760,8 +760,9 @@ void ToCHIR::RecordCodeInfoAtTheBegin()
         "import pkg", static_cast<int64_t>(importManager.GetAllImportedPackages(true).size()));
     Utils::ProfileRecorder::RecordCodeInfo("src file", static_cast<int64_t>(pkg->files.size()));
     Utils::ProfileRecorder::RecordCodeInfo(
-        "global func in CHIR after trans", static_cast<int64_t>(chirPkg->GetGlobalFuncs().size()));
-    Utils::ProfileRecorder::RecordCodeInfo("global var in CHIR", static_cast<int64_t>(chirPkg->GetGlobalVars().size()));
+        "global func in CHIR after trans", static_cast<int64_t>(chirPkg->GetGlobalFuncsWithBody().size()));
+    Utils::ProfileRecorder::RecordCodeInfo(
+        "global var in CHIR", static_cast<int64_t>(chirPkg->GetGlobalVarsWithInit().size()));
     int64_t funcInlineCnt = std::count_if(
         pkg->inlineFuncDecls.begin(), pkg->inlineFuncDecls.end(), [](auto func) { return func && func->isInline; });
     Utils::ProfileRecorder::RecordCodeInfo("imported inline func", funcInlineCnt);
@@ -792,11 +793,11 @@ void ToCHIR::RecordCodeInfoAtTheEnd()
     Utils::ProfileRecorder::RecordCodeInfo("all CHIR node", static_cast<int64_t>(builder.GetAllNodesNum()));
     Utils::ProfileRecorder::RecordCodeInfo("all CHIR type", static_cast<int64_t>(builder.GetTypesNum()));
     Utils::ProfileRecorder::RecordCodeInfo(
-        "global func after CHIR stage", static_cast<int64_t>(chirPkg->GetGlobalFuncs().size()));
+        "global func after CHIR stage", static_cast<int64_t>(chirPkg->GetGlobalFuncsWithBody().size()));
     int64_t wrapperFuncNum = 0;
     int64_t funcExprNum = 0;
     int64_t wrapperFuncExprNum = 0;
-    for (auto func : chirPkg->GetGlobalFuncs()) {
+    for (auto func : chirPkg->GetGlobalFuncsWithBody()) {
         if (!func->GetBody()) {
             continue;
         }
@@ -822,12 +823,12 @@ void ToCHIR::RecordCHIRExprNum(const std::string& suffix)
     }
     Utils::ProfileRecorder recorder("CHIR", "RecordCodeInfo");
     Utils::ProfileRecorder::RecordCodeInfo(
-        "valid CHIR func num after " + suffix, static_cast<int64_t>(chirPkg->GetGlobalFuncs().size()));
+        "valid CHIR func num after " + suffix, static_cast<int64_t>(chirPkg->GetGlobalFuncsWithBody().size()));
 
     int64_t allNonGenericExprsNum = 0;
     int64_t allInstantiatedExprsNum = 0;
     int64_t curPkgInstantiatedExprsNum = 0;
-    for (auto func : chirPkg->GetGlobalFuncs()) {
+    for (auto func : chirPkg->GetGlobalFuncsWithBody()) {
         auto exprsNum = func->GetExpressionsNum();
         allNonGenericExprsNum += static_cast<int64_t>(exprsNum);
         if (func->GetGenericDecl() == nullptr) {
@@ -851,7 +852,7 @@ void ToCHIR::RecordCHIRExprNum(const std::string& suffix)
     int64_t curPkgGenericExprsNum = 0;
     int64_t allGenericFuncNum = 0;
     int64_t curPkgGenericFuncNum = 0;
-    for (auto func : chirPkg->GetGlobalFuncs()) {
+    for (auto func : chirPkg->GetGlobalFuncsWithBody()) {
         if (!func->IsInGenericContext()) {
             continue;
         }
@@ -897,7 +898,7 @@ void ToCHIR::EraseDebugExpr()
     // Erase useless debug expressions for codegen in not -g mode,
     // For the reason of error when enable parallel mode in codegen.
     // These expressions are needed for report warning, so only can be removed at the end of CHIR stage.
-    for (auto func : chirPkg->GetGlobalFuncs()) {
+    for (auto func : chirPkg->GetGlobalFuncsWithBody()) {
         for (auto block : func->GetBody()->GetBlocks()) {
             auto exprs = block->GetExpressions();
             for (size_t i = 0; i < exprs.size(); i++) {
@@ -916,12 +917,12 @@ void ToCHIR::CFFIFuncWrapper()
     Utils::ProfileRecorder recorder("CHIR", "CFFIFuncWrapper");
     std::vector<Function*> cfuncs;
     std::vector<Function*> foreignFuncs;
-    for (auto curFunc : chirPkg->GetGlobalFuncs()) {
+    for (auto curFunc : chirPkg->GetGlobalFuncsWithBody()) {
         if (curFunc->GetType()->IsCFunc()) {
             cfuncs.emplace_back(curFunc);
         }
     }
-    for (auto foreignFunc : chirPkg->GetImportedFunctions()) {
+    for (auto foreignFunc : chirPkg->GetGlobalFuncsWithoutBody()) {
         if (foreignFunc->GetType()->IsCFunc()) {
             CJC_ASSERT(foreignFunc->IsImportedFunc());
             foreignFuncs.emplace_back(StaticCast<Function*>(foreignFunc));
@@ -973,13 +974,15 @@ std::pair<Value*, Apply*> ToCHIR::DoCFFIFuncWrapper(T& curFunc, bool isForeign, 
         ident = funcPkgName + ":" + ident;
     }
     if (funcPkgName != chirPkg->GetName()) {
-        auto wrapperFunc = builder.CreateImportedFuncSig(
+        auto wrapperFunc = builder.CreateFunction(
             curFunc.GetFuncType(), ident, ident, "", funcPkgName, curFunc.GetGenericTypeParams());
+        wrapperFunc->EnableAttr(Attribute::IMPORTED);
         wrapperFunc->SetCFFIWrapper(true);
         return std::make_pair(wrapperFunc, nullptr);
     }
     auto wrapperFunc =
-        builder.CreateFuncWithBody(curFunc.GetDebugLocation(), curFunc.GetFuncType(), ident, ident, "", funcPkgName);
+        builder.CreateFunction(curFunc.GetFuncType(), ident, ident, "", funcPkgName);
+    wrapperFunc->SetDebugLocation(curFunc.GetDebugLocation());
     wrapperFunc->SetFuncKind(curFunc.GetFuncKind());
     if (wrapperFunc->IsLambda()) {
         auto originalLambdaInfo = FuncSigInfo {
@@ -1191,7 +1194,7 @@ bool ToCHIR::Run()
     }
     // 9. replace source code imported functions and variables with imported symbols,
     //    this pass must be after `RunConstantEvaluation`, because we need to calculate const var from imported package
-    ReplaceSrcCodeImportedVal(*chirPkg, implicitFuncs, builder).Run(
+    ReplaceSrcCodeImportedVal(*chirPkg).Run(
         srcCodeImportedFuncs, srcCodeImportedVars, uselessClasses, uselessLambda);
 
     // 10. annotation check depends on const eval
@@ -1240,7 +1243,7 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
             }
             hasPluginForCHIR = true;
             if (mtc.IsForFunc()) {
-                for (auto func : package.GetGlobalFuncs()) {
+                for (auto func : package.GetGlobalFuncsWithBody()) {
                     static_cast<MetaTransform<CHIR::Function>*>(&mtc)->Run(*func);
                 }
             } else if (mtc.IsForPackage()) {
@@ -1352,7 +1355,7 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
 VarInitDepMap ToCHIR::GetVarInitDepMap() const
 {
     VarInitDepMap dep;
-    for (auto var : chirPkg->GetGlobalVars()) {
+    for (auto var : chirPkg->GetGlobalVarsWithInit()) {
         // local const doesn't have raw mangle name
         if (var->GetRawMangledName().empty()) {
             continue;

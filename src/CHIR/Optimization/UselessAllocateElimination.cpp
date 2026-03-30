@@ -14,7 +14,7 @@ using namespace Cangjie::CHIR;
 
 void UselessAllocateElimination::RunOnPackage(const Package& package, bool isDebug)
 {
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         RunOnFunc(*func, isDebug);
     }
 }

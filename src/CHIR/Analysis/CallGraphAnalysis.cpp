@@ -96,7 +96,7 @@ CallGraph::CallGraph(const Package* package, DevirtualizationInfo& devirtFuncInf
       exitNode(std::make_unique<Node>(nullptr))
 {
     // build the call graph.
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         if (func->GetUsers().size() == 0) {
             AddToCallGraph(*func, true);
         } else {

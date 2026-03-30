@@ -56,7 +56,6 @@ private:
     std::vector<Lambda*> CollectNestedFunctions();
     void InlineLambda(const std::vector<Lambda*>& funcs);
     void ConvertNestedFunctions(const std::vector<Lambda*>& funcs);
-    void ConvertImportedFunctions();
 
     Ptr<LocalVar> CreateAutoEnvImplObject(
         Block& parent, ClassType& autoEnvImplType, const std::vector<Value*>& envs, Expression& user, Value& srcFunc);

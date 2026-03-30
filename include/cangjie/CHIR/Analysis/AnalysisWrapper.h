@@ -117,7 +117,7 @@ private:
         if constexpr (IsValueAnalysis<TAnalysis>::value) {
             SetUpGlobalVarState(*package, isDebug, std::forward<Args>(args)...);
         }
-        for (auto func : package->GetGlobalFuncs()) {
+        for (auto func : package->GetGlobalFuncsWithBody()) {
             if (ShouldBeAnalysed(*func)) {
                 if (auto res = RunOnFunc(func, isDebug, std::forward<Args>(args)...)) {
                     resultsMap.emplace(func, std::move(res));
@@ -135,7 +135,7 @@ private:
         Utils::TaskQueue taskQueue(threadNum);
         using ResTy = std::unique_ptr<Results<TDomain>>;
         std::vector<Cangjie::Utils::TaskResult<ResTy>> results;
-        for (auto func : package->GetGlobalFuncs()) {
+        for (auto func : package->GetGlobalFuncsWithBody()) {
             if (ShouldBeAnalysed(*func)) {
                 results.emplace_back(taskQueue.AddTask<ResTy>(
                     [func, isDebug, &args..., this]() { return RunOnFunc(func, isDebug, std::forward<Args>(args)...); },
@@ -166,7 +166,7 @@ private:
     template <typename... Args> void SetUpGlobalVarState(const Package& package, bool isDebug, Args&&... args)
     {
         TAnalysis::InitialiseLetGVState(package, builder);
-        for (auto gv : package.GetGlobalVars()) {
+        for (auto gv : package.GetGlobalVarsWithInit()) {
             if (auto init = gv->GetInitFunc();
                 gv->TestAttr(Attribute::READONLY) && init && resultsMap.find(init) == resultsMap.end()) {
                 // Multiple global vars may be initialised in the same function.

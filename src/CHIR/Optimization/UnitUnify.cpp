@@ -38,7 +38,7 @@ UnitUnify::UnitUnify(CHIRBuilder& builder) : builder(builder)
 
 void UnitUnify::RunOnPackage(const Ptr<const Package>& package, bool isDebug)
 {
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         RunOnFunc(func, isDebug);
     }
 }

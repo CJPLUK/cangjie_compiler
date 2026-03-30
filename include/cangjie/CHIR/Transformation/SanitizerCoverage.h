@@ -70,8 +70,8 @@ private:
     // create imported function or global var
     GlobalVar* GenerateGlobalVar(const std::string& globalVarName, const DebugLocation& loc, Type& globalType);
     GlobalVar* GetGlobalVar(const std::string& globalVarName);
-    Function* GenerateForeignFunc(
-        const std::string& globalFuncName, const DebugLocation& loc, Type& funcType, const std::string& packName = "");
+    Function* GenerateForeignFunc(const std::string& globalFuncName,
+        const DebugLocation& loc, FuncType& funcType, const std::string& packName = "");
     Function* GetImportedFunc(const std::string& mangledName);
     Function* CreateInitFunc(const std::string& name, FuncType& funcType, const DebugLocation& loc);
 

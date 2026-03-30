@@ -748,7 +748,7 @@ public:
     static void InitialiseLetGVState(const Package& package, CHIRBuilder& builder)
     {
         globalState.kind = ReachableKind::REACHABLE;
-        for (auto gv : package.GetGlobalVars()) {
+        for (auto gv : package.GetGlobalVarsWithInit()) {
             if (!gv->TestAttr(Attribute::READONLY) || !gv->GetInitFunc() || !IsTrackedGV<ValueDomain>(*gv)) {
                 continue;
             }

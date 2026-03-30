@@ -335,9 +335,10 @@ Function* GlobalVarInitializer::TranslateIncrementalNoChangeVar(const AST::VarDe
 {
     GVInit<AST::VarDecl> context{decl, trans};
     auto ty = builder.GetType<FuncType>(std::vector<Type*>{}, builder.GetUnitTy());
-    auto func = builder.CreateImportedFuncSig(ty, std::move(context.mangledName),
+    auto func = builder.CreateFunction(ty, std::move(context.mangledName),
         std::move(context.srcCodeIdentifier), std::move(context.rawMangledName), context.packageName);
     func->SetFuncKind(FuncKind::GLOBALVAR_INIT);
+    func->EnableAttr(Attribute::IMPORTED);
     func->Set<LinkTypeInfo>(Cangjie::Linkage::INTERNAL);
     if (decl.isConst) {
         func->EnableAttr(Attribute::CONST);
@@ -621,8 +622,9 @@ void GlobalVarInitializer::AddImportedPackageInit(const AST::Package& curPackage
         }
         auto attrs = AttributeInfo();
         attrs.SetAttr(Attribute::INITIALIZER, true);
-        initFunc = builder.CreateImportedFuncSig(
+        initFunc = builder.CreateFunction(
             initFuncTy, context.mangledName, context.srcCodeIdentifier, context.rawMangledName, pkgName);
+        initFunc->EnableAttr(Attribute::IMPORTED);
         initFunc->AppendAttributeInfo(attrs);
         initFunc->EnableAttr(Attribute::PUBLIC);
         trans.GenerateFuncCall(*initFunc, StaticCast<FuncType*>(initFunc->GetType()),
@@ -687,8 +689,9 @@ void GlobalVarInitializer::UpdateImportsInit(
 
         auto attrs = AttributeInfo();
         attrs.SetAttr(Attribute::INITIALIZER, true);
-        auto importInit = builder.CreateImportedFuncSig(initFuncTy, context.mangledName,
+        auto importInit = builder.CreateFunction(initFuncTy, context.mangledName,
             context.srcCodeIdentifier, context.rawMangledName, dep->srcPackage->fullPackageName);
+        importInit->EnableAttr(Attribute::IMPORTED);
         importInit->AppendAttributeInfo(attrs);
         importInit->SetFuncKind(FuncKind::GLOBALVAR_INIT);
         importInit->EnableAttr(Attribute::PUBLIC);
@@ -725,8 +728,8 @@ Ptr<Function> GlobalVarInitializer::GeneratePackageInitBase(const AST::Package& 
     auto initFlagName = suffix.empty() ? GV_PKG_INIT_ONCE_FLAG : "has_invoked_pkg_init_literal";
     GlobalVar* initFlag = TryGetDeserialized<GlobalVar>(initFlagName);
     if (!initFlag) {
-        initFlag = builder.CreateGlobalVarWithInit(
-            INVALID_LOCATION, builder.GetType<RefType>(boolTy), initFlagName, initFlagName, "", func->GetPackageName());
+        initFlag = builder.CreateGlobalVar(
+            builder.GetType<RefType>(boolTy), initFlagName, initFlagName, "", func->GetPackageName());
         initFlag->SetInitializer(*builder.CreateLiteralValue<BoolLiteral>(boolTy, false));
         initFlag->EnableAttr(Attribute::NO_REFLECT_INFO);
         initFlag->EnableAttr(Attribute::COMPILER_ADD);

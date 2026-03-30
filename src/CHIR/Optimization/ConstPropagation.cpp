@@ -19,7 +19,7 @@ ConstPropagation::ConstPropagation(CHIRBuilder& builder, ConstAnalysisWrapper* c
 
 void ConstPropagation::RunOnPackage(const Ptr<const Package>& package, bool isDebug, bool isCJLint)
 {
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         RunOnFunc(func, isDebug, isCJLint);
     }
 }

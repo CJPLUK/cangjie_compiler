@@ -79,8 +79,8 @@ void CHIRSplitter::CalcSplitsNum()
     auto& options = cgPkgCtx.GetGlobalOptions();
     auto& chirPkg = cgPkgCtx.GetCHIRPackage();
     splitNum = options.aggressiveParallelCompile.value_or(1);
-    if (splitNum > chirPkg.GetGlobalFuncs().size()) {
-        splitNum = chirPkg.GetGlobalFuncs().size();
+    if (splitNum > chirPkg.GetGlobalFuncsWithBody().size()) {
+        splitNum = chirPkg.GetGlobalFuncsWithBody().size();
     }
 }
 
@@ -170,7 +170,7 @@ void SplitNormalFunc(const std::multimap<std::size_t, CHIR::Function*>& sortedCh
 void SplitForeign(const CHIR::Package& chirPkg, std::set<SubCHIRPackage, SubCHIRPackageCmp>& subCHIRPackagesSet,
     std::map<std::string, std::size_t>& cache)
 {
-    for (auto importedFunc : chirPkg.GetImportedFunctions()) {
+    for (auto importedFunc : chirPkg.GetGlobalFuncsWithoutBody()) {
         if (!importedFunc->TestAttr(CHIR::Attribute::FOREIGN) ||
             importedFunc->GetPackageName() != chirPkg.GetName()) {
             continue;
@@ -186,7 +186,7 @@ void SplitForeign(const CHIR::Package& chirPkg, std::set<SubCHIRPackage, SubCHIR
 }
 }; // namespace
 
-// Split chirPkg.GetGlobalFuncs evenly into splitNum subCHIRPackages,
+// Split chirPkg.GetGlobalFuncsWithBody evenly into splitNum subCHIRPackages,
 // so that the total number of expressions of all functions in each subCHIRPackage is close to.
 void CHIRSplitter::SplitCHIRFuncs(std::vector<SubCHIRPackage>& subCHIRPackages)
 {
@@ -204,7 +204,7 @@ void CHIRSplitter::SplitCHIRFuncs(std::vector<SubCHIRPackage>& subCHIRPackages)
         globalInitFuncName.replace(globalInitFuncName.size() - 4, 2, "il")));
     std::vector<CHIR::Function*> toAnyFuncs{};
     std::multimap<std::size_t, CHIR::Function*> sortedChirFuncs{};
-    for (auto chirFunc : chirPkg.GetGlobalFuncs()) {
+    for (auto chirFunc : chirPkg.GetGlobalFuncsWithBody()) {
         if (chirPkg.GetName() == REFLECT_PACKAGE_NAME && chirFunc->GetSrcCodeIdentifier() == "toAny") {
             toAnyFuncs.emplace_back(chirFunc);
         } else if (chirFunc != globalInitFunc && chirFunc != globalInitLiteralFunc) {
@@ -308,7 +308,7 @@ void CHIRSplitter::SplitCHIRExtends(std::vector<SubCHIRPackage>& subCHIRPackages
 
 void CHIRSplitter::SplitCHIRGlobalVars(std::vector<SubCHIRPackage>& subCHIRPackages)
 {
-    for (auto chirGV : cgPkgCtx.GetCHIRPackage().GetGlobalVars()) {
+    for (auto chirGV : cgPkgCtx.GetCHIRPackage().GetGlobalVarsWithInit()) {
         auto key = chirGV->GetIdentifierWithoutPrefix();
         auto iter = subCHIRPackagesCache.gvsCache.find(key);
         auto idx = iter == subCHIRPackagesCache.gvsCache.cend() ? (index++ % splitNum) : iter->second;
@@ -319,7 +319,7 @@ void CHIRSplitter::SplitCHIRGlobalVars(std::vector<SubCHIRPackage>& subCHIRPacka
 
 void CHIRSplitter::SplitCHIRImportedCFuncs(std::vector<SubCHIRPackage>& subCHIRPackages)
 {
-    for (auto importedFunc : cgPkgCtx.GetCHIRPackage().GetImportedFunctions()) {
+    for (auto importedFunc : cgPkgCtx.GetCHIRPackage().GetGlobalFuncsWithoutBody()) {
         // We only process imported non-public CFunc here,
         // whether it's explicitly imported, implicitly imported, or a foreign function.
         if (!importedFunc->GetFuncType()->IsCFunc() ||

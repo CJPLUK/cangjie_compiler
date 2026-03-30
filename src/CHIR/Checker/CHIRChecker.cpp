@@ -387,10 +387,10 @@ CHIRChecker::CHIRChecker(const Package& package, const Cangjie::GlobalOptions& o
 bool CHIRChecker::CheckPackage(const std::unordered_set<Rule>& r)
 {
     optionalRules = r;
-    ParallelCheck(&CHIRChecker::CheckFunc, package.GetGlobalFuncs());
-    ParallelCheck(&CHIRChecker::CheckGlobalVar, package.GetGlobalVars());
-    ParallelCheck(&CHIRChecker::CheckGlobalVar, package.GetImportedGlobalVars());
-    ParallelCheck(&CHIRChecker::CheckFuncBase, package.GetImportedFunctions());
+    ParallelCheck(&CHIRChecker::CheckFunc, package.GetGlobalFuncsWithBody());
+    ParallelCheck(&CHIRChecker::CheckGlobalVar, package.GetGlobalVarsWithInit());
+    ParallelCheck(&CHIRChecker::CheckGlobalVar, package.GetGlobalVarsWithoutInit());
+    ParallelCheck(&CHIRChecker::CheckFuncBase, package.GetGlobalFuncsWithoutBody());
     ParallelCheck(&CHIRChecker::CheckStructDef, package.GetAllStructDef());
     ParallelCheck(&CHIRChecker::CheckClassDef, package.GetAllClassDef());
     ParallelCheck(&CHIRChecker::CheckEnumDef, package.GetAllEnumDef());
