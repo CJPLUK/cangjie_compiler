@@ -406,12 +406,7 @@ std::unordered_map<const GenericType*, Type*> VTableGenerator::GetInstMapFromDef
     auto [res, tmpTable] = def.GetType()->CalculateGenericTyMapping(curType);
     // 3. update replaceTable with temp table, from {I::T -> U1} to {I::T -> Int32}
     for (auto& it : replaceTable) {
-        if (auto genericTy = DynamicCast<GenericType*>(it.second)) {
-            auto tmp = tmpTable.find(genericTy);
-            if (tmp != tmpTable.end()) {
-                it.second = tmp->second;
-            }
-        }
+        it.second = ReplaceRawGenericArgType(*it.second, tmpTable, builder);
     }
     // 4. merge temp table to replaceTable, then result is {U1 -> Int32}, {I::T -> Int32}
     replaceTable.merge(tmpTable);
