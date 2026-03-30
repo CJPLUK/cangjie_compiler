@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+. $(dirname $0)/init_env.sh
+
+# cjpm
+cd $WORKSPACE/cangjie_tools/cjpm/build;
+[ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
+python3 build.py build -t release --set-rpath @loader_path/../../runtime/lib/darwin_${ARCH}_cjnative;
+python3 build.py install;
+
