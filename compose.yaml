@@ -12,7 +12,7 @@ services:
     volumes:
       - ./:/workspace
     command: >-
-      bash -lc "bash build_scripts/linux.sh"
+      bash build_scripts/linux/all.sh
   build-sdk-linuxarm:
     image: swr.cn-north-4.myhuaweicloud.com/cj-docker/cangjie_ubuntu18_arm_kernel:v2.2
     working_dir: /workspace
@@ -26,5 +26,5 @@ services:
     volumes:
       - ./:/workspace
     command: >-
-      bash -lc "bash build_scripts/linux.sh"
+      bash build_scripts/linux/all.sh
 
