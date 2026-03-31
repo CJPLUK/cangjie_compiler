@@ -1,4 +1,5 @@
 set -e
+set -o xtrace
 . $(dirname $0)/init_env.sh
 
 # Cangjie Compiler
@@ -10,6 +11,7 @@ cd $WORKSPACE/cangjie_compiler;
 python3 build.py build -t release --no-tests;
 python3 build.py install;
 
+# Quick test
 . output/envsetup.sh
 cjc -v
 

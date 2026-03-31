@@ -1,3 +1,4 @@
+set -o xtrace
 . $(dirname $0)/init_env.sh
 
 # Bundle SDK
