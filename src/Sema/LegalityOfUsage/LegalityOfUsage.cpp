@@ -132,8 +132,9 @@ void TypeChecker::TypeCheckerImpl::CheckStaticMemberWithGeneric(
             ref.target->outerDecl->ty->HasGeneric();
         if (needDiag) {
             Sema::DiagForStaticVariableDependsGeneric(diag, *node, ref.target->outerDecl->ty->GetGenericTyArgs());
+            return VisitAction::SKIP_CHILDREN;
         }
-        return VisitAction::SKIP_CHILDREN;
+        return VisitAction::WALK_CHILDREN;
     };
     Walker(&member, preVisitor).Walk();
 }
