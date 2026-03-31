@@ -1,19 +1,20 @@
 set -e
 . $(dirname $0)/init_env.sh
+MACOS_BUILD_SCRIPTS=${WORKSPACE}/build_scripts/macos
 
 
-. $(dirname $0)/compiler.sh
-. $(dirname $0)/runtime.sh
-. $(dirname $0)/stdlib.sh
-. $(dirname $0)/stdx.sh
+. ${MACOS_BUILD_SCRIPTS}/compiler.sh
+. ${MACOS_BUILD_SCRIPTS}/runtime.sh
+. ${MACOS_BUILD_SCRIPTS}/stdlib.sh
+. ${MACOS_BUILD_SCRIPTS}/stdx.sh
 
 # tools
-. $(dirname $0)/cjpm.sh
-. $(dirname $0)/cjfmt.sh
-. $(dirname $0)/hyperlang.sh
-. $(dirname $0)/lsp.sh
+. ${MACOS_BUILD_SCRIPTS}/cjpm.sh
+. ${MACOS_BUILD_SCRIPTS}/cjfmt.sh
+. ${MACOS_BUILD_SCRIPTS}/hyperlang.sh
+. ${MACOS_BUILD_SCRIPTS}/lsp.sh
 
-. $(dirname $0)/bundleSDK.sh
+. ${MACOS_BUILD_SCRIPTS}/bundleSDK.sh
 
 
 
