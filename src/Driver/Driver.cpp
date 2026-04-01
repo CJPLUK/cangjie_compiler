@@ -16,6 +16,11 @@
 #include <utility>
 #include <vector>
 
+#include "llvm/Bitcode/BitcodeReader.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/Support/MemoryBuffer.h"
+
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Basic/Version.h"
 #include "cangjie/Driver/TempFileManager.h"
@@ -119,6 +124,43 @@ bool Driver::ParseArgs()
     }
 
     driverOptions->SetCompilationCachedPath();
+
+    if (!ExtractBCPackageNames()) {
+        return false;
+    }
+
+    return true;
+}
+
+bool Driver::ExtractBCPackageNames()
+{
+    for (const auto& bcPath : driverOptions->bcInputFiles) {
+        auto mbOrErr = llvm::MemoryBuffer::getFile(bcPath, false, false);
+        if (auto ec = mbOrErr.getError()) {
+            diag.DiagnoseRefactor(DiagKindRefactor::bc_file_open_failed, DEFAULT_POSITION, bcPath, ec.message());
+            return false;
+        }
+        
+        llvm::MemoryBufferRef mbref = (*mbOrErr)->getMemBufferRef();
+        llvm::LLVMContext context;
+        auto moduleOrErr = llvm::getLazyBitcodeModule(mbref, context, false);
+        if (!moduleOrErr) {
+            diag.DiagnoseRefactor(DiagKindRefactor::bc_parse_failed, DEFAULT_POSITION, bcPath);
+            return false;
+        }
+
+        std::unique_ptr<llvm::Module> module = std::move(*moduleOrErr);
+        llvm::StringRef pkgName = module->getSourceFileName();
+        unsigned subCHIRPackageIdx = 0;
+        unsigned Radix = 10;
+        if (pkgName.consumeInteger(Radix, subCHIRPackageIdx) ||
+            !pkgName.consume_front("-") || pkgName.empty()) {
+                diag.DiagnoseRefactor(DiagKindRefactor::bc_invalid_package_name, DEFAULT_POSITION, bcPath);
+                return false;
+        }
+        driverOptions->bcPackageNames.push_back(std::string(pkgName));
+    }
+
     return true;
 }
 

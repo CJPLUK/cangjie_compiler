@@ -1574,3 +1574,30 @@ void ImportManager::ClearCachesForRebuild()
     // clear for ResolveImports.
     directMacroDeps.clear();
 }
+
+bool ImportManager::AnalyzeDepStdPkgsOfBC(const std::string& fullPackageName)
+{
+    auto existingPkg = cjoManager->GetPackage(fullPackageName);
+    if (existingPkg || (cjoFilePaths.find(fullPackageName) != cjoFilePaths.end())) {
+        return true;
+    }
+
+    std::string cjoPath = FileUtil::FindSerializationFile(fullPackageName, SERIALIZED_FILE_EXTENSION, GetSearchPath());
+    if (cjoPath.empty() || !cjoManager->LoadPackageHeader(fullPackageName, cjoPath)) {
+        diag.DiagnoseRefactor(DiagKindRefactor::bc_cjo_error, DEFAULT_POSITION, fullPackageName);
+        return false;
+    }
+
+    auto package = cjoManager->GetPackage(fullPackageName);
+    CJC_NULLPTR_CHECK(package);
+    for (const auto& depStdPkg : package->GetAllDependentStdPkgs()) {
+        CJC_ASSERT(STANDARD_LIBS.find(depStdPkg) != STANDARD_LIBS.end());
+        if (cjoFilePaths.find(depStdPkg) == cjoFilePaths.end()) {
+            std::string depCjoPath = FileUtil::FindSerializationFile(
+                depStdPkg, SERIALIZED_FILE_EXTENSION, GetSearchPath());
+            // Stdlib deps in separately-handled .bc files are regarded as indirect.
+            HandleStdPackage(depStdPkg, depCjoPath, true);
+        }
+    }
+    return true;
+}

@@ -15,6 +15,9 @@ ERROR(permission_denied, "Permission denied: '%s'.")
 ERROR(invalid_path, "Invalid path: '%s'.")
 ERROR(no_such_file_or_directory_of_macro_obj, "No such file or directory: '%s', please check if input file exists, separate paths by space if there are multiple input files")
 ERROR(input_file_overwritten_by_generated_output, "The input file '%s' would be overwritten by the generated output.")
+ERROR(bc_file_open_failed, "cannot open bitcode file '%s': %s")
+ERROR(bc_parse_failed, "failed to parse bitcode file: %s")
+ERROR(bc_invalid_package_name, "invalid package name format in bitcode file: %s")
 
 // Ignore argument warnings
 WARNING(driver_warning_no_such_file, DRIVER_ARG, "No such file: '%s'")
