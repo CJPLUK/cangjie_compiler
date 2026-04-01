@@ -1,0 +1,20 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "bash build_scripts/* *": "allow",
+      "ls *": "allow",
+      "echo *": "allow",
+      "grep *": "allow",
+      "head *": "allow",
+      "tail *": "allow"
+    },
+    "edit": {
+      "*": "deny",
+      "build_scripts": "deny",
+      "third_party": "deny",
+      "cangjie_*/**/*": "allow"
+    }
+  }
+}
