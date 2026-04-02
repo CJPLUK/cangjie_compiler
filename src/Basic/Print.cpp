@@ -11,6 +11,31 @@
 #endif
 
 namespace Cangjie {
+const std::unordered_map<DiagColor, std::string> ColorPrintMap = {
+    {DiagColor::NO_COLOR, ANSI_NO_COLOR},
+    {DiagColor::RESET, ANSI_COLOR_RESET},
+    {DiagColor::BLACK, ANSI_COLOR_BLACK},
+    {DiagColor::RED, ANSI_COLOR_RED},
+    {DiagColor::GREEN, ANSI_COLOR_GREEN},
+    {DiagColor::YELLOW, ANSI_COLOR_YELLOW},
+    {DiagColor::BLUE, ANSI_COLOR_BLUE},
+    {DiagColor::MAGENTA, ANSI_COLOR_MAGENTA},
+    {DiagColor::CYAN, ANSI_COLOR_CYAN},
+    {DiagColor::WHITE, ANSI_COLOR_WHITE},
+    {DiagColor::REVERSE, ANSI_COLOR_WHITE_BACKGROUND_BLACK_FOREGROUND},
+};
+
+void ErrorWithColor(const DiagColor& color, const std::string& content, bool isBright)
+{
+    if (isBright) {
+        std::cerr << ANSI_COLOR_BRIGHT;
+    }
+    std::cerr << ColorPrintMap.at(color);
+    std::cerr << content;
+    if (color != DiagColor::NO_COLOR) {
+        std::cerr << ANSI_COLOR_RESET;
+    }
+}
 
 #ifdef _WIN32
 
