@@ -8,7 +8,7 @@ set -o xtrace
 #
 cd $WORKSPACE/cangjie_runtime/runtime;
 [ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
-python3 build.py build -t release -v ${CANGJIE_VERSION};
+python3 build.py build -t $TARGET -v ${CANGJIE_VERSION};
 python3 build.py install;
-cp -R $WORKSPACE/cangjie_runtime/runtime/output/common/linux_release_${ARCH}/{lib,runtime} $WORKSPACE/cangjie_compiler/output;
+cp -R $WORKSPACE/cangjie_runtime/runtime/output/common/linux_${TARGET}_${ARCH}/{lib,runtime} $WORKSPACE/cangjie_compiler/output;
 
