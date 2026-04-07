@@ -796,5 +796,13 @@ uint64_t GetRefDims(const Type& type);
  * @return True if func is from standard library.
  */
 bool IsSTDFunction(const Function& func);
+
+/**
+ * @brief Retrieves the non-debug users of a value.
+ *
+ * @param val The value to retrieve the non-debug users from.
+ * @return The non-debug users of the value.
+ */
+ std::vector<Expression*> GetNonDebugUsers(const Value& val);
 } // namespace Cangjie::CHIR
 #endif
