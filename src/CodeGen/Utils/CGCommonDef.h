@@ -153,9 +153,16 @@ const std::set<std::string> REFLECT_INTRINSIC_FUNC = {"CJ_MCC_ApplyCJInstanceMet
 const std::unordered_map<CHIR::IntrinsicKind, IntrinsicFuncInfo> INTRINSIC_KIND_TO_FUNCNAME_MAP = {
     // future
     {CHIR::IntrinsicKind::FUTURE_INIT, {"CJ_MCC_FutureInit", {FAST_NATIVE_ATTR}}},
+    {CHIR::IntrinsicKind::TASK_INIT, {"CJ_MCC_TaskInit", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::FUTURE_IS_COMPLETE, {"CJ_MCC_FutureIsComplete", {FAST_NATIVE_ATTR}}},
+    {CHIR::IntrinsicKind::TASK_IS_COMPLETE, {"CJ_MCC_TaskIsComplete", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::FUTURE_WAIT, {"CJ_MCC_FutureWait", {}}},
+    {CHIR::IntrinsicKind::TASK_WAIT, {"CJ_MCC_TaskWait", {}}},
     {CHIR::IntrinsicKind::FUTURE_NOTIFYALL, {"CJ_MCC_FutureNotifyAll", {FAST_NATIVE_ATTR}}},
+    {CHIR::IntrinsicKind::TASK_NOTIFYALL, {"CJ_MCC_TaskNotifyAll", {FAST_NATIVE_ATTR}}},
+    {CHIR::IntrinsicKind::TASK_LOCK_CONTINUATIONS, {"CJ_MCC_TaskLockContinuationsOrAlreadyComplete", {FAST_NATIVE_ATTR}}},
+    {CHIR::IntrinsicKind::TASK_UNLOCK_CONTINUATIONS, {"CJ_MCC_TaskUnlockContinuations", {FAST_NATIVE_ATTR}}},
+    {CHIR::IntrinsicKind::TASK_NOTIFY_END_THREAD, {"CJ_MCC_TaskNotifyEndThread", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::IS_THREAD_OBJECT_INITED, {"CJ_MCC_IsThreadObjectInited", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::GET_THREAD_OBJECT, {"CJ_MCC_GetCurrentCJThreadObject", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::SET_THREAD_OBJECT, {"CJ_MCC_SetCurrentCJThreadObject", {FAST_NATIVE_ATTR}}},

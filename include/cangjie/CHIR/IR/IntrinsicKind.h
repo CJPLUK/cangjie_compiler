@@ -109,6 +109,7 @@ static const std::string GET_BLOCKING_THREAD_NUMBER_NAME = "getBlockingThreadNum
 static const std::string GET_NATIVE_THREAD_NUMBER_NAME = "getNativeThreadNumber";
 
 static const std::string FUTURE_INIT_NAME = "futureInit";
+static const std::string TASK_INIT_NAME = "taskInit";
 static const std::string OBJECT_REFEQ_NAME = "intrinsicRefEq";
 
 static const std::string RAW_ARRAY_REFEQ_NAME = "intrinsicRefEqRawArray"; // cjnative only
@@ -122,6 +123,12 @@ static const std::string SET_THREAD_OBJECT_NAME = "setThreadObject";
 static const std::string FUTURE_IS_COMPLETE_NAME = "futureIsComplete"; // cjnative only
 static const std::string FUTURE_WAIT_NAME = "futureWait";              // cjnative only
 static const std::string FUTURE_NOTIFYALL_NAME = "futureNotifyAll";    // cjnative only
+static const std::string TASK_IS_COMPLETE_NAME = "taskIsComplete"; // cjnative only
+static const std::string TASK_WAIT_NAME = "taskWait";              // cjnative only
+static const std::string TASK_NOTIFYALL_NAME = "taskNotifyAll";    // cjnative only
+static const std::string TASK_LOCK_CONTINUATIONS_NAME = "taskLockContinuationsOrAlreadyComplete"; // cjnative only
+static const std::string TASK_UNLOCK_CONTINUATIONS_NAME = "taskUnlockContinuations";              // cjnative only
+static const std::string TASK_NOTIFY_END_THREAD_NAME = "taskNotifyEndThread";                     // cjnative only
 
 // ============================ cjnative only start ==============================
 // REFLECTION
@@ -352,10 +359,17 @@ enum IntrinsicKind : uint16_t {
 
     // About Future
     FUTURE_INIT,
+    TASK_INIT,
 
     FUTURE_IS_COMPLETE, // cjnative only
     FUTURE_WAIT,        // cjnative only
     FUTURE_NOTIFYALL,   // cjnative only
+    TASK_IS_COMPLETE, // cjnative only
+    TASK_WAIT,        // cjnative only
+    TASK_NOTIFYALL,   // cjnative only
+    TASK_LOCK_CONTINUATIONS,   // cjnative only
+    TASK_UNLOCK_CONTINUATIONS, // cjnative only
+    TASK_NOTIFY_END_THREAD,    // cjnative only
 
     IS_THREAD_OBJECT_INITED,
     GET_THREAD_OBJECT,
@@ -664,6 +678,7 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {BIT_CAST_NAME, BIT_CAST},
 
     {FUTURE_INIT_NAME, FUTURE_INIT},
+    {TASK_INIT_NAME, TASK_INIT},
 
     {IS_THREAD_OBJECT_INITED_NAME, IS_THREAD_OBJECT_INITED},
     {GET_THREAD_OBJECT_NAME, GET_THREAD_OBJECT},
@@ -672,6 +687,12 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {FUTURE_IS_COMPLETE_NAME, FUTURE_IS_COMPLETE},
     {FUTURE_WAIT_NAME, FUTURE_WAIT},
     {FUTURE_NOTIFYALL_NAME, FUTURE_NOTIFYALL},
+    {TASK_IS_COMPLETE_NAME, TASK_IS_COMPLETE},
+    {TASK_WAIT_NAME, TASK_WAIT},
+    {TASK_NOTIFYALL_NAME, TASK_NOTIFYALL},
+    {TASK_LOCK_CONTINUATIONS_NAME, TASK_LOCK_CONTINUATIONS},
+    {TASK_UNLOCK_CONTINUATIONS_NAME, TASK_UNLOCK_CONTINUATIONS},
+    {TASK_NOTIFY_END_THREAD_NAME, TASK_NOTIFY_END_THREAD},
 
     {OBJECT_REFEQ_NAME, OBJECT_REFEQ},
 
