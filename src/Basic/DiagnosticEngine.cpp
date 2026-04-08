@@ -387,15 +387,16 @@ void DiagnosticBuilder::AddNote(const AST::Node& node, const std::string& note)
     auto range = MakeRange(node.begin, node.end);
     diag.CheckRange(diagnostic.GetDiagCategory(), range);
     SubDiagnostic subDiag(range, note);
+    subDiag.SetNodeSubDiagAt(&node);
     AddNote(subDiag);
 }
 
 void DiagnosticBuilder::AddNote(const AST::Node& node, const Range& range, const std::string& note)
 {
     diag.CheckRange(diagnostic.GetDiagCategory(), range);
-
     auto newRange = MakeRange(node.GetMacroCallPos(range.begin), node.GetMacroCallPos(range.end, true));
     SubDiagnostic subDiag(newRange, note);
+    subDiag.SetNodeSubDiagAt(&node);
     AddNote(subDiag);
 }
 
