@@ -849,7 +849,7 @@ Position Node::GetMacroCallNewPos(const Position& originPos)
  */
 Position Node::GetMacroCallPos(Position originPos, bool isLowerBound) const
 {
-    if (this->TestAttr(Attribute::MACRO_EXPANDED_NODE) && this->curMacroCall) {
+    if (this->curMacroCall) {
         auto pInvocation = this->curMacroCall->GetConstInvocation();
         if (pInvocation && !IsPureAnnotation(*pInvocation)) {
             return GetMacroSourcePos(*pInvocation, originPos, isLowerBound);
@@ -1027,7 +1027,7 @@ Position Node::GetDebugPos(const Position& curPos) const
     auto pInvocation = this->GetConstInvocation();
     if (!pInvocation) {
         // If the node is not macrocall node, then check whether it is expanded from macrocall node or not.
-        if (curPos == INVALID_POSITION || !this->TestAttr(Attribute::MACRO_EXPANDED_NODE) || !this->curMacroCall) {
+        if (curPos == INVALID_POSITION || !this->curMacroCall) {
             return curPos;
         }
         // Current node is expanded from macrocall node.

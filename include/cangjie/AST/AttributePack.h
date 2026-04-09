@@ -312,7 +312,7 @@ enum class Attribute {
      * W: MacroExpansion.
      * R: None.
      */
-    MACRO_EXPANDED_NODE,
+    MACRO_EXPANDED_NODE[[deprecated("Redundant with Node->curMacroCall; will be removed in the future.")]],
 
     /**
      * Mark whether a function definition is a macro definition.
@@ -677,6 +677,13 @@ enum class Attribute {
     AST_ATTR_END,
 };
 
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 static const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::IN_REFERENCE_CYCLE, "IN_REFERENCE_CYCLE"},
     {AST::Attribute::UNREACHABLE, "UNREACHABLE"},
@@ -716,7 +723,10 @@ static const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::IS_CAPTURE, "IS_CAPTURE"},
     {AST::Attribute::IN_CORE, "IN_CORE"},
     {AST::Attribute::NEED_AUTO_BOX, "NEED_AUTO_BOX"},
-    {AST::Attribute::MACRO_EXPANDED_NODE, "MACRO_EXPANDED_NODE"},
+
+    // deprecated: Redundant with Node->curMacroCall; will be removed in the future.
+    {AST::Attribute::MACRO_EXPANDED_NODE, "MACRO_EXPANDED_NODE(deprecated)"},
+
     {AST::Attribute::MACRO_FUNC, "MACRO_FUNC"},
     {AST::Attribute::MACRO_INVOKE_FUNC, "MACRO_INVOKE_FUNC"},
     {AST::Attribute::MACRO_INVOKE_BODY, "MACRO_INVOKE_BODY"},
@@ -772,6 +782,11 @@ static const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD, "CJ_MIRROR_OBJC_INTERFACE_FWD"},
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
 };
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#else
+#pragma GCC diagnostic pop
+#endif
 
 class AttributePack {
 public:

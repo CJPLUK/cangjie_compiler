@@ -27,7 +27,6 @@ public:
             return diag.DiagnoseRefactor(kind, range, std::forward<Args>(args)...);
         }
         AST::Node node;
-        node.EnableAttr(AST::Attribute::MACRO_EXPANDED_NODE);
         node.curMacroCall = it->second;
         return diag.DiagnoseRefactor(kind, node, range, std::forward<Args>(args)...);
     }

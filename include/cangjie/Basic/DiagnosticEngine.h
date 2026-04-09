@@ -838,7 +838,7 @@ public:
             diagnostic.isInMacroCall = true;
             return DiagnosticBuilder(*this, diagnostic);
         }
-        if (node.TestAttr(AST::Attribute::MACRO_EXPANDED_NODE) && node.curMacroCall) {
+        if (node.curMacroCall) {
             auto begin = node.GetMacroCallPos(pos);
             Diagnostic diagnostic(begin, begin + 1, kind, args...);
             AddMacroCallNote(diagnostic, node, pos);
@@ -855,7 +855,7 @@ public:
             return DiagnosticBuilder(*this, diagnostic);
         }
         // Refactor the Diagnose of the node after the macro expansion.
-        if (node.TestAttr(AST::Attribute::MACRO_EXPANDED_NODE) && node.curMacroCall) {
+        if (node.curMacroCall) {
             Diagnostic diagnostic(node.GetBegin(), node.GetEnd(), kind, args...);
             AddMacroCallNote(diagnostic, node, node.begin);
             return DiagnosticBuilder(*this, diagnostic);

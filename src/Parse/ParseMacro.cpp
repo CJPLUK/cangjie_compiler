@@ -116,7 +116,6 @@ std::vector<OwnedPtr<Node>> ParserImpl::ParseNodes(std::variant<ScopeKind, ExprK
             }
             node = ParseExpr(*scp);
         }
-        node->EnableAttr(Attribute::MACRO_EXPANDED_NODE);
         node->curFile = this->currentFile;
         node->curMacroCall = this->curMacroCall;
         AddMacroAttr(*node);

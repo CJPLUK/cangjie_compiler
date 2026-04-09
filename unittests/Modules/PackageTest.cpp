@@ -716,9 +716,8 @@ TEST_F(PackageTest, LSPExportInterfaceFuncFromMacro)
             auto macroCall = MakeOwned<MacroExpandDecl>();
             id->curMacroCall = macroCall.get();
             meds.emplace_back(std::move(macroCall));
-            id->EnableAttr(Attribute::MACRO_EXPANDED_NODE);
             for (auto& d : id->body->decls) {
-                d->EnableAttr(Attribute::MACRO_EXPANDED_NODE);
+                d->curMacroCall = macroCall.get();
             }
         }
     }

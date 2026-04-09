@@ -100,7 +100,7 @@ TEST_F(MacroTest, DISABLED_MacroCall_GetNewPos)
     }
     instance->PerformMacroExpand();
     for (auto& decl : file->decls) {
-        if (!decl->TestAttr(Attribute::MACRO_EXPANDED_NODE)) {
+        if (!decl->curMacroCall) {
             continue;
         }
         auto macrocall = decl->curMacroCall;
@@ -460,7 +460,7 @@ TEST_F(MacroTest, DISABLED_MacroCall_HighLight_LSP)
     auto file = instance->GetSourcePackages()[0]->files[0].get();
 
     for (auto& decl : file->decls) {
-        if (!decl->TestAttr(Attribute::MACRO_EXPANDED_NODE)) {
+        if (!decl->curMacroCall) {
             continue;
         }
         auto macrocall = decl->curMacroCall;

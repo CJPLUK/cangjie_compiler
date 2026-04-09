@@ -137,7 +137,6 @@ public:
         n->begin = pos;
         n->end = pos + 1;
         if (CurMacroCall()) {
-            n->EnableAttr(AST::Attribute::MACRO_EXPANDED_NODE);
             n->curMacroCall = CurMacroCall();
         }
         return GetDiagnosticEngine().DiagnoseRefactor(kind, *n, pos, std::forward<Args>(args)...);
@@ -150,7 +149,6 @@ public:
         n->begin = range.begin;
         n->end = range.end;
         if (CurMacroCall()) {
-            n->EnableAttr(AST::Attribute::MACRO_EXPANDED_NODE);
             n->curMacroCall = CurMacroCall();
         }
         return GetDiagnosticEngine().DiagnoseRefactor(kind, *n, range, std::forward<Args>(args)...);
@@ -163,7 +161,6 @@ public:
         n->begin = token.Begin();
         n->end = token.End();
         if (CurMacroCall()) {
-            n->EnableAttr(AST::Attribute::MACRO_EXPANDED_NODE);
             n->curMacroCall = CurMacroCall();
         }
         return GetDiagnosticEngine().DiagnoseRefactor(kind, *n, token, std::forward<Args>(args)...);
@@ -176,7 +173,6 @@ public:
         n->begin = node.begin;
         n->end = node.end;
         if (CurMacroCall()) {
-            n->EnableAttr(AST::Attribute::MACRO_EXPANDED_NODE);
             n->curMacroCall = CurMacroCall();
         }
         return GetDiagnosticEngine().DiagnoseRefactor(kind, *n, std::forward<Args>(args)...);

@@ -674,7 +674,7 @@ void DiagnosticEngineImpl::ReportErrorAndWarningCount()
 
 void DiagnosticEngineImpl::AddMacroCallNote(Diagnostic& diagnostic, const AST::Node& node, const Position& pos)
 {
-    if (!node.TestAttr(AST::Attribute::MACRO_EXPANDED_NODE) || !node.curMacroCall) {
+    if (!node.curMacroCall) {
         return;
     }
     diagnostic.curMacroCall = node.curMacroCall;

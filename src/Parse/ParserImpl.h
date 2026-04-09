@@ -1067,7 +1067,6 @@ private:
         n->begin = pos;
         n->end = pos + 1;
         if (curMacroCall) {
-            n->EnableAttr(AST::Attribute::MACRO_EXPANDED_NODE);
             n->curMacroCall = curMacroCall;
         }
         return diag.DiagnoseRefactor(kind, *n, pos, std::forward<Args>(args)...);
@@ -1080,7 +1079,6 @@ private:
         n->begin = range.begin;
         n->end = range.end;
         if (curMacroCall) {
-            n->EnableAttr(AST::Attribute::MACRO_EXPANDED_NODE);
             n->curMacroCall = curMacroCall;
         }
         return diag.DiagnoseRefactor(kind, *n, range, std::forward<Args>(args)...);
@@ -1093,7 +1091,6 @@ private:
         n->begin = token.Begin();
         n->end = token.End();
         if (curMacroCall) {
-            n->EnableAttr(AST::Attribute::MACRO_EXPANDED_NODE);
             n->curMacroCall = curMacroCall;
         }
         return diag.DiagnoseRefactor(kind, *n, token, std::forward<Args>(args)...);
@@ -1106,7 +1103,6 @@ private:
         n->begin = node.begin;
         n->end = node.end;
         if (curMacroCall) {
-            n->EnableAttr(AST::Attribute::MACRO_EXPANDED_NODE);
             n->curMacroCall = curMacroCall;
         }
         return diag.DiagnoseRefactor(kind, *n, std::forward<Args>(args)...);
