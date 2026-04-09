@@ -1,8 +1,8 @@
 # Cangjie SDK build framework
 
-This repository is used to pin down versions of relevant repos to build a fork of the Cangjie SDK with deferred effect handlers, including the versions of some third party dependencies to keep the build system reproducible (and not time-dependent).
+This repository is used to pin down versions of relevant repos to build a fork of the Cangjie SDK (with deferred effect handlers in certain branches), including the versions of some third party dependencies to keep the build system reproducible (and not time-dependent).
 
-A biproduct is to build the custom SDK to host on the Cangjie UK website. The goal is to set up containerized builds for all the supported platforms. Maybe later this could also include CI testing pinned down to specific revisions of cangjie_test and cangjie_test_framework.
+A biproduct is to build the custom SDK to host on the Cangjie UK website. The goal is to set up containerised builds for all the supported platforms. Maybe later this could also include CI testing pinned down to specific revisions of cangjie_test and cangjie_test_framework.
 
 ## Cloning
 This repo makes use of git submodules so make sure to `git clone` with the `--recurse-submodules`... or if you forgot to do that the first time, you can run `git submodule update --init`.
