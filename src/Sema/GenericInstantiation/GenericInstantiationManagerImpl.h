@@ -146,6 +146,7 @@ private:
         std::unordered_set<std::pair<Ptr<AST::Decl>, size_t>, HashPair>, HashPair>
         abstractFuncToDeclMap;
     std::unordered_map<Ptr<AST::Decl>, size_t> membersIndexMap;
+    std::unordered_map<Ptr<const AST::Decl>, std::vector<size_t>> skippedMemberOffsets;
     /** Node kinds which should be ignored in walker. */
     inline static const std::unordered_set<AST::ASTKind> ignoreKinds = {
         AST::ASTKind::GENERIC_PARAM_DECL,
@@ -322,6 +323,8 @@ private:
             }
         }
     }
+    size_t CountSkippedMembersBefore(const AST::Decl& decl, size_t offset);
+    Ptr<AST::Decl> GetMemberByOffset(const AST::Decl& decl, size_t offset);
     bool IsDeclCanRestoredForTy(const AST::Decl& decl) const;
     class IncrementalContext {
     public:

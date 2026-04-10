@@ -59,7 +59,7 @@ inline int Mkdir(const std::string& path)
 #else
 inline int Mkdir(const std::string& path)
 {
-    return mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    return mkdir(path.c_str(), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
 }
 #endif
 

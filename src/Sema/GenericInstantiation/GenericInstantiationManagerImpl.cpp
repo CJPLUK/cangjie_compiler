@@ -75,8 +75,6 @@ GIM::GenericInstantiationManagerImpl::GenericInstantiationManagerImpl(CompilerIn
 }
 
 namespace {
-std::unordered_map<Ptr<const Decl>, std::vector<size_t>> g_skippedMemberOffsets = {};
-
 void UpdateInstantiatedDeclsLinkage(const Package& pkg)
 {
     // All instantiated decls should be marked as internal for cjnative backend.
@@ -228,11 +226,12 @@ void BuildGenericsTyMap(const FuncDecl& fd, TypeSubst& g2gMap)
         }
     }
 }
+} // namespace
 
-size_t CountSkippedMembersBefore(const Decl& decl, size_t offset)
+size_t GIM::GenericInstantiationManagerImpl::CountSkippedMembersBefore(const Decl& decl, size_t offset)
 {
-    auto found = g_skippedMemberOffsets.find(&decl);
-    if (found == g_skippedMemberOffsets.end()) {
+    auto found = skippedMemberOffsets.find(&decl);
+    if (found == skippedMemberOffsets.end()) {
         std::vector<size_t> offsets;
         auto members = GetRealIndexingMembers(decl.GetMemberDecls(), decl.TestAttr(Attribute::GENERIC));
         for (auto it = members.begin(); it != members.end(); ++it) {
@@ -244,7 +243,7 @@ size_t CountSkippedMembersBefore(const Decl& decl, size_t offset)
             }
             offsets.emplace_back(off);
         }
-        found = g_skippedMemberOffsets.emplace(&decl, std::move(offsets)).first;
+        found = skippedMemberOffsets.emplace(&decl, std::move(offsets)).first;
     }
     for (size_t i = 0; i < found->second.size(); ++i) {
         if (found->second[i] == offset) {
@@ -254,7 +253,7 @@ size_t CountSkippedMembersBefore(const Decl& decl, size_t offset)
     return std::numeric_limits<size_t>::max();
 }
 
-Ptr<Decl> GetMemberByOffset(const Decl& decl, size_t offset)
+Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetMemberByOffset(const Decl& decl, size_t offset)
 {
     auto members = GetRealIndexingMembers(decl.GetMemberDecls(), decl.TestAttr(Attribute::GENERIC));
     auto implMemberIt = members.begin();
@@ -277,7 +276,6 @@ Ptr<Decl> GetMemberByOffset(const Decl& decl, size_t offset)
     }
     return implMemberIt->get();
 }
-} // namespace
 
 void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pkg)
 {
