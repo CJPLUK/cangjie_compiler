@@ -95,6 +95,29 @@ private:
     Ptr<AST::Expr> ReplaceFieldGetWithAccessor(AST::MemberAccess& memberAccess, bool isInConstructor);
     Ptr<AST::Expr> ReplaceFieldSetWithAccessor(AST::AssignExpr& assignExpr, bool isInConstructor);
     Ptr<AST::Expr> ReplaceMemberAccessWithAccessor(AST::MemberAccess& memberAccess, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceMemberAccess(AST::MemberAccess& member, bool isInConstructor, bool isSubMemberAccess);
+    Ptr<AST::Expr> ReplaceAssignment(AST::AssignExpr& assignment, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceRefExpr(AST::RefExpr& refExpr);
+    Ptr<AST::Expr> ReplaceCallExpr(AST::CallExpr& callExpr);
+    Ptr<AST::Expr> ReplaceStaticRefExprWithGetAccessor(AST::RefExpr& refExpr);
+
+    /**
+     * 
+     * Example of desugaring:
+     * foreign func times2(x: CPointer<Int64>): Unit
+     * 
+     * public var x: Int64 = 10
+     * unsafe {
+     *     times2(inout x)
+     * } |->
+     * 
+     * var $tmp1: Int64 = x$get()
+     * times2(inout tmp1)
+     * x = x$set($tmp1)
+     * 
+     */
+    Ptr<AST::Expr> ReplaceInoutFuncArgWithAccessor(AST::CallExpr& callExpr);
+    Ptr<AST::FuncArg> GenerateDesugarFuncArg(Ptr<AST::FuncArg> funcArg, Ptr<AST::VarDecl> varDecl);
     template <typename T> Ptr<T> FindGeneratedGlobalDecl(Ptr<AST::File> file, const std::string& identifier);
     std::tuple<Ptr<AST::InterfaceDecl>, Ptr<AST::FuncDecl>> FindDefaultAccessorInterfaceAndFunction(
         Ptr<AST::FuncDecl> original);

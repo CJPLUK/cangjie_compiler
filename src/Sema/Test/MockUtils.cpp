@@ -181,25 +181,16 @@ bool MockUtils::IsMockAccessorRequired(const Decl& decl)
 }
 
 Ptr<Decl> MockUtils::FindAccessorForMemberAccess(
-    const MemberAccess& memberAccess, const Ptr<Decl> resolvedMember,
+    const Ptr<Ty> ty, const Ptr<Decl> resolvedMember,
     const std::vector<Ptr<Ty>>& instTys, AccessorKind kind) const
 {
     if (!resolvedMember || !IsMockAccessorRequired(*resolvedMember)) {
         return nullptr;
     }
 
-    if (IS_GENERIC_INSTANTIATION_ENABLED) {
-        for (auto tyVar : memberAccess.instTys) {
-            if (tyVar->HasGeneric()) {
-                return nullptr;
-            }
-        }
-    }
-
-    auto baseTy = memberAccess.baseExpr->ty;
-    auto baseDecl = Ty::GetDeclOfTy(baseTy);
+    auto baseDecl = Ty::GetDeclOfTy(ty);
     if (!baseDecl || !Is<ClassDecl>(baseDecl) ||
-        (IS_GENERIC_INSTANTIATION_ENABLED && baseTy->HasGeneric()) || !baseDecl->TestAttr(Attribute::MOCK_SUPPORTED)
+        (IS_GENERIC_INSTANTIATION_ENABLED && ty->HasGeneric()) || !baseDecl->TestAttr(Attribute::MOCK_SUPPORTED)
     ) {
         return nullptr;
     }
@@ -207,12 +198,12 @@ Ptr<Decl> MockUtils::FindAccessorForMemberAccess(
     Ptr<ClassDecl> baseClass = As<ASTKind::CLASS_DECL>(baseDecl);
     Ptr<ClassDecl> outerClass;
     if (baseClass->TestAttr(Attribute::GENERIC)) {
-        outerClass = GetInstantiatedDecl(baseClass, baseTy->typeArgs, IS_GENERIC_INSTANTIATION_ENABLED);
+        outerClass = GetInstantiatedDecl(baseClass, ty->typeArgs, IS_GENERIC_INSTANTIATION_ENABLED);
     } else if (baseClass->genericDecl != nullptr) {
         // Initially instantiated generic base type points to its original package's type
         // But we need to get the current package's version of that instantiated type
         outerClass = GetInstantiatedDecl(
-            Ptr(As<ASTKind::CLASS_DECL>(baseClass->genericDecl)), baseTy->typeArgs, IS_GENERIC_INSTANTIATION_ENABLED);
+            Ptr(As<ASTKind::CLASS_DECL>(baseClass->genericDecl)), ty->typeArgs, IS_GENERIC_INSTANTIATION_ENABLED);
     } else {
         outerClass = baseClass;
     }
@@ -244,7 +235,7 @@ Ptr<FuncDecl> MockUtils::FindAccessor(Ptr<MemberAccess> ma, Ptr<Decl> target, Ac
     Ptr<Decl> accessor;
     if (kind == AccessorKind::FIELD_GETTER || kind == AccessorKind::FIELD_SETTER) {
         CJC_ASSERT(ma);
-        accessor = FindAccessorForMemberAccess(*ma, target, {}, kind);
+        accessor = FindAccessorForMemberAccess(ma->baseExpr->ty, target, {}, kind);
     } else if (kind == AccessorKind::TOP_LEVEL_VARIABLE_GETTER ||
         kind == AccessorKind::TOP_LEVEL_VARIABLE_SETTER
     ) {
@@ -279,6 +270,12 @@ Ptr<Decl> MockUtils::FindAccessor(
                     originalIdentifier == member->identifier + GETTER_SUFFIX) {
                     return decl.get();
                 } else if (kind == AccessorKind::FIELD_SETTER &&
+                    originalIdentifier == member->identifier + SETTER_SUFFIX) {
+                    return decl.get();
+                } else if (kind == AccessorKind::STATIC_FIELD_GETTER &&
+                    originalIdentifier == member->identifier + GETTER_SUFFIX) {
+                    return decl.get();
+                } else if (kind == AccessorKind::STATIC_FIELD_SETTER &&
                     originalIdentifier == member->identifier + SETTER_SUFFIX) {
                     return decl.get();
                 }
