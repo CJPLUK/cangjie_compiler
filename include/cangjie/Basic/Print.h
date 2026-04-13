@@ -24,6 +24,9 @@
 #include "cangjie/Basic/Utils.h"
 #include "cangjie/Basic/Color.h"
 #include "cangjie/Utils/ICEUtil.h"
+#ifdef _WIN32
+#include "cangjie/Basic/StringConvertor.h"
+#endif
 
 #if defined(__GNUC__) || defined(__clang__)
 #define CJC_PRINTF_FORMAT(fmtIdx, firstVarargIdx) __attribute__((format(printf, fmtIdx, firstVarargIdx)))
@@ -130,6 +133,22 @@ template <typename... Args> inline void Error(Args&&... args)
     std::cerr << RED_ERROR_MARK;
     ((std::cerr << args), ...);
 }
+
+#ifdef _WIN32
+inline void WErrorf(const wchar_t *fmt, ...)
+{
+    std::optional<std::wstring> werrMark = Cangjie::StringConvertor::StringToWString(RED_ERROR_MARK);
+    if (!werrMark.has_value()) {
+        return;
+    }
+    std::wcerr << werrMark.value().c_str();
+    va_list myargs;
+    va_start(myargs, fmt);
+    (void)vfwprintf(stderr, fmt, myargs);
+    va_end(myargs);
+    std::wcerr << std::flush;
+}
+#endif
 
 // format Error print with new line
 CJC_PRINTF_FORMAT(1, 2) inline void Errorf(const char* fmt, ...)

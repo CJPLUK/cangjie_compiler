@@ -47,6 +47,22 @@ public:
      * @brief The destructor of class ToolFuture.
      */
     virtual ~ToolFuture() {};
+    std::string spawnErrorMessage;
+
+#ifdef _WIN32
+    DWORD exitCode = 0;
+#else
+    int exitCode = 0;
+#endif
+};
+
+class ErrorFuture : public ToolFuture {
+public:
+    explicit ErrorFuture(const std::string& message)
+    {
+        spawnErrorMessage = message;
+    };
+    State GetState() override;
 };
 
 class ThreadFuture : public ToolFuture {
