@@ -32,6 +32,7 @@
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/Utils/Macros.h"
 #include "cangjie/Utils/Utils.h"
 
 using namespace Cangjie;
@@ -218,6 +219,7 @@ std::vector<Ptr<Ty>> GetAllGenericTys(const Expr& expr, const FuncDecl& fd)
 }
 
 /** Calculate enum target's scope level when using. */
+SUPPRESS_WARNING("-Wunused-function")
 int64_t CalculateEnumCtorScopeLevel(const ASTContext& ctx, const CallExpr& ce, const FuncDecl& fd)
 {
     if (fd.TestAttr(Attribute::IMPORTED)) {
@@ -238,6 +240,7 @@ int64_t CalculateEnumCtorScopeLevel(const ASTContext& ctx, const CallExpr& ce, c
     // Otherwise return global scope level.
     return 0;
 }
+UNSUPPRESS_WARNING()
 
 // Check whether given i types can passed to j types (T_i <: T_j).
 bool CompareParamTys(TypeManager& tyMgr, const std::vector<Ptr<AST::Ty>>& iTys, const std::vector<Ptr<AST::Ty>>& jTys)

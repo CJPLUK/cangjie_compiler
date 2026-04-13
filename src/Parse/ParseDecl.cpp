@@ -15,6 +15,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Parse/ParseModifiersRules.h"
+#include "cangjie/Utils/Macros.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -30,6 +31,7 @@ ParserImpl::DeclHandler ParserImpl::LookupDeclHandler(TokenKind kind)
     static constexpr int arraySize = lastKind - firstKind + 1;
     // clang-format off
     static const DeclHandler handlers[arraySize] = {
+SUPPRESS_WARNING("-Wcast-function-type-mismatch")
         reinterpret_cast<DeclHandler>(&ParserImpl::ParseStructDecl),
         reinterpret_cast<DeclHandler>(&ParserImpl::ParseEnumDecl),
         nullptr, nullptr, nullptr, nullptr,
@@ -53,6 +55,7 @@ ParserImpl::DeclHandler ParserImpl::LookupDeclHandler(TokenKind kind)
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
         nullptr, nullptr,
         reinterpret_cast<DeclHandler>(&ParserImpl::ParseMainDecl),
+UNSUPPRESS_WARNING()
     };
     // clang-format on
 

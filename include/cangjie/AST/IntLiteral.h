@@ -97,20 +97,6 @@ public:
 
     bool GreaterThanOrEqualBitLen(const TypeKind kind) const;
 
-    IntLiteral operator-() const;
-    IntLiteral operator~() const;
-    IntLiteral operator+(const IntLiteral& rhs) const;
-    IntLiteral operator-(const IntLiteral& rhs) const;
-    IntLiteral operator*(const IntLiteral& rhs) const;
-    IntLiteral operator/(const IntLiteral& rhs) const;
-    IntLiteral operator%(const IntLiteral& rhs) const;
-    IntLiteral operator>>(const IntLiteral& rhs) const;
-    IntLiteral operator<<(const IntLiteral& rhs) const;
-    IntLiteral operator&(const IntLiteral& rhs) const;
-    IntLiteral operator^(const IntLiteral& rhs) const;
-    IntLiteral operator|(const IntLiteral& rhs) const;
-    IntLiteral PowerOf(const IntLiteral& exponent) const;
-    static int EscapeCharacterToInt(char c);
     void SetOutOfRange(Ptr<const Ty> ty);
 
 private:
