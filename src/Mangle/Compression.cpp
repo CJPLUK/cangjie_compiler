@@ -13,6 +13,7 @@
 #include "Compression.h"
 
 #include "cangjie/Mangle/BaseMangler.h"
+#include "cangjie/Utils/StdUtils.h"
 
 using namespace Cangjie::MangleUtils;
 
@@ -29,7 +30,11 @@ std::string DecimalToManglingNumber(const std::string& decimal)
         }
     }
     // Because _ represents 1, decimal to mangling number requires subtracting 1.
-    int num = std::stoi(decimal) - 1;
+    auto numOpt = Stoi(decimal);
+    if (!numOpt.has_value()) {
+        return "";
+    }
+    int num = *numOpt - 1;
     if (num < 0) {
         return MANGLE_WILDCARD_PREFIX;
     }
@@ -234,10 +239,14 @@ size_t ForwardName(std::string& mangled, bool& isCompressed, size_t idx)
     }
     if (mangled[cIdx] == MANGLE_ANONYMOUS_VARIABLE_PREFIX[0]) { return idx + MANGLE_CHAR_LEN; }
     size_t numberLen = 0;
-    while (idx < mangled.size() && isdigit(mangled[idx + numberLen])) {
+    while (idx + numberLen < mangled.size() && isdigit(mangled[idx + numberLen])) {
         numberLen++;
     }
-    size_t number = static_cast<size_t>(std::stoi(mangled.substr(idx, numberLen).c_str()));
+    auto numberOpt = Stoi(mangled.substr(idx, numberLen));
+    if (!numberOpt.has_value()) {
+        return idx;
+    }
+    size_t number = static_cast<size_t>(*numberOpt);
     return idx + numberLen + number;
 }
 

@@ -18,6 +18,7 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Utils/FileUtil.h"
+#include "cangjie/Utils/StdUtils.h"
 
 #include <sstream>
 
@@ -154,7 +155,11 @@ std::string DecimalToManglingNumber(const std::string& decimal)
         }
     }
 
-    int num = std::stoi(decimal) - 1;
+    auto numOpt = Stoi(decimal);
+    if (!numOpt.has_value()) {
+        return "";
+    }
+    int num = *numOpt - 1;
     if (num < 0) {
         return MANGLE_WILDCARD_PREFIX;
     }

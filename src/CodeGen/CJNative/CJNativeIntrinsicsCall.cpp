@@ -1485,7 +1485,7 @@ llvm::Value* GetRealUUIDForAutoEnvClass(IRBuilder2& irBuilder, llvm::Value* obj)
     auto i81PtrTy = irBuilder.getInt8PtrTy(1U);
     const size_t realAutoEnvClassIdx = 2;
     auto [judgeBB, wrapperClassBB, endBB] = Vec2Tuple<3>(irBuilder.CreateAndInsertBasicBlocks({"judge", "wrapperClass", "end"}));
-    
+
     auto newObjPtr = irBuilder.CreateEntryAlloca(i81PtrTy, nullptr, "obj");
     irBuilder.CreateStore(obj, newObjPtr);
     irBuilder.CreateBr(judgeBB);
@@ -1509,7 +1509,7 @@ llvm::Value* GetRealUUIDForAutoEnvClass(IRBuilder2& irBuilder, llvm::Value* obj)
     auto ti = irBuilder.GetTypeInfoFromObject(newObj2);
     auto uuid = irBuilder.GetUUIDFromTypeInfo(ti);
     return uuid;
-} 
+}
 }
 
 llvm::Value* IRBuilder2::CallIntrinsicFuncRefEq(std::vector<CGValue*> parameters)
