@@ -156,6 +156,17 @@ llvm::Value* IRBuilder2::CreateCallOrInvoke(const CGFunctionType& calleeType, ll
     const auto& structParamNeedsBasePtr = calleeType.GetStructParamNeedsBasePtrIndices();
     const auto& realArgIndices = calleeType.GetRealArgIndices();
     std::vector<llvm::Value*> argsVal;
+    auto isGlobalStructArgOnAArch64 = [this, &structParamNeedsBasePtr, &realArgIndices](size_t idx) {
+        auto applyWrapper = dynamic_cast<const CHIRCallExpr*>(this->chirExpr);
+        return applyWrapper && structParamNeedsBasePtr.find(realArgIndices[idx]) != structParamNeedsBasePtr.end() &&
+            applyWrapper->GetArgs()[idx]->IsGlobalVar() &&
+            cgMod.GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::AARCH64;
+    };
+    auto tagGlobalStructAddrForAArch64 = [this](llvm::Value* llvmVal) {
+        auto taggedPtr = CreatePtrToInt(llvmVal, getInt64Ty());
+        taggedPtr = CreateOr(taggedPtr, getInt64(1ULL << 63));
+        return CreateIntToPtr(taggedPtr, llvmVal->getType());
+    };
     size_t idx = 0;
     for (auto arg : args) {
         bool isThisArgInStruct = false;
@@ -164,6 +175,9 @@ llvm::Value* IRBuilder2::CreateCallOrInvoke(const CGFunctionType& calleeType, ll
             isThisArgInStruct = applyWrapper->IsCalleeStructInstanceMethod();
         }
         auto llvmVal = FixFuncArg(*arg, *calleeType.GetParamType(idx), isThisArgInStruct);
+        if (isGlobalStructArgOnAArch64(idx)) {
+            llvmVal = tagGlobalStructAddrForAArch64(llvmVal);
+        }
         (void)argsVal.emplace_back(llvmVal); // Insert the fixed argument, may do some casting meanwhile.
         auto cgType = arg->GetCGType();
         CJC_ASSERT(!cgType->IsStructType());
@@ -176,7 +190,7 @@ llvm::Value* IRBuilder2::CreateCallOrInvoke(const CGFunctionType& calleeType, ll
                 auto i8PtrTy = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), addrspace);
                 auto basePtrVal = llvm::Constant::getNullValue(i8PtrTy);
                 if (auto applyWrapper = dynamic_cast<const CHIRCallExpr*>(this->chirExpr);
-                    applyWrapper && !applyWrapper->GetArgs()[idx]->IsLocalVar()) {
+                    applyWrapper && !isGlobalStructArgOnAArch64(idx) && !applyWrapper->GetArgs()[idx]->IsLocalVar()) {
                     basePtrVal = llvm::ConstantExpr::getIntToPtr(
                         llvm::ConstantInt::get(llvm::Type::getInt64Ty(cgMod.GetLLVMContext()), 0x1), i8PtrTy);
                 }
