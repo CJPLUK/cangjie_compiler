@@ -83,8 +83,10 @@ std::string GetSystemErrorMessage(int error)
 } // namespace
 #ifdef __APPLE__
 const static std::string LD_LIBRARY_PATH = "DYLD_LIBRARY_PATH";
+const static std::string LD_PRELOAD = "DYLD_INSERT_LIBRARIES";
 #elif !defined(_WIN32)
 const static std::string LD_LIBRARY_PATH = "LD_LIBRARY_PATH";
+const static std::string LD_PRELOAD = "LD_PRELOAD";
 #endif
 
 void Tool::AppendMultiArgs(const std::string& argStr)
@@ -208,7 +210,7 @@ std::unique_ptr<ToolFuture> Tool::Run() const
 
     // Convert arguments to char * array for argv argument.
     std::vector<char*> rawArgumentArray = {};
-    rawArgumentArray.reserve(arguments.size() + 1);
+    rawArgumentArray.resize(arguments.size() + 1);
     size_t index = 0;
     while (index < arguments.size()) {
         rawArgumentArray[index] = const_cast<char*>(arguments[index].c_str());
@@ -266,8 +268,42 @@ std::list<std::string> Tool::BuildEnvironmentVector() const
         }
         environment.emplace_back(LD_LIBRARY_PATH + "=" + newLdLibraryPath);
     }
+
+    const static std::unordered_set<std::string> blocklist = {
+        // Linux specific
+        LD_LIBRARY_PATH,
+        LD_PRELOAD,          // Preload shared libraries
+        "LD_AUDIT",          // Audit libraries
+        "LD_DEBUG",          // Debugging
+        "LD_PROFILE",        // Profiling
+        "LD_TRACE_LOADED_OBJECTS", // Trace loaded objects
+
+        // macOS specific
+        "DYLD_INSERT_LIBRARIES",       // Preload libraries on macOS
+        "DYLD_FRAMEWORK_PATH",         // Framework search path
+        "DYLD_FALLBACK_FRAMEWORK_PATH", // Fallback framework path
+        "DYLD_FALLBACK_LIBRARY_PATH",   // Fallback library path
+        "DYLD_VERSIONED_FRAMEWORK_PATH", // Versioned framework path
+        "DYLD_VERSIONED_LIBRARY_PATH",   // Versioned library path
+        "DYLD_PRINT_LIBRARIES",         // Print loaded libraries
+        "DYLD_PRINT_TO_FILE",           // Print to file
+
+        // Compiler specific
+        "RUSTC_WRAPPER",     // Rust compiler wrapper
+        "LLVM_SYS_*",        // LLVM system variables
+        "MLIR_SYS_*",        // MLIR system variables
+        "TABLEGEN_*",        // TableGen variables
+    };
+
     for (const auto& environmentVar : environmentVars) {
-        if (environmentVar.first == LD_LIBRARY_PATH) {
+        // Skip blocklisted environment variables
+        if (blocklist.find(environmentVar.first) != blocklist.end()) {
+            continue;
+        }
+        // Also skip variables that match patterns like LLVM_SYS_*, MLIR_SYS_*, TABLEGEN_*
+        if (environmentVar.first.find("LLVM_SYS_") == 0 ||
+            environmentVar.first.find("MLIR_SYS_") == 0 ||
+            environmentVar.first.find("TABLEGEN_") == 0) {
             continue;
         }
         environment.emplace_back(environmentVar.first + "=" + environmentVar.second);

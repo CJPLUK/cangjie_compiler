@@ -284,7 +284,12 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
         setOptionHandler("--cangjie-full-lto");
     } else {
         // The backend lld defaults to supporting incremental compilation in thin LTO mode.
-        setOptionHandler("--thinlto-cache-dir=" + driverOptions.compilationCachedPath);
+        auto normalizedPath = Cangjie::FileUtil::NormalizePath(driverOptions.compilationCachedPath);
+        auto absolutePath = Cangjie::FileUtil::GetAbsPath(normalizedPath);
+        if (absolutePath.has_value()) {
+            auto escapedPath = Cangjie::FileUtil::TransferEscapeBacktick(absolutePath.value());
+            setOptionHandler("--thinlto-cache-dir=" + escapedPath);
+        }
     }
     // safepoint outline improves codesize but may lead to performance degrade.
     if (GetEffectiveOptimizationLevel(driverOptions) == GlobalOptions::OptimizationLevel::O2) {

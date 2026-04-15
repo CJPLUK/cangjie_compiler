@@ -122,7 +122,7 @@ void Signal::ConcurrentSynchronousSignalHandler(int signum)
 {
     ThreadDelaySynchronizer();
     WriteICEMessage(signum);
-    Cangjie::TempFileManager::Instance().DeleteTempFiles(true);
+    Cangjie::TempFileManager::Instance().DeleteTempFilesSignalSafe();
     int exitCode = 128 + signum; // Add 128 to return the same error code as if the program crashed.
     _exit(exitCode);
 }

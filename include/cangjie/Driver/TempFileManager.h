@@ -73,10 +73,13 @@ public:
 
     /**
      * @brief Delete all temporary files.
-     *
-     * @param isSignalSafe Whether temporary files are safe.
      */
-    void DeleteTempFiles(bool isSignalSafe = false);
+    void DeleteTempFiles();
+
+    /**
+     * @brief Delete all temporary files asynchronously in a signal-safe manner.
+     */
+    void DeleteTempFilesSignalSafe();
 
     /**
      * @brief Check whether temporary files are deleted.
