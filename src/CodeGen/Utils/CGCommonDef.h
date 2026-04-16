@@ -156,6 +156,7 @@ const std::unordered_map<CHIR::IntrinsicKind, IntrinsicFuncInfo> INTRINSIC_KIND_
     {CHIR::IntrinsicKind::TASK_INIT, {"CJ_MCC_TaskInit", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::FUTURE_IS_COMPLETE, {"CJ_MCC_FutureIsComplete", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::TASK_IS_COMPLETE, {"CJ_MCC_TaskIsComplete", {FAST_NATIVE_ATTR}}},
+    {CHIR::IntrinsicKind::TASK_CONTINUATIONS_ARE_LOCKED, {"CJ_MCC_TaskContinuationsAreLocked", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::FUTURE_WAIT, {"CJ_MCC_FutureWait", {}}},
     {CHIR::IntrinsicKind::TASK_WAIT, {"CJ_MCC_TaskWait", {}}},
     {CHIR::IntrinsicKind::FUTURE_NOTIFYALL, {"CJ_MCC_FutureNotifyAll", {FAST_NATIVE_ATTR}}},

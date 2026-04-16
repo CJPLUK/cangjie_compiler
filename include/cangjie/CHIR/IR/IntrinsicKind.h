@@ -123,9 +123,10 @@ static const std::string SET_THREAD_OBJECT_NAME = "setThreadObject";
 static const std::string FUTURE_IS_COMPLETE_NAME = "futureIsComplete"; // cjnative only
 static const std::string FUTURE_WAIT_NAME = "futureWait";              // cjnative only
 static const std::string FUTURE_NOTIFYALL_NAME = "futureNotifyAll";    // cjnative only
-static const std::string TASK_IS_COMPLETE_NAME = "taskIsComplete"; // cjnative only
-static const std::string TASK_WAIT_NAME = "taskWait";              // cjnative only
-static const std::string TASK_NOTIFYALL_NAME = "taskNotifyAll";    // cjnative only
+static const std::string TASK_IS_COMPLETE_NAME = "taskIsComplete";                    // cjnative only
+static const std::string TASK_CONTINUATIONS_ARE_LOCKED_NAME = "taskContinuationsAreLocked"; // cjnative only
+static const std::string TASK_WAIT_NAME = "taskWait";                                 // cjnative only
+static const std::string TASK_NOTIFYALL_NAME = "taskNotifyAll";                       // cjnative only
 static const std::string TASK_LOCK_CONTINUATIONS_NAME = "taskLockContinuationsOrAlreadyComplete"; // cjnative only
 static const std::string TASK_UNLOCK_CONTINUATIONS_NAME = "taskUnlockContinuations";              // cjnative only
 static const std::string TASK_NOTIFY_END_THREAD_NAME = "taskNotifyEndThread";                     // cjnative only
@@ -364,9 +365,10 @@ enum IntrinsicKind : uint16_t {
     FUTURE_IS_COMPLETE, // cjnative only
     FUTURE_WAIT,        // cjnative only
     FUTURE_NOTIFYALL,   // cjnative only
-    TASK_IS_COMPLETE, // cjnative only
-    TASK_WAIT,        // cjnative only
-    TASK_NOTIFYALL,   // cjnative only
+    TASK_IS_COMPLETE,              // cjnative only
+    TASK_CONTINUATIONS_ARE_LOCKED, // cjnative only
+    TASK_WAIT,                     // cjnative only
+    TASK_NOTIFYALL,                // cjnative only
     TASK_LOCK_CONTINUATIONS,   // cjnative only
     TASK_UNLOCK_CONTINUATIONS, // cjnative only
     TASK_NOTIFY_END_THREAD,    // cjnative only
@@ -688,6 +690,7 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {FUTURE_WAIT_NAME, FUTURE_WAIT},
     {FUTURE_NOTIFYALL_NAME, FUTURE_NOTIFYALL},
     {TASK_IS_COMPLETE_NAME, TASK_IS_COMPLETE},
+    {TASK_CONTINUATIONS_ARE_LOCKED_NAME, TASK_CONTINUATIONS_ARE_LOCKED},
     {TASK_WAIT_NAME, TASK_WAIT},
     {TASK_NOTIFYALL_NAME, TASK_NOTIFYALL},
     {TASK_LOCK_CONTINUATIONS_NAME, TASK_LOCK_CONTINUATIONS},
@@ -814,6 +817,7 @@ static const std::unordered_map<std::string, IntrinsicKind> cjnativeSyncIntrinsi
 
     {TASK_INIT_NAME, TASK_INIT},
     {TASK_IS_COMPLETE_NAME, TASK_IS_COMPLETE},
+    {TASK_CONTINUATIONS_ARE_LOCKED_NAME, TASK_CONTINUATIONS_ARE_LOCKED},
     {TASK_WAIT_NAME, TASK_WAIT},
     {TASK_NOTIFYALL_NAME, TASK_NOTIFYALL},
     {TASK_LOCK_CONTINUATIONS_NAME, TASK_LOCK_CONTINUATIONS},
