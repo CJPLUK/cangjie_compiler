@@ -26,6 +26,7 @@ Where <FLAGS> can be one or more of the following:
 
 --skip-clean: Skip cleaning, for iterative builds this should be safe
 --skip-compiler: Skip the compiler component
+--skip-runtime: Skip the runtime component
 --skip-stdlib: Skip the standard library component
 --skip-stdx: Skip the extended standard library
 --skip-cjpm: Skip the CJPM project management tool build

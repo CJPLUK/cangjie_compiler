@@ -5,6 +5,7 @@ if test "0$cjbuildenv" -ne "01"; then
     case "$1" in
       --skip-clean) SKIP_CLEAN=1; shift ;;
       --skip-compiler) SKIP_COMPILER=1; shift ;;
+      --skip-runtime) SKIP_RUNTIME=1; shift ;;
       --skip-stdlib) SKIP_STDLIB=1; shift ;;
       --skip-stdx) SKIP_STDX=1; shift ;;
       --skip-cjpm) SKIP_CJPM=1; shift ;;
@@ -19,6 +20,7 @@ if test "0$cjbuildenv" -ne "01"; then
 
   : "${SKIP_CLEAN:=0}"
   : "${SKIP_COMPILER:=0}"
+  : "${SKIP_RUNTIME:=0}"
   : "${SKIP_STDLIB:=0}"
   : "${SKIP_STDX:=0}"
   : "${SKIP_CJPM:=0}"
@@ -30,6 +32,7 @@ if test "0$cjbuildenv" -ne "01"; then
 
   export SKIP_CLEAN
   export SKIP_COMPILER
+  export SKIP_RUNTIME
   export SKIP_STDLIB
   export SKIP_STDX
   export SKIP_CJPM
