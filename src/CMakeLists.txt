@@ -23,17 +23,43 @@ set(CJC_EXTRA_WARNINGS -Woverloaded-virtual -Wvla -Wconversion -Wfloat-equal -Wu
 # -Wno-sign-conversion here to be removed by next MR
 if(${CMAKE_SYSTEM_NAME} EQUAL Darwin)
     # mac uses llvm headers for std, and llvm headers have the following warning(s)
-    set(CJC_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wno-float-equal)
+    list(APPEND CJC_EXTRA_WARNINGS -Wno-float-equal)
     # mac headers have warning on undefed macro(s) (FFI_GO_CLOSURES), so use -Wno-undef
     set(CJC_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wno-undef)
+else()
+    list(APPEND CJC_EXTRA_WARNINGS -Wfloat-equal -Wundef)
 endif()
-    # g++ on some platform has harsher check on -Werror=shadow, in that it does not allow function parameters to share the same name with class members, which is actually bad in constructor. So we disable this on some platform.
-    set(CJC_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wshadow)
+
+if(CMAKE_BUILD_TYPE
+   AND ("${uppercase_CMAKE_BUILD_TYPE}" MATCHES "^(RELEASE)$")
+   AND NOT CMAKE_ENABLE_ASSERT)
+    add_compile_definitions(CANGJIE_CHIR_WFC_OFF)
+endif()
 
 # when including llvm header files, the following warnings have to be excluded
 set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wno-sign-conversion -Wno-unused-parameter -Wno-float-conversion -Wno-shadow)
+include(CheckCXXCompilerFlag)
+if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" OR ${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang")
+    # gcc does not recognise these options
+    set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_WITH_LLVM_EXTRA_WARNINGS} -Wno-implicit-int-conversion -Wno-shorten-64-to-32 -Wno-implicit-int-float-conversion)
+    check_cxx_compiler_flag("-Wno-unnecessary-virtual-specifier" COMPILER_SUPPORTS_UNNECESSARY_VIRTUAL)
+    if(COMPILER_SUPPORTS_UNNECESSARY_VIRTUAL)
+        set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_WITH_LLVM_EXTRA_WARNINGS} -Wno-unnecessary-virtual-specifier)
+    endif()
+endif()
+set(CJC_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wnon-virtual-dtor -Wcast-align)
+
+# when including llvm header files, the following warnings have to be excluded
+set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS})
+set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_WITH_LLVM_EXTRA_WARNINGS} -Wno-sign-conversion -Wno-unused-parameter -Wno-float-conversion)
 # gcc on some platform does not recognise these options
 set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_WITH_LLVM_EXTRA_WARNINGS} -Wno-implicit-int-conversion -Wno-shorten-64-to-32 -Wno-implicit-int-float-conversion)
+
+if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" OR ${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang")
+    # g++ on some platform has harsher check on -Werror=shadow, in that it does not allow function parameters to share the same name with class members, which is actually bad in constructor. So we disable this on some platform.
+    # also do not add shadow to LLVM headers
+    set(CJC_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wshadow)
+endif()
 
 if(NOT CANGJIE_BUILD_CJC AND CANGJIE_BUILD_STD_SUPPORT)
     add_subdirectory(AST)
@@ -112,6 +138,7 @@ else()
         CACHE INTERNAL "")
 endif()
 add_executable(cjc main.cpp ${CANGJIE_SRC_OBJECTS})
+set_source_files_properties(main.cpp PROPERTIES COMPILE_OPTIONS "${CJC_EXTRA_WARNINGS}")
 
 if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     add_dependencies(cjc cjnative)
@@ -302,6 +329,7 @@ endif()
 
 # LSPMacroServer for lsp
 add_executable(LSPMacroServer main-macrosrv.cpp)
+set_source_files_properties(main-macrosrv.cpp PROPERTIES COMPILE_OPTIONS "${CJC_EXTRA_WARNINGS}")
 if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     add_dependencies(LSPMacroServer cjnative)
 endif()
@@ -333,6 +361,7 @@ install(TARGETS LSPMacroServer DESTINATION "tools/bin")
 
 # The chir-dis
 add_executable(chir-dis main-chir-dis.cpp)
+set_source_files_properties(main-chir-dis.cpp PROPERTIES COMPILE_OPTIONS "${CJC_EXTRA_WARNINGS}")
 if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     add_dependencies(chir-dis cjnative)
 endif()

@@ -30,12 +30,6 @@ if(CMAKE_BUILD_TYPE AND NOT ("${uppercase_CMAKE_BUILD_TYPE}" MATCHES "^(DEBUG|RE
     message(FATAL_ERROR "Invalid value for CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 endif()
 
-if(CMAKE_BUILD_TYPE
-   AND ("${uppercase_CMAKE_BUILD_TYPE}" MATCHES "^(RELEASE)$")
-   AND NOT CMAKE_ENABLE_ASSERT)
-    add_compile_definitions(CANGJIE_CHIR_WFC_OFF)
-endif()
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Because stdlib is currently compiled very slowly, add this to avoid recompiling stdlib when install.
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)

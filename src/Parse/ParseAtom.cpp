@@ -18,6 +18,7 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/StringConvertor.h"
 #include "cangjie/Utils/FileUtil.h"
+#include "cangjie/Utils/Macros.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -29,6 +30,7 @@ ParserImpl::ExprHandler ParserImpl::LookupExprHandler(TokenKind kind)
     static constexpr int arraySize = lastKind - firstKind + 1;
 
     // clang-format off
+SUPPRESS_WARNING("-Wcast-function-type-mismatch")
     static const ExprHandler HANDLERS[arraySize] = {
         reinterpret_cast<ExprHandler>(&ParserImpl::ParseLeftParenExpr),
         nullptr, // RPAREN
@@ -76,6 +78,7 @@ ParserImpl::ExprHandler ParserImpl::LookupExprHandler(TokenKind kind)
         reinterpret_cast<ExprHandler>(&ParserImpl::ParsePerformExpr),
         reinterpret_cast<ExprHandler>(&ParserImpl::ParseResumeExpr),
     };
+UNSUPPRESS_WARNING()
     // clang-format on
 
     int index = static_cast<int>(kind) - firstKind;
