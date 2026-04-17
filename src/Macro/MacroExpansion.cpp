@@ -445,3 +445,100 @@ void MacroExpansion::Execute(std::vector<OwnedPtr<AST::Package>>& packages)
         CheckUnhandledMacroCall(*package, ci->diag);
     }
 }
+
+/**
+ * @brief Scan a vector of declaration nodes for macro calls and populate the collector.
+ *
+ * @param currentDecls The declaration nodes to scan for macro calls.
+ * @param collector The MacroCollector to populate with discovered macro call information.
+ */
+void MacroExpansion::CollectMacroCallsInDecls(
+    std::vector<OwnedPtr<AST::Decl>>& currentDecls, MacroCollector& collector)
+{
+    for (size_t i = 0; i < currentDecls.size(); ++i) {
+        auto& currentDecl = currentDecls[i];
+        if (currentDecl->IsMacroCallNode()) {
+            auto macroNode = currentDecl.get();
+            (void)collector.macCalls.emplace_back(macroNode);
+            collector.macCalls.back().replaceLoc = VectorTarget<OwnedPtr<AST::Decl>>{&currentDecls, i};
+            collector.macCalls.back().isOuterMost = true;
+        } else {
+            auto collectFunc = [&collector](Ptr<Node> curNode) -> VisitAction {
+                UpdateMacroInfo(curNode, collector);
+                return VisitAction::WALK_CHILDREN;
+            };
+            Walker walker(currentDecl.get(), collectFunc);
+            walker.Walk();
+        }
+    }
+    std::sort(collector.macCalls.begin(), collector.macCalls.end(), [](auto& m1, auto& m2) -> bool {
+        auto pos1 = m1.GetBeginPos();
+        auto pos2 = m2.GetBeginPos();
+        return std::tie(pos1.fileID, pos1) < std::tie(pos2.fileID, pos2);
+    });
+}
+
+void MacroExpansion::ReplaceMacroCallsInDecls(std::vector<MacroCall>& macroCalls)
+{
+    std::reverse(macroCalls.begin(), macroCalls.end());
+    for (auto& macCall : macroCalls) {
+        ReplaceEachMacro(macCall);
+    }
+}
+
+
+/**
+ * @brief Expand macro calls within a single top-level declaration.
+ *
+ * This function performs macro expansion on a single declaration (e.g., a class,
+ * struct, or function). It recursively collects macro calls within the declaration
+ * and its nested children (e.g., member declarations inside a class), then evaluates
+ * and replaces them with their expanded forms.
+ *
+ * @param decl The top-level declaration to expand.
+ * @return A vector of expanded declarations. May contain:
+ *         - The original declaration if no macros were found
+ *         - Multiple declarations if a macro expands to multiple nodes
+ *         - An empty vector if the input is null or is a member declaration
+ */
+std::vector<OwnedPtr<AST::Decl>> MacroExpansion::ExpandDecl(OwnedPtr<AST::Decl> decl)
+{
+    // add lock to protect macro expansion in different CompilerInstances
+    std::lock_guard<std::mutex> guard(globalMacroExpandLock);
+    std::vector<OwnedPtr<AST::Decl>> result;
+    if (!decl) {
+        return result;
+    }
+    if (decl->IsMemberDecl()) {
+        return result;
+    }
+    AST::File* file = decl->curFile;
+    std::vector<OwnedPtr<AST::Decl>> currentDecls;
+    currentDecls.emplace_back(std::move(decl));
+
+    // collect all macroCalls in current decl
+    MacroCollector localCollector;
+    localCollector.importedMacroPkgs = ci->importManager->GetImportedPkgsForMacro();
+    CollectMacroCallsInDecls(currentDecls, localCollector);
+    if (localCollector.macCalls.empty()) {
+        return currentDecls;
+    }
+
+    // evaluate macroCalls
+    bool useChildProcess = ci->invocation.globalOptions.enableMacroInLSP;
+    MacroEvaluation evaluator(ci, &localCollector, useChildProcess);
+    evaluator.Evaluate();
+
+    // process and replace macroCalls
+    ProcessMacros(localCollector.macCalls);
+    ReplaceMacroCallsInDecls(localCollector.macCalls);
+
+    for (auto& currentDecl : currentDecls) {
+        if (currentDecl) {
+            currentDecl->curFile = file;
+            result.emplace_back(std::move(currentDecl));
+        }
+    }
+    return result;
+}
+

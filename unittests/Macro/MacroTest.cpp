@@ -14,10 +14,31 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <unistd.h>
 #endif
 
 using namespace Cangjie;
 using namespace AST;
+
+namespace {
+std::unordered_map<std::string, std::string> GetEnvironmentVars()
+{
+    std::unordered_map<std::string, std::string> envVars;
+    char **env = environ;
+    while (env && *env) {
+        std::string entry(*env);
+        size_t pos = entry.find('=');
+        if (pos != std::string::npos) {
+            std::string key = entry.substr(0, pos);
+            std::string value = entry.substr(pos + 1);
+            envVars[key] = value;
+        }
+        ++env;
+    }
+    return envVars;
+}
+}
 
 class MacroTest : public testing::Test {
 protected:
@@ -42,6 +63,15 @@ protected:
         invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
         invocation.globalOptions.executablePath = projectPath + "/output/bin";
 #endif
+        std::string cangjieHome = projectPath + "/output";
+#ifdef __x86_64__
+        std::string cangjiePath = cangjieHome + "/modules/linux_x86_64_cjnative";
+#else
+        std::string cangjiePath = cangjieHome + "/modules/linux_aarch64_cjnative";
+#endif
+        setenv("CANGJIE_HOME", cangjieHome.c_str(), 1);
+        setenv("CANGJIE_PATH", cangjiePath.c_str(), 1);
+        invocation.globalOptions.ReadPathsFromEnvironmentVars(GetEnvironmentVars());
         invocation.globalOptions.importPaths = {definePath};
     }
 
@@ -479,3 +509,533 @@ TEST_F(MacroTest, DISABLED_MacroCall_HighLight_LSP)
     }
 }
 #endif
+
+// Single node expand to single node
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully01)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_gen.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[0]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::CLASS_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "A");
+    ASSERT_TRUE(expandedDecl->body != nullptr);
+    EXPECT_TRUE(expandedDecl->body->decls.empty());
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+// Single node expand to multiple node
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully02)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_gen.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[1]));
+    auto expectResSize = 2;
+    ASSERT_EQ(result.size(), expectResSize);
+    auto expandedDecl = AST::As<ASTKind::ENUM_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->constructors.size(), 1);
+
+    auto extendDecl = AST::As<ASTKind::EXTEND_DECL>(result[1].get());
+    ASSERT_TRUE(extendDecl != nullptr);
+    auto expectMemberSize = 2;
+    EXPECT_EQ(extendDecl->members.size(), expectMemberSize);
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+// Multi node expand to multiple node
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully03)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_gen.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[2]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::CLASS_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    auto expectBodySize = 2;
+    EXPECT_EQ(expandedDecl->body->decls.size(), expectBodySize);
+    EXPECT_EQ(expandedDecl->body->decls[0]->identifier, "a_gen_var");
+    EXPECT_EQ(expandedDecl->body->decls[1]->identifier, "a_gen_let");
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+// Single node with multiple macro
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully04)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_gen.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[3]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::VAR_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "a_gen_var");
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+// Nest macro on different nodes
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully05)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_gen.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[4]));
+    auto expectResSize = 2;
+    ASSERT_EQ(result.size(), expectResSize);
+    auto expandedDecl = AST::As<ASTKind::ENUM_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->constructors.size(), 1);
+    auto constructor = std::move(expandedDecl->constructors[0]);
+
+    EXPECT_EQ(constructor->identifier, "M");
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+// Generate new macro node
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully06)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_gen.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[5]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::VAR_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "a_gen_let");
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+// Single Annotation
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully07)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_anno.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[1]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::CLASS_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "SingleAnno");
+    EXPECT_EQ(expandedDecl->annotations.size(), 1);
+    EXPECT_EQ(expandedDecl->annotations[0]->identifier, "LogWithLevel");
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+// Macro nest annotation
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully08)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_anno.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[2]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::CLASS_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "A");
+    EXPECT_EQ(expandedDecl->annotations.size(), 0);
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+// Annotation nest macro
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully09)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_anno.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[3]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::CLASS_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "A");
+    EXPECT_EQ(expandedDecl->annotations.size(), 1);
+    EXPECT_EQ(expandedDecl->annotations[0]->identifier, "LogWithLevel");
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+// Annotation nest child macro node
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully10)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_anno.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[4]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::CLASS_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "AnnoNestChildMacro");
+    EXPECT_EQ(expandedDecl->annotations.size(), 1);
+    EXPECT_EQ(expandedDecl->annotations[0]->identifier, "LogWithLevel");
+    EXPECT_EQ(expandedDecl->body->decls.size(), 1);
+    EXPECT_EQ(expandedDecl->body->decls[0]->identifier, "a_gen_var");
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+// Expand MacroExpandExpr
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully11)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_gen.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[6]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::FUNC_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "ExpandExpr");
+    auto expectBodySize = 3;
+    EXPECT_EQ(expandedDecl->funcBody->body->body.size(), expectBodySize);
+    auto varDecl = AST::As<ASTKind::VAR_DECL>(expandedDecl->funcBody->body->body[0]);
+    EXPECT_EQ(varDecl->identifier, "a_gen_var");
+
+    auto intDecl = AST::As<ASTKind::VAR_DECL>(expandedDecl->funcBody->body->body[1]);
+    EXPECT_EQ(intDecl->identifier, "b");
+    auto litExpr = AST::As<ASTKind::LIT_CONST_EXPR>(intDecl->initializer);
+    EXPECT_EQ(litExpr->stringValue, "100");
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+// Expand MacroExpandParam
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully12)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_gen.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[7]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::FUNC_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "ExpandParam");
+    auto param = expandedDecl->funcBody->paramLists[0]->params[0].get();
+    EXPECT_TRUE(param != nullptr);
+    EXPECT_EQ(param->identifier, "param");
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+TEST_F(MacroTest, ExpandDecl_WithVarMacroCall_ExpandsSuccessfully)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "var.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[0]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::VAR_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "a");
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+TEST_F(MacroTest, ExpandDecl_WithNoMacroCall_ReturnsSameDecl)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_anno.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto& decl = file->decls[1];
+    auto result = instance->ExpandDecl(std::move(decl));
+    EXPECT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::CLASS_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "SingleAnno");
+    EXPECT_EQ(expandedDecl->annotations.size(), 1);
+    EXPECT_EQ(expandedDecl->annotations[0]->identifier, "LogWithLevel");
+
+}
+
+TEST_F(MacroTest, ExpandDecl_WithNullDecl_ReturnsEmpty)
+{
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    auto result = instance->ExpandDecl(nullptr);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(MacroTest, ExpandDecl_WithMemberDecl_ReturnsEmpty)
+{
+    auto src = srcPath + "class.cj";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+
+    for (auto& decl : file->decls) {
+        if (auto cd = AST::As<ASTKind::CLASS_DECL>(decl.get()); cd && cd->body && !cd->body->decls.empty()) {
+            auto vd = AST::As<ASTKind::VAR_DECL>(cd->body->decls[0].get());
+            if (vd) {
+                auto result = instance->ExpandDecl(std::move(cd->body->decls[0]));
+                EXPECT_TRUE(result.empty());
+                break;
+            }
+        }
+    }
+}
+
+// Child macro expand failed, parent macro not expand
+TEST_F(MacroTest, ExpandDecl_WithFailedMacroCall_HandlesError01)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_failExpand.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[0]));
+    ASSERT_EQ(result.size(), 1);
+    auto med = AST::As<ASTKind::MACRO_EXPAND_DECL>(result[0].get());
+    EXPECT_EQ(med->identifier, "M");
+
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+}
+
+// One child macro expand failed, another child macro expand success
+TEST_F(MacroTest, ExpandDecl_WithFailedMacroCall_HandlesError02)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_failExpand.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[1]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::CLASS_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "FailExpand");
+    auto expectBodySize = 2;
+    EXPECT_EQ(expandedDecl->body->decls.size(), expectBodySize);
+    EXPECT_EQ(expandedDecl->body->decls[0]->identifier, "a_gen_var");
+
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+}
+
+// One child MacroExpandExpr expand failed, another child macro expand success
+TEST_F(MacroTest, ExpandDecl_WithFailedMacroCall_HandlesError03)
+{
+    std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
+
+    auto src = srcPath + "test_failExpand.cj";
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+    instance->PerformImportPackage();
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    auto result = instance->ExpandDecl(std::move(file->decls[2]));
+    ASSERT_EQ(result.size(), 1);
+    auto expandedDecl = AST::As<ASTKind::FUNC_DECL>(result[0].get());
+    ASSERT_TRUE(expandedDecl != nullptr);
+    EXPECT_EQ(expandedDecl->identifier, "ExpandExpr");
+    auto expectBodySize = 3;
+    EXPECT_EQ(expandedDecl->funcBody->body->body.size(), expectBodySize);
+    auto varDecl = AST::As<ASTKind::VAR_DECL>(expandedDecl->funcBody->body->body[0]);
+    EXPECT_EQ(varDecl->identifier, "a_gen_var");
+
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+}

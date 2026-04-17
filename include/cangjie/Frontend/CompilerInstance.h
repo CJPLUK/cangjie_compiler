@@ -177,6 +177,13 @@ public:
     virtual bool PerformMacroExpand();
 
     /**
+     * Expand macros for a single decl node.
+     * @param decl The decl node to expand. If it's a MacroExpandDecl, it will be expanded.
+     * @return A vector of expanded decl nodes.
+     */
+    std::vector<OwnedPtr<AST::Decl>> ExpandDecl(OwnedPtr<AST::Decl> decl);
+
+    /**
      * Perform AST diff to get incremental compilation scope.
      */
     virtual bool PerformIncrementalScopeAnalysis();

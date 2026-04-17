@@ -490,3 +490,22 @@ void MacroExpansion::ProcessMacros(Package& package)
     GenerateMacroCallFile(fileSucVec, foundSucMacroMap, *ci);
     return;
 }
+
+void MacroExpansion::ProcessMacros(std::vector<MacroCall>& macCalls)
+{
+    for (auto& macCall : macCalls) {
+        auto pInvocation = macCall.GetInvocation();
+        if (!pInvocation || MacroExpandFailed(pInvocation->newTokens) ||
+            macCall.status == MacroEvalStatus::FAIL) {
+            continue;
+        }
+        auto node = macCall.GetNode();
+        if (!node || !node->curFile) {
+            continue;
+        }
+        if (pInvocation->newTokens.empty()) {
+            continue;
+        }
+        RefreshNewTokensPos(*node, ci->GetSourceManager(), *ci);
+    }
+}

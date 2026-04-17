@@ -28,6 +28,7 @@
 #include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
 #include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
+#include "cangjie/Macro/MacroExpansion.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Modules/PackageManager.h"
@@ -443,6 +444,12 @@ bool CompilerInstance::PerformMacroExpand()
         DumpAST(GetSourcePackages(), invocation.globalOptions.output, "macroexp");
     }
     return ret;
+}
+
+std::vector<OwnedPtr<AST::Decl>> CompilerInstance::ExpandDecl(OwnedPtr<AST::Decl> decl)
+{
+    MacroExpansion me(this);
+    return me.ExpandDecl(std::move(decl));
 }
 
 void CompilerInstance::CacheCompileArgs()
