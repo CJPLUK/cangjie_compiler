@@ -4,6 +4,11 @@
 - Root repo assembles an SDK from pinned submodules, not a single buildable codebase. Most real code changes belong in `cangjie_compiler`, `cangjie_runtime`, `cangjie_stdx`, or `cangjie_tools`.
 - Root `third_party/` holds pinned clones for LLVM and FlatBuffers. `build_scripts/linux/clone_thirdparty.sh` copies them into `cangjie_compiler/third_party/*` during compiler builds.
 
+## Component skills
+- For difficult `cangjie_compiler` work, read `.opencode/skills/cangjie-compiler-hard-problems/SKILL.md` before editing. Use it for parser/sema/modules/incremental/codegen/driver problems and compiler-only test failures.
+- For difficult runtime work in `cangjie_runtime/runtime`, read `.opencode/skills/cangjie-runtime-hard-problems/SKILL.md` before editing. Use it for GC/heap/loader/concurrency/platform/sanitizer problems and runtime-only build failures.
+- For difficult stdlib work in `cangjie_runtime/stdlib`, read `.opencode/skills/cangjie-stdlib-hard-problems/SKILL.md` before editing. Use it for FFI glue, AST/flatbuffers, runtime/compiler coupling, sanitizer/coverage problems, and stdlib-only build failures.
+
 ## Build entrypoints
 - Real root entrypoint on Linux: `bash build_scripts/linux/all.sh`.
 - Component wrappers: `bash build_scripts/linux/{compiler,runtime,stdlib,stdx,cjpm,cjfmt,hyperlang,lsp}.sh`.
