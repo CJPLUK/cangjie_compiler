@@ -593,6 +593,8 @@ std::vector<llvm::Constant*> CGModule::InitRawArrayUInt8Constants() const
         auto gvUInt8Ti = llvm::cast<llvm::GlobalVariable>(module->getOrInsertGlobal(memberTiName, typeInfoType));
         auto metaUInt8Ti = llvm::MDTuple::get(ctx, {llvm::MDString::get(ctx, "UInt8.Type")});
         gvUInt8Ti->setMetadata(GC_TYPE_META_NAME, metaUInt8Ti);
+        gvUInt8Ti->addAttribute(GC_KLASS_ATTR);
+        gvUInt8Ti->addAttribute(NOT_MODIFIABLE_CLASS_ATTR);
     }
 
     auto constantInt8Zero = llvm::ConstantInt::get(int8Ty, 0);
