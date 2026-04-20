@@ -494,19 +494,20 @@ void MacroEvaluation::ExecMacroSrv(pid_t pid) const
 {
     // args
     std::vector<char*> cstrings;
-    std::string macSrvName = MACRO_SRV_NAME;
+    std::string macSrvPath = FileUtil::JoinPath(
+        FileUtil::GetDirPath(ci->invocation.globalOptions.executablePath), MACRO_SRV_NAME);
     std::string hRead = std::to_string(MacroProcMsger::GetInstance().pipefdP2C[0]);
     std::string hWrite = std::to_string(MacroProcMsger::GetInstance().pipefdC2P[1]);
     std::string enPara = enableParallelMacro ? "1" : "0";
     std::string pidStr = std::to_string(pid);
-    cstrings.push_back(macSrvName.data());
+    cstrings.push_back(macSrvPath.data());
     cstrings.push_back(hRead.data());
     cstrings.push_back(hWrite.data());
     cstrings.push_back(enPara.data());
     cstrings.push_back(ci->invocation.globalOptions.executablePath.data());
     cstrings.push_back(pidStr.data());
-    cstrings.push_back(nullptr);  // for execvp argv
-    execvp(macSrvName.c_str(), cstrings.data());
+    cstrings.push_back(nullptr);  // for execv argv
+    execv(macSrvPath.c_str(), cstrings.data());
 }
 
 void MacroEvaluation::CreateMacroSrvProcess()
@@ -638,7 +639,8 @@ bool CreateMacroMsgPipe()
 
 std::string GetMacroSrvCmd(bool enableParallelMacro, std::string& cjcPath)
 {
-    std::string cmdStr = MACRO_SRV_NAME + ".exe";
+    std::string cmdStr = FileUtil::JoinPath(
+        FileUtil::GetDirPath(cjcPath), MACRO_SRV_NAME + ".exe");
     const size_t buffLen = 20;
     char handlebuffer[buffLen];
     sprintf_s(handlebuffer, buffLen, "%d", MacroProcMsger::GetInstance().hChildRead);
