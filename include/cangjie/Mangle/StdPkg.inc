@@ -46,6 +46,7 @@
     {"std.math", "bg"},
     {"std.collection.concurrent", "bh"},
     {"std.collection.concurrent.native", "bi"},
+    {"std.concurrent", "bp"},
     {"std.deriving.impl", "bj"},
     {"std.deriving.builtins", "bk"},
     {"std.deriving.api", "bl"},

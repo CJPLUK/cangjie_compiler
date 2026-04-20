@@ -108,6 +108,7 @@ const std::unordered_map<const char*, const char*, StdPkgHash, StdPkgCompare> MA
     {"bg", "std.math"},
     {"bh", "std.collection.concurrent"},
     {"bi", "std.collection.concurrent.native"},
+    {"bp", "std.concurrent"},
     {"bj", "std.deriving.impl"},
     {"bk", "std.deriving.builtins"},
     {"bl", "std.deriving.api"},

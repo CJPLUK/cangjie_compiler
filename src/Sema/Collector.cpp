@@ -19,6 +19,7 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Utils/FileUtil.h"
 
 #include "TypeCheckUtil.h"
@@ -306,7 +307,8 @@ void Collector::CollectFuncDecl(ASTContext& ctx, FuncDecl& fd, bool buildTrie)
         scopeManager.FinalizeScope(ctx);
     }
     auto pkg = ctx.curPackage;
-    static const std::unordered_set<std::string> intrinsicPkgs{CORE_PACKAGE_NAME, SYNC_PACKAGE_NAME, MATH_PACKAGE_NAME,
+    static const std::unordered_set<std::string> intrinsicPkgs{CORE_PACKAGE_NAME, SYNC_PACKAGE_NAME,
+        CONCURRENT_PACKAGE_NAME, MATH_PACKAGE_NAME,
         OVERFLOW_PACKAGE_NAME, RUNTIME_PACKAGE_NAME, NET_PACKAGE_NAME, REFLECT_PACKAGE_NAME,
         UNITTEST_MOCK_INTERNAL_PACKAGE_NAME, EFFECT_PACKAGE_NAME, INTEROP_PACKAGE_NAME, "ohos.ark_interop"};
     static const std::unordered_set<std::string> headlessIntrinsics{

@@ -28,6 +28,7 @@ STDLIB(INTEROP, "std", "interop")
 #endif
 STDLIB(TIME, "std", "time")
 STDLIB(SYNC, "std", "sync")
+STDLIB(CONCURRENT, "std", "concurrent")
 STDLIB(COLLECTION.CONCURRENT, "std", "collection.concurrent")
 STDLIB(NET, "std", "net")
 STDLIB(REGEX, "std", "regex")

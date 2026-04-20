@@ -1177,6 +1177,7 @@ static const std::unordered_map<Cangjie::TokenKind, ExprKind> op2ExprKind = {
 const static std::unordered_map<std::string, const std::unordered_map<std::string, IntrinsicKind>> packageMap = {
     {CORE_PACKAGE_NAME, coreIntrinsicMap},
     {SYNC_PACKAGE_NAME, cjnativeSyncIntrinsicMap},
+    {CONCURRENT_PACKAGE_NAME, cjnativeConcurrentIntrinsicMap},
     {OVERFLOW_PACKAGE_NAME, overflowIntrinsicMap},
     {RUNTIME_PACKAGE_NAME, runtimeIntrinsicMap},
     {REFLECT_PACKAGE_NAME, reflectIntrinsicMap},

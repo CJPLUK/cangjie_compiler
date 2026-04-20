@@ -814,7 +814,9 @@ static const std::unordered_map<std::string, IntrinsicKind> cjnativeSyncIntrinsi
     {MULTICONDITION_WAIT_NAME, MULTICONDITION_WAIT},
     {MULTICONDITION_NOTIFY_NAME, MULTICONDITION_NOTIFY},
     {MULTICONDITION_NOTIFY_ALL_NAME, MULTICONDITION_NOTIFY_ALL},
+};
 
+static const std::unordered_map<std::string, IntrinsicKind> cjnativeConcurrentIntrinsicMap = {
     {TASK_INIT_NAME, TASK_INIT},
     {TASK_IS_COMPLETE_NAME, TASK_IS_COMPLETE},
     {TASK_CONTINUATIONS_ARE_LOCKED_NAME, TASK_CONTINUATIONS_ARE_LOCKED},

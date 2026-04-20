@@ -84,6 +84,7 @@ constexpr std::string_view IF_AVAILABLE{"IfAvailable"};
 inline const std::string DEFAULT_PACKAGE_NAME = "default";
 inline constexpr const char CORE_PACKAGE_NAME[] = "std.core";
 inline constexpr const char SYNC_PACKAGE_NAME[] = "std.sync";
+inline constexpr const char CONCURRENT_PACKAGE_NAME[] = "std.concurrent";
 inline constexpr const char MATH_PACKAGE_NAME[] = "std.math";
 inline constexpr const char OVERFLOW_PACKAGE_NAME[] = "std.overflow";
 inline constexpr const char RUNTIME_PACKAGE_NAME[] = "std.runtime";
