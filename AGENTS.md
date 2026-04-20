@@ -1,53 +1,35 @@
-# Cangjie SDK project
+# Cangjie SDK assembly repo
 
-## Build instructions
+## What this repo is
+- Root repo assembles an SDK from pinned submodules, not a single buildable codebase. Most real code changes belong in `cangjie_compiler`, `cangjie_runtime`, `cangjie_stdx`, or `cangjie_tools`.
+- Root `third_party/` holds pinned clones for LLVM and FlatBuffers. `build_scripts/linux/clone_thirdparty.sh` copies them into `cangjie_compiler/third_party/*` during compiler builds.
 
-To perform any build of the project as a whole, or a component, you will run commands of the following form
-```shell
-bash build_scripts/linux/<SCRIPT>.sh <OPTS>
-```
-Any timeout for the builds should be generous, say one hour and a half.
+## Build entrypoints
+- Real root entrypoint on Linux: `bash build_scripts/linux/all.sh`.
+- Component wrappers: `bash build_scripts/linux/{compiler,runtime,stdlib,stdx,cjpm,cjfmt,hyperlang,lsp}.sh`.
+- macOS has parallel wrappers under `build_scripts/macos/`.
+- Use long timeouts for builds; the repo’s own guidance is about 90 minutes.
 
-### Full build and package
-The most basic command for a full build of the SDK into a tarball is the following
-```shell
-bash build_scripts/linux/all.sh
-```
+## Build wiring and gotchas
+- Build order matters: wrappers expect compiler install artifacts first. `build_scripts/linux/envsetup.sh` sources `cangjie_compiler/output/envsetup.sh` and then exports `CANGJIE_STDX_PATH`.
+- Linux wrappers require `ARCH` to already be set (`x86_64` or `aarch64`). `compose.yaml` sets it; the scripts themselves do not.
+- `--jobs N` is supported by `build_scripts/linux/*.sh` via `init_env.sh`.
+- `--debug` only changes the runtime wrapper (`runtime.sh` uses `-t $TARGET`). The compiler, stdlib, stdx, cjpm, cjfmt, hyperlang, and lsp wrappers are still hardcoded to `release`.
+- For iterative work, prefer `bash build_scripts/linux/all.sh --skip-clean --skip-bundle ...` or the narrow component wrapper with `--skip-clean`.
+- `bundleSDK.sh` assembles the final tarball under `software/cangjie-sdk-${SDK_NAME}-${CANGJIE_VERSION}.tar.gz` by copying `cangjie_compiler/output` and overlaying runtime, stdlib, stdx, and tool binaries.
 
-However this is only necessary for packaging the SDK to distribute, for general dev purposes one of the other commands here are more appropriate.
+## Component-specific verification
+- Compiler wrapper builds with `python3 build.py build -t release --no-tests`, so wrapper builds do not compile compiler unittests. If you need compiler tests, work in `cangjie_compiler` directly instead of relying on the root wrapper.
+- Compiler quick smoke check from the wrapper is `source cangjie_compiler/output/envsetup.sh && cjc -v`.
+- LSP has an explicit test command: run `python3 build.py test` in `cangjie_tools/cangjie-language-server/build` after a build with `CANGJIE_HOME` set to a built SDK/compiler output.
 
-### Build all components
+## Containerized builds
+- Compose services are `build-sdk-linux64` and `build-sdk-linuxarm`.
+- Use `FIXUID=$(id -u) FIXGID=$(id -g) docker compose run --rm <service>`.
+- Root `README.md` says `FIXGUID`; `compose.yaml` actually uses `FIXGID`.
 
-```shell
-bash build_scripts/linux/all.sh <FLAGS>
-```
+## OpenCode repo config
+- `opencode.json` allows build-script bash commands broadly, but normal edits are only allowed under `cangjie_*`. Root files, `build_scripts`, and `third_party` are protected unless the user explicitly relaxes that.
 
-Where <FLAGS> can be one or more of the following:
-
---skip-clean: Skip cleaning, for iterative builds this should be safe
---skip-compiler: Skip the compiler component
---skip-runtime: Skip the runtime component
---skip-stdlib: Skip the standard library component
---skip-stdx: Skip the extended standard library
---skip-cjpm: Skip the CJPM project management tool build
---skip-cjfmt: Skip the formatter build
---skip-hyperlang: Skip the hyperlang build
---skip-lsp: Skip the language server build
---skip-bundle: Skip bundling the SDK into a tarball (most likely always use this one unless explicitly building something to be distributed)
---debug: Build in debug mode
-
-### Build individual components
-
-```shell
-bash build_scripts/linux/<COMPONENT>.sh <FLAGS>
-```
-
-Where <FLAGS> is the same as above, and <COMPONENT> is one of:
-- compiler
-- runtime
-- stdlib
-- stdx
-- cjpm
-- cjfmt
-- hyperlang
-- lsp
+## Avoid touching generated outputs
+- Do not hand-edit build outputs under `software/`, `*/output/`, `*/target/`, `cangjie_tools/*/build/build/`, or `cangjie_runtime/runtime/CMakebuild/`.
