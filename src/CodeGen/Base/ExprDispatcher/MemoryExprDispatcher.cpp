@@ -18,6 +18,29 @@
 #include "cangjie/CHIR/IR/Value/Value.h"
 
 namespace Cangjie::CodeGen {
+namespace {
+llvm::Value* TryGetSpecialRetValueStorage(IRBuilder2& irBuilder, const CHIR::Allocate& alloca)
+{
+    auto parentFunc = alloca.GetTopLevelFunc();
+    if (!parentFunc || parentFunc->GetReturnValue() != alloca.GetResult()) {
+        return nullptr;
+    }
+
+    auto llvmFunc = irBuilder.GetCGModule().GetOrInsertCGFunction(parentFunc)->GetRawFunction();
+    if (llvmFunc->hasStructRetAttr()) {
+        return llvmFunc->getArg(0);
+    }
+
+    auto overrideSrcFuncType = parentFunc->Get<CHIR::OverrideSrcFuncType>();
+    if (!overrideSrcFuncType || !DeRef(*alloca.GetType())->IsBox()) {
+        return nullptr;
+    }
+
+    auto retValueCGType = CGType::GetOrCreate(irBuilder.GetCGModule(), overrideSrcFuncType->GetReturnType());
+    return retValueCGType->GetSize() ? irBuilder.CreateEntryAlloca(*retValueCGType) : nullptr;
+}
+} // namespace
+
 llvm::Value* HandleLoadExpr(IRBuilder2& irBuilder, const CHIR::Load& load)
 {
     auto& cgMod = irBuilder.GetCGModule();
@@ -81,11 +104,11 @@ llvm::Value* HandleStoreExpr(IRBuilder2& irBuilder, const CHIR::Store& store)
     if (auto var = DynamicCast<CHIR::LocalVar*>(addr); var && var->IsRetValue() &&
         store.GetTopLevelFunc()->Get<CHIR::OverrideSrcFuncType>() && DeRef(*addr->GetType())->IsBox()) {
         auto overrideSrcRetType = store.GetTopLevelFunc()->Get<CHIR::OverrideSrcFuncType>()->GetReturnType();
-        auto ptrCGType = CGType::GetOrCreate(
+        auto retAddrCGType = CGType::GetOrCreate(
             cgMod, CGType::GetRefTypeOf(cgMod.GetCGContext().GetCHIRBuilder(), *overrideSrcRetType));
-        auto valueCGType = CGType::GetOrCreate(cgMod, overrideSrcRetType);
-        auto valCGType = !overrideSrcRetType->IsGeneric() ? ptrCGType : valueCGType;
-        bool needBoxExpr = overrideSrcRetType->IsGeneric() || !valueCGType->GetSize();
+        auto retValueCGType = CGType::GetOrCreate(cgMod, overrideSrcRetType);
+        bool needBoxExpr = overrideSrcRetType->IsGeneric() || !retValueCGType->GetSize();
+        auto storeValCGType = overrideSrcRetType->IsGeneric() ? retValueCGType : retAddrCGType;
         auto valueToStore = valueVal.GetRawValue();
         if (!needBoxExpr) {
             if (auto valueVar = DynamicCast<CHIR::LocalVar*>(value);
@@ -95,8 +118,8 @@ llvm::Value* HandleStoreExpr(IRBuilder2& irBuilder, const CHIR::Store& store)
             }
         }
 
-        return irBuilder.CreateStore(CGValue(valueToStore, valCGType, valueVal.IsSRetArg()),
-            CGValue((cgMod | addr)->GetRawValue(), ptrCGType, (cgMod | addr)->IsSRetArg()),
+        return irBuilder.CreateStore(CGValue(valueToStore, storeValCGType, valueVal.IsSRetArg()),
+            CGValue((cgMod | addr)->GetRawValue(), retAddrCGType, (cgMod | addr)->IsSRetArg()),
             DeRef(*addr->GetType())->GetTypeArgs()[0]);
     }
     return irBuilder.CreateStore(valueVal, *(cgMod | addr));
@@ -230,12 +253,8 @@ llvm::Value* HandleMemoryExpression(IRBuilder2& irBuilder, const CHIR::Expressio
             auto& alloca = StaticCast<const CHIR::Allocate&>(chirExpr);
             // Opt: For the function that returns value by an `sret` argument,
             // we don't need to allocate another place to store the return value.
-            if (auto parentFunc = alloca.GetTopLevelFunc();
-                parentFunc && parentFunc->GetReturnValue() == alloca.GetResult()) {
-                auto llvmFunc = irBuilder.GetCGModule().GetOrInsertCGFunction(parentFunc)->GetRawFunction();
-                if (llvmFunc->hasStructRetAttr()) {
-                    return llvmFunc->getArg(0);
-                }
+            if (auto retValueStorage = TryGetSpecialRetValueStorage(irBuilder, alloca)) {
+                return retValueStorage;
             }
             irBuilder.EmitLocation(CHIRExprWrapper(alloca));
             return GenerateAllocate(irBuilder, CHIRAllocateWrapper(alloca));
