@@ -10,5 +10,6 @@ cd $WORKSPACE/cangjie_runtime/runtime;
 [ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
 python3 build.py build -t $TARGET -v ${CANGJIE_VERSION};
 python3 build.py install;
-cp -R $WORKSPACE/cangjie_runtime/runtime/output/common/linux_${TARGET}_${ARCH}/{lib,runtime} $WORKSPACE/cangjie_compiler/output;
+rsync -a $WORKSPACE/cangjie_runtime/runtime/output/common/linux_${TARGET}_${ARCH}/lib/ $WORKSPACE/cangjie_compiler/output/lib/;
+rsync -a $WORKSPACE/cangjie_runtime/runtime/output/common/linux_${TARGET}_${ARCH}/runtime/ $WORKSPACE/cangjie_compiler/output/runtime/;
 
