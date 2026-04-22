@@ -24,6 +24,8 @@
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/Unicode.h"
 
+#include "cangjie/AST/PrintNode.h"
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -337,7 +339,7 @@ void DiagnosticBuilder::AddHint(const Range& range, std::vector<std::string>& ar
     diag.CheckRange(diagnostic.GetDiagCategory(), range);
 
     auto errData = errorData[static_cast<unsigned>(diagnostic.rKind)];
-
+    
     if (diagnostic.otherHints.size() >= errData.otherHints.size()) {
         CJC_ASSERT(arguments.size() <= 1);
         auto str = arguments.empty() ? "" : arguments.front();
@@ -794,49 +796,46 @@ void DiagnosticEngineImpl::AddMacroCallNote(Diagnostic& diagnostic, const AST::N
         return;
     }
     diagnostic.curMacroCall = node.curMacroCall;
-    // Refactor the Diagnose of the node after the macro expansion.
+    // Check pure annotation
     auto pInvocation = node.curMacroCall->GetInvocation();
     if (!pInvocation || IsPureAnnotation(*pInvocation)) {
         return;
     }
 
-    // For cjc, display a hint message on the source code if the corresponding source code exists.
-    if (!pInvocation->isForLSP) {
-        Position originPos;
-        auto key = pInvocation->isCurFile ? pos.Hash32() : static_cast<const uint32_t>(pos.column);
-        if (pInvocation->isCurFile && pInvocation->originPosMap.find(key) != pInvocation->originPosMap.end()) {
-            originPos = pInvocation->originPosMap.at(key);
-        } else if (pInvocation->new2originPosMap.find(pos.Hash32()) != pInvocation->new2originPosMap.end()) {
-            originPos = pInvocation->new2originPosMap.at(pos.Hash32());
-            if (!originPos.isCurFile) {
-                originPos = INVALID_POSITION;
-            }
-        }
-        if (originPos != INVALID_POSITION && originPos != diagnostic.start &&
-            originPos != diagnostic.mainHint.range.begin) {
-            if (diagnostic.errorMessage.empty()) {
-                ConvertArgsToDiagMessage(diagnostic);
-                auto range = MakeRange(diagnostic.start, diagnostic.end);
-                (void)diagnostic.subDiags.emplace_back(range, "which is expanded as follows");
-                diagnostic.start = originPos;
-                diagnostic.end = originPos + 1;
-            } else {
-                (void)diagnostic.subDiags.emplace_back(diagnostic.mainHint.range, "which is expanded as follows");
-            }
-            diagnostic.mainHint.range = MakeRange(originPos, originPos + 1);
-        }
-    }
     auto mcBegin = node.curMacroCall->begin;
-    auto idPosEnd = pInvocation->identifierPos + pInvocation->identifier.size();
-    // For lsp, the error range includes only identifier.
-    // Otherwise, the error range includes the entire macrocall node.
-    auto mcEnd = pInvocation->isForLSP ? idPosEnd : node.curMacroCall->end;
     std::string sevInfo = (diagnostic.diagSeverity == DiagSeverity::DS_ERROR) ? "the error" : "the warning";
-    (void)diagnostic.subDiags.emplace_back(MakeRange(mcBegin, mcEnd), sevInfo + " occurs after the macro is expanded");
-    if (!pInvocation->isForLSP) {
-        auto codeRange = MakeRange(pInvocation->mcBegin, pInvocation->mcEnd);
-        (void)diagnostic.subDiags.emplace_back(codeRange, MACROCALL_CODE);
+    // For lsp, the error range includes only identifier.
+    if (pInvocation->isForLSP) {
+        auto idPosEnd = pInvocation->identifierPos + pInvocation->identifier.size();
+        auto message = sevInfo + " occurs after the macro is expanded";
+        (void)diagnostic.subDiags.emplace_back(MakeRange(mcBegin, idPosEnd), message);
+        return;
     }
+
+    // For cjc, display a hint message on the source code if the corresponding source code exists.
+    Position originPos;
+    auto key = pInvocation->isCurFile ? pos.Hash32() : static_cast<const uint32_t>(pos.column);
+    if (pInvocation->isCurFile && pInvocation->originPosMap.find(key) != pInvocation->originPosMap.end()) {
+        originPos = pInvocation->originPosMap.at(key);
+    } else if (pInvocation->new2originPosMap.find(pos.Hash32()) != pInvocation->new2originPosMap.end()) {
+        originPos = pInvocation->new2originPosMap.at(pos.Hash32());
+        if (!originPos.isCurFile) {
+            originPos = INVALID_POSITION;
+        }
+    }
+    if (originPos != INVALID_POSITION && originPos != diagnostic.start &&
+        originPos != diagnostic.mainHint.range.begin) {
+        if (diagnostic.errorMessage.empty()) {
+            diagnostic.start = originPos;
+            diagnostic.end = originPos + 1;
+        }
+        diagnostic.mainHint.range = MakeRange(originPos, originPos + 1);
+    }
+    // Add macro note.
+    auto message = sevInfo + " originates in the macro `" + pInvocation->fullName +
+        "` (consider using `--debug-macro` for more info)";
+    auto range = MakeRange(mcBegin, node.curMacroCall->end);
+    (void)diagnostic.subDiags.insert(diagnostic.subDiags.begin(), SubDiagnostic(range, message));
 }
 
 void DiagnosticHandler::SetPrevDiag(Position pos, std::string str)

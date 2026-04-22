@@ -164,7 +164,11 @@ void DiagWeakVisibility(DiagnosticEngine& diag, const Decl& parent, const Decl& 
     auto childRange = MakeRangeForDeclIdentifier(child);
     std::string childHint =
         "the visibility of the deriving '" + child.identifier + "' is '" + visibilityToString(child) + "'";
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_weak_visibility, MakeRangeForDeclIdentifier(diagNode));
+    auto range = MakeRangeForDeclIdentifier(diagNode);
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_weak_visibility, range);
+    if (diagNode.curMacroCall) {
+        diag.AddMacroCallNote(builder.diagnostic, diagNode, range.begin);
+    }
     if (&child == &diagNode) {
         builder.AddMainHintArguments(childHint);
     } else { // child is inherited from other parent

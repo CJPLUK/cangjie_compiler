@@ -424,20 +424,11 @@ void MacroEvaluation::ProcessNewTokens(MacroCall& macCall)
     }
 
     pInvocation->newTokens.clear();
-    // Append line comment, "/* 7.1 */".
     auto subline = 1;
-    auto mcline = std::to_string(macCall.GetBeginPos().line);
-    auto comment = "/* " + mcline + "." + std::to_string(subline) + " */";
-    (void)pInvocation->newTokens.emplace_back(
-        TokenKind::COMMENT, comment, macCall.GetBeginPos(), macCall.GetEndPos(), true);
     for (const auto& tk : std::as_const(retTokens)) {
         ProcessCombinedToken(pInvocation->newTokens, tk, ci->diag);
         if (tk.kind == TokenKind::NL) {
             subline++;
-            auto lineComment = "/* " + mcline + "." + std::to_string(subline) + " */";
-            auto pos = Position{tk.Begin().fileID, tk.Begin().line + 1, 1};
-            (void)pInvocation->newTokens.emplace_back(
-                TokenKind::COMMENT, lineComment, pos, pos + lineComment.size(), true);
         }
     }
     if (ci->invocation.globalOptions.enableMacroInLSP || ci->invocation.globalOptions.enableMacroDebug) {

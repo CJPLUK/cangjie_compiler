@@ -886,10 +886,61 @@ bool IsTextOnlyWarning(const WarnGroup& warnGroup)
 {
     return (warnGroup == WarnGroup::DRIVER_ARG || warnGroup == WarnGroup::UNSUPPORT_COMPILE_SOURCE);
 }
+
+/**
+ * @brief Swap error message with note for diagnostics in macro calls.
+ *
+ * This function exchanges the main diagnostic message with sub-diagnostic information
+ * when dealing with macro invocations. It handles two scenarios:
+ * 1. For refactor diagnostics: Replaces the error message with the note from sub-diagnostic,
+ *    and moves the original error message to the sub-diagnostic position.
+ * 2. For regular diagnostics: Inserts a new sub-diagnostic with the original message,
+ *    and replaces the main diagnostic message with the sub-diagnostic's message.
+ *
+ * This is useful for providing clearer error reporting when errors occur within macro expansions,
+ * allowing the actual error location to be highlighted while preserving context.
+ *
+ * @param diagnostic The diagnostic object whose message will be swapped with its note.
+ */
+void SwapErrorMessageWithNote(Diagnostic& diagnostic)
+{
+    // Check if the diagnostic is a macro call and has sub-diagnostics.
+    if (!diagnostic.curMacroCall || diagnostic.subDiags.empty()) {
+        return;
+    }
+    // Check if the diagnostic is in the current file.
+    auto pInvocation = diagnostic.curMacroCall->GetInvocation();
+    auto mainHint = diagnostic.mainHint;
+    if ((pInvocation && pInvocation->isCurFile) || mainHint.range.begin.isCurFile || diagnostic.start.isCurFile) {
+        return;
+    }
+    // Swap error message with note.
+    auto subDiag = diagnostic.subDiags[0];
+    if (diagnostic.isRefactor) {
+        auto newSubDiag = SubDiagnostic(diagnostic.errorMessage);
+        newSubDiag.AddMainHint(mainHint.range, mainHint.str);
+        newSubDiag.otherHints = diagnostic.otherHints;
+        diagnostic.subDiags[0] = newSubDiag;
+        // Replace error message with note in macro call.
+        diagnostic.errorMessage = subDiag.subDiagMessage;
+        diagnostic.mainHint = IntegratedString(subDiag.mainHint.range, "", mainHint.color);
+        diagnostic.otherHints = subDiag.otherHints;
+    } else {
+        auto newSubDiag = SubDiagnostic(diagnostic.diagMessage);
+        newSubDiag.AddMainHint(MakeRange(diagnostic.start, diagnostic.end), "");
+        (void)diagnostic.subDiags.insert(diagnostic.subDiags.begin(), newSubDiag);
+        // Replace error message with note in macro call.
+        diagnostic.diagMessage = subDiag.subDiagMessage;
+        diagnostic.start = subDiag.mainHint.range.begin;
+        diagnostic.end = subDiag.mainHint.range.end;
+    }
+}
 }
 
 bool DiagnosticEmitterImpl::Emit()
 {
+    // Swap error message with note when dealing with macro calls.
+    SwapErrorMessageWithNote(diag);
     const std::map<DiagSeverity, std::string_view> seveToStr = {
         {DiagSeverity::DS_ERROR, "error"}, {DiagSeverity::DS_WARNING, "warning"},
         {DiagSeverity::DS_NOTE, "note"},

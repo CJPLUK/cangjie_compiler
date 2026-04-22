@@ -850,6 +850,10 @@ Position Node::GetMacroCallNewPos(const Position& originPos)
 Position Node::GetMacroCallPos(Position originPos, bool isLowerBound) const
 {
     if (this->curMacroCall) {
+        // If originPos is not from macro expansion, return it.
+        if (originPos.line != this->curMacroCall->begin.line) {
+            return originPos;
+        }
         auto pInvocation = this->curMacroCall->GetConstInvocation();
         if (pInvocation && !IsPureAnnotation(*pInvocation)) {
             return GetMacroSourcePos(*pInvocation, originPos, isLowerBound);
