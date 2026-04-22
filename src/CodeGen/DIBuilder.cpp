@@ -1316,8 +1316,7 @@ llvm::DICompositeType* DIBuilder::CreateEnumWithNonRefArgsType(
             continue;
         }
         auto& target = cgMod.GetCGContext().GetCompileOptions().target;
-        bool useAndroidArm32Layout =
-            target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID;
+        bool useAndroidArm32Layout = CGEnumType::NeedAndroidArm32AlignedEnumLayout(target);
         size_t totalSize = 32u;
         std::vector<uint64_t> sizeOfCtors(ctor.funcType->GetParamTypes().size() + 1, 0);
         sizeOfCtors[0] = totalSize;

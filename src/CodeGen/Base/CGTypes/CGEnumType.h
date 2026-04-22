@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "Base/CGTypes/CGCustomType.h"
+#include "cangjie/Option/Option.h"
 
 namespace Cangjie {
 namespace CodeGen {
@@ -124,7 +125,14 @@ public:
 
     std::string GetEnumTypeName() const;
 
-    static llvm::StructType* GetAssociatedNonRefLayoutType(
+    static inline bool NeedAndroidArm32AlignedEnumLayout(const Triple::Info& target)
+    {
+        return target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID;
+    }
+
+    // Build an LLVM StructType that describes how these fields should be interpreted as a struct layout on
+    // Android ARM32. It is used as a layout model for StructLayout/StructGEP, rather than as the concrete enum type.
+    static llvm::StructType* GetAndroidArm32AssociatedNonRefLayoutType(
         CGModule& cgMod, const std::vector<CHIR::Type*>& fieldTypes);
 
     static AssociatedNonRefLayout ComputeAssociatedNonRefLayout(

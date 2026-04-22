@@ -15,13 +15,6 @@
 #include "cangjie/CHIR/IR/Type/EnumDef.h"
 
 namespace Cangjie::CodeGen {
-namespace {
-bool NeedAndroidArm32EnumLayout(const Triple::Info& target)
-{
-    return target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID;
-}
-} // namespace
-
 EnumCtorTIOrTTGenerator::EnumCtorTIOrTTGenerator(
     CGModule& cgMod, const CHIR::EnumType& chirEnumType, std::size_t ctorIndex)
     : cgMod(cgMod), cgCtx(cgMod.GetCGContext()), chirEnumType(chirEnumType), ctorIndex(ctorIndex)
@@ -149,25 +142,15 @@ EnumCtorLayout EnumCtorTIOrTTGenerator::GenLayoutForStructure(const CGEnumType* 
         return ComputeLLVMLayout(fields, tiName, className);
     } else { // EXHAUSTIVE_ASSOCIATED_NONREF
         layout.fieldTypes = fields;
-        std::vector<llvm::Constant*> offSets(layout.fieldTypes.size());
-        if (NeedAndroidArm32EnumLayout(cgCtx.GetCompileOptions().target)) {
-            auto nonRefLayout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, layout.fieldTypes);
+        auto nonRefLayout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, layout.fieldTypes);
+        // Ideally, all targets should use the computed associated non-ref size here.
+        // For compatibility, only Android ARM32 switches to the aligned layout size for now.
+        if (CGEnumType::NeedAndroidArm32AlignedEnumLayout(cgMod.GetCGContext().GetCompileOptions().target))
             layout.size = nonRefLayout.size;
-            layout.align = nonRefLayout.align;
-            for (size_t i = 0; i < layout.fieldTypes.size(); ++i) {
-                offSets[i] = llvm::ConstantInt::get(i32Ty, nonRefLayout.offsets[i]);
-            }
-        } else {
-            layout.align = 1;
-            uint32_t totalSize = 0;
-            for (size_t i = 0; i < layout.fieldTypes.size(); ++i) {
-                auto fieldType = layout.fieldTypes[i];
-                offSets[i] = llvm::ConstantInt::get(i32Ty, totalSize);
-                auto cgField = CGType::GetOrCreate(cgMod, DeRef(*fieldType));
-                auto fieldSize = cgField->GetSize().value_or(0);
-                totalSize += fieldSize;
-            }
-            layout.size = totalSize;
+        layout.align = nonRefLayout.align;
+        std::vector<llvm::Constant*> offSets(layout.fieldTypes.size());
+        for (size_t i = 0; i < layout.fieldTypes.size(); ++i) {
+            offSets[i] = llvm::ConstantInt::get(i32Ty, nonRefLayout.offsets[i]);
         }
         auto layoutType = GetLLVMStructType(cgMod, layout.fieldTypes, GetClassObjLayoutName(className));
         if (layoutType->elements().empty()) {

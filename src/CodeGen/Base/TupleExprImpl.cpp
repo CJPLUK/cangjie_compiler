@@ -94,6 +94,16 @@ llvm::Value* CodeGen::GenerateNativeTuple(IRBuilder2& irBuilder, const CHIR::Tup
     return res;
 }
 namespace {
+std::vector<CHIR::Type*> CollectAssociatedNonRefFieldTypes(const CHIR::Tuple& tuple)
+{
+    std::vector<CHIR::Type*> fieldTypes;
+    fieldTypes.reserve(tuple.GetNumOfOperands());
+    for (unsigned idx = 0U; idx < tuple.GetNumOfOperands(); ++idx) {
+        fieldTypes.emplace_back(tuple.GetOperand(idx)->GetType());
+    }
+    return fieldTypes;
+}
+
 llvm::Value* GenerateOptionLikeT(IRBuilder2& irBuilder, const CHIR::Tuple& tuple)
 {
     auto& cgMod = irBuilder.GetCGModule();
@@ -193,17 +203,13 @@ llvm::Value* GenerateAssociatedNonRefEnum(IRBuilder2& irBuilder, const CHIR::Tup
     auto enumVal = irBuilder.CreateEntryAlloca(*cgEnumType, "enum.val");
     // 2. store the tag and associated values into the memory.
     auto casted = irBuilder.CreateBitCast(enumVal, i8Ty->getPointerTo());
-    std::vector<CHIR::Type*> fieldTypes;
-    fieldTypes.reserve(tuple.GetNumOfOperands());
-    for (unsigned idx = 0U; idx < tuple.GetNumOfOperands(); ++idx) {
-        fieldTypes.emplace_back(tuple.GetOperand(idx)->GetType());
-    }
-    auto& target = irBuilder.GetCGContext().GetCompileOptions().target;
-    auto useStructGEP = target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID;
+    auto fieldTypes = CollectAssociatedNonRefFieldTypes(tuple);
+    auto useStructGEP = CGEnumType::NeedAndroidArm32AlignedEnumLayout(
+        irBuilder.GetCGContext().GetCompileOptions().target);
     llvm::StructType* layoutType = nullptr;
     llvm::Value* castedStruct = nullptr;
     if (useStructGEP) {
-        layoutType = CGEnumType::GetAssociatedNonRefLayoutType(cgMod, fieldTypes);
+        layoutType = CGEnumType::GetAndroidArm32AssociatedNonRefLayoutType(cgMod, fieldTypes);
         castedStruct = irBuilder.CreateBitCast(enumVal, layoutType->getPointerTo());
     }
     auto layout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fieldTypes);
