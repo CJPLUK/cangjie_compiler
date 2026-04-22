@@ -15,21 +15,16 @@ using namespace Utils;
 using namespace InvokeRuntime;
 
 #ifdef _WIN32
-#ifdef UNICODE
-#define LoadLibrary LoadLibraryW
-#else
-#define LoadLibrary LoadLibraryA
-#endif
-
 HANDLE InvokeRuntime::OpenSymbolTable(const std::string& libPath)
 {
-    HANDLE handle = LoadLibrary(libPath.c_str());
+    HANDLE handle = LoadLibraryA(libPath.c_str());
     // Judge load dynamic lib correctly or not.
     if (!handle) {
         Errorln("could not load the dynamic library: ", libPath);
     }
     return handle;
 }
+
 #elif defined(__linux__) || defined(__APPLE__)
 HANDLE InvokeRuntime::OpenSymbolTable(const std::string& libPath, int dlopenMode)
 {

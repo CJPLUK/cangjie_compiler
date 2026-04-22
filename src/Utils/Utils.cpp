@@ -162,6 +162,7 @@ std::unordered_map<std::string, std::string> StringifyEnvironmentPointer(const c
     return environmentVars;
 }
 
+#ifndef _WIN32
 static std::vector<std::string> GetPathsFromEnvironmentVars(
     const std::unordered_map<std::string, std::string>& environmentVars)
 {
@@ -172,6 +173,7 @@ static std::vector<std::string> GetPathsFromEnvironmentVars(
     }
     return searchPaths;
 }
+#endif
 
 std::string GetRootPackageName(const std::string& fullPackageName)
 {

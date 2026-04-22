@@ -213,6 +213,7 @@ endif()
 
 if(MINGW)
     set(TRIPLE x86_64-w64-mingw32)
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:-Wa,-mbig-obj>)
 endif()
 
 if(NOT TARGET_TRIPLE_DIRECTORY_PREFIX)

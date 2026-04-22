@@ -69,6 +69,9 @@ public:
  */
 enum class DiagKind {
 #define NOTE(Kind, Info) Kind,
+#ifdef ERROR
+#undef ERROR
+#endif
 #define ERROR(Kind, Info) Kind,
 #define WARNING(Kind, Group, Info) Kind,
 #include "cangjie/Basic/DiagnosticsAll.def"
