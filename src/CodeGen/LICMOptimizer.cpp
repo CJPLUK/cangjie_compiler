@@ -95,7 +95,9 @@ std::pair<llvm::Value*, llvm::Value*> LICMOptimizer::GenCreateCacheLogic(
         ? irBuilder.CreateEntryAlloca(i8PtrTy, nullptr, "outer_Type_cache")
         : nullptr;
     irBuilder.SetInsertPoint(preHdr);
-    preHdr->getTerminator()->eraseFromParent();
+    if (auto terminator = preHdr->getTerminator()) {
+        terminator->eraseFromParent();
+    }
     auto thisTI = irBuilder.CreateTypeInfo(virtualCallInfo4LICM.thisType);
     auto isRef = irBuilder.CreateTypeInfoIsReferenceCall(thisTI);
     auto [refBB, nonRefBB] = Vec2Tuple<2>(
@@ -132,7 +134,9 @@ void LICMOptimizer::GenCheckAndUseCacheLogic(IRBuilder2& irBuilder, llvm::Value*
     // gen check cache logic
     auto oldBB = prepForVirtualCallBB->splitBasicBlock(&*prepForVirtualCallBB->begin(), "prepForVirtualCall.bb.old");
     irBuilder.SetInsertPoint(prepForVirtualCallBB);
-    prepForVirtualCallBB->getTerminator()->eraseFromParent();
+    if (auto terminator = prepForVirtualCallBB->getTerminator()) {
+        terminator->eraseFromParent();
+    }
     auto vmCacheLoaded = irBuilder.CreateLoad(i8PtrTy, vmCachePtr);
     auto isNull = irBuilder.CreateICmpEQ(vmCacheLoaded, llvm::ConstantPointerNull::get(i8PtrTy));
     auto [nonNullBB] = Vec2Tuple<1>(irBuilder.CreateAndInsertBasicBlocks({GenNameForBB("cache.non.null")}));
