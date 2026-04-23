@@ -1,8 +1,13 @@
 services:
   build-sdk-linux64:
-    image: swr.cn-north-4.myhuaweicloud.com/cj-docker/cangjie_ubuntu18_x86_kernel:v2.8
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base-x64
+      args:
+        - UID=${FIXUID}
+        - GID=${FIXGID}
     working_dir: /workspace
-    user: ${FIXUID:-1000}:${FIXGID:-1000}
     environment:
       CANGJIE_VERSION: ${CANGJIE_VERSION:-unofficial}
       SDK_NAME: ${SDK_NAME:-stdx}
@@ -14,9 +19,14 @@ services:
     command: >-
       bash build_scripts/linux/all.sh
   build-sdk-linuxarm:
-    image: swr.cn-north-4.myhuaweicloud.com/cj-docker/cangjie_ubuntu18_arm_kernel:v2.2
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base-aarch64
+      args:
+        - UID=${FIXUID}
+        - GID=${FIXGID}
     working_dir: /workspace
-    user: ${FIXUID:-1000}:${FIXGID:-1000}
     environment:
       CANGJIE_VERSION: ${CANGJIE_VERSION:-unofficial}
       SDK_NAME: ${SDK_NAME:-stdx}
@@ -27,4 +37,50 @@ services:
       - ./:/workspace
     command: >-
       bash build_scripts/linux/all.sh
+  opencode-linux64:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: opencode-x64
+      args:
+        - UID=${FIXUID}
+        - GID=${FIXGID}
+    working_dir: /workspace
+    environment:
+      CANGJIE_VERSION: ${CANGJIE_VERSION:-unofficial}
+      SDK_NAME: ${SDK_NAME:-stdx}
+      ARCH: x86_64
+      OPENSSL_ROOT_DIR: /opt/buildtools/openssl-3.0.9
+      CMAKE_PREFIX_PATH: /opt/buildtools/openssl-3.0.9
+    volumes:
+      - ./:/workspace
+      - type: bind
+        source: /home/${USER}/.local/share/opencode/auth.json
+        target: /home/dev/.local/share/opencode/auth.json
+    command: >-
+      /home/dev/.opencode/bin/opencode --agent containerized
+  opencode-linuxarm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: opencode-aarch64
+      args:
+        - UID=${FIXUID}
+        - GID=${FIXGID}
+    working_dir: /home/dev/workspace
+    user: dev
+    tty: true
+    stdin_open: true
+    environment:
+      HOME: /home/dev
+      CANGJIE_VERSION: ${CANGJIE_VERSION:-unofficial}
+      SDK_NAME: ${SDK_NAME:-stdx}
+      ARCH: x86_64
+      OPENSSL_ROOT_DIR: /opt/buildtools/openssl-3.0.9
+      CMAKE_PREFIX_PATH: /opt/buildtools/openssl-3.0.9
+    volumes:
+      - ./:/home/dev/workspace
+      - ${HOME}/.local/share/opencode/auth.json:/home/dev/.local/share/opencode/auth.json
+    command: >-
+      /home/dev/.opencode/bin/opencode --agent containerized
 

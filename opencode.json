@@ -11,10 +11,17 @@
       "tail *": "allow"
     },
     "edit": {
-      "*": "deny",
+      "*": "ask",
       "build_scripts": "deny",
       "third_party": "deny",
       "cangjie_*/**/*": "allow"
+    }
+  },
+  "agent": {
+    "containerized": {
+      "permission": {
+        "*": "allow"
+      }
     }
   }
 }
