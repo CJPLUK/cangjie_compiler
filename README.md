@@ -23,12 +23,21 @@ There are services defined in `compose.yaml` which will build the SDK for differ
 
 ### Linux/x86_64
 ```shell
-FIXUID=`id -u` FIXGUID=`id -g` docker-compose run --rm build-sdk-linux64
+FIXUID=`id -u` docker-compose run --rm build-sdk-linux64
 ```
 
 ### Linux/aarch64
 ```shell
-FIXUID=`id -u` FIXGUID=`id -g` docker-compose run --rm build-sdk-linuxarm
+FIXUID=`id -u` docker-compose run --rm build-sdk-linuxarm
+```
+
+## Containerized unrestricted vibing (opencode)
+
+Assumes $HOME is /home/$USER (i.e. set up for linux not mac).
+This will use your auth file from your main opencode install (~/.local/share/opencode/auth.json).
+
+```shell
+FIXUID=`id -u` docker compose run opencode-linux64
 ```
 
 ### Others
