@@ -85,7 +85,7 @@ bool VirtualMethodInfo::FuncSigIsMatched(const FuncSigInfo& other, CHIRBuilder& 
 }
 
 bool VirtualMethodInfo::FuncSigIsMatched(const FuncCallType& other,
-    std::unordered_map<const GenericType*, Type*>& replaceTable, CHIRBuilder& builder) const
+    std::unordered_map<const GenericType*, Type*> replaceTable, CHIRBuilder& builder) const
 {
     if (condition.funcName != other.funcName) {
         return false;

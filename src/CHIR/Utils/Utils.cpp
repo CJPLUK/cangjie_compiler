@@ -21,7 +21,9 @@
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
+#include <cstddef>
 #include <iostream>
+#include <optional>
 #include <stack>
 
 namespace Cangjie::CHIR {
@@ -1396,16 +1398,16 @@ Type* GetInstParentCustomTypeForAweCallee(const ApplyWithException& expr, CHIRBu
     return GetInstParentCustomTyOfCallee(*expr.GetCallee(), expr.GetArgs(), expr.GetThisType(), builder);
 }
 
-std::vector<VTableSearchRes> GetFuncIndexInVTable(Type& root, const FuncCallType& funcCallType, CHIRBuilder& builder)
+std::optional<VTableSearchRes> GetFuncIndexInVTable(Type& root, const FuncCallType& funcCallType, CHIRBuilder& builder)
 {
-    std::vector<VTableSearchRes> result;
+    std::optional<VTableSearchRes> result;
     if (auto genericTy = DynamicCast<GenericType*>(&root)) {
         auto& upperBounds = genericTy->GetUpperBounds();
         CJC_ASSERT(!upperBounds.empty());
         for (auto upperBound : upperBounds) {
             ClassType* upperClassType = StaticCast<ClassType*>(StaticCast<RefType*>(upperBound)->GetBaseType());
             result = GetFuncIndexInVTable(*upperClassType, funcCallType, builder);
-            if (!result.empty()) {
+            if (result.has_value()) {
                 break;
             }
         }
@@ -1417,7 +1419,7 @@ std::vector<VTableSearchRes> GetFuncIndexInVTable(Type& root, const FuncCallType
         CJC_ASSERT(!extendDefs.empty());
         for (auto ex : extendDefs) {
             result = ex->GetFuncIndexInVTable(funcCallType, empty, builder);
-            if (!result.empty()) {
+            if (result.has_value()) {
                 break;
             }
         }
@@ -1591,5 +1593,53 @@ std::vector<Expression*> GetNonDebugUsers(const Value& val)
         }
     }
     return res;
+}
+
+size_t GetBestMatchingResultIndex(const std::vector<FuncType*>& candidateTypes, CHIRBuilder& builder)
+{
+    CJC_ASSERT(!candidateTypes.empty());
+    if (candidateTypes.size() == 1) {
+        return 0;
+    }
+    auto candidateNum = candidateTypes.size();
+    std::vector<bool> targetMark(candidateNum, true);
+    for (size_t i = 0; i < candidateNum; ++i) {
+        if (!targetMark[i]) {
+            continue;
+        }
+        for (size_t j = i + 1; j < candidateNum; ++j) {
+            if (!targetMark[j]) {
+                continue;
+            }
+            if (candidateTypes[i] == candidateTypes[j]) {
+                // When candidates have same signature, disable one of them.
+                targetMark[i] = false;
+                break;
+            }
+            auto iToJ = candidateTypes[i]->IsEqualOrInstantiatedTypeOf(*candidateTypes[j], builder);
+            auto jToI = candidateTypes[j]->IsEqualOrInstantiatedTypeOf(*candidateTypes[i], builder);
+            // according to spec, the more specific type is expected
+            if (iToJ && !jToI) {
+                targetMark[j] = false;
+            } else if (!iToJ && jToI) {
+                targetMark[i] = false;
+                break;
+            }
+        }
+    }
+    std::optional<size_t> result;
+    for (size_t i = 0; i < candidateNum; ++i) {
+        if (targetMark[i]) {
+            if (result.has_value()) {
+                // shouldn't have many results, otherwise, compiler error must occurred in Sema
+                CJC_ABORT();
+            } else {
+                result = i;
+            }
+        }
+    }
+    // must have a result
+    CJC_ASSERT(result.has_value());
+    return result.value();
 }
 } // namespace Cangjie::CHIR

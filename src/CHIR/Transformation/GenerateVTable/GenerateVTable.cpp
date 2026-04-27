@@ -149,10 +149,9 @@ Function* GenerateVTable::GetMutFuncWrapper(const Type& thisType, const std::vec
         .funcType = builder.GetType<FuncType>(paramTypes, &retType),
         .genericTypeArgs = instTypeArgs
     };
-    auto vtableRes = GetFuncIndexInVTable(*thisType.StripAllRefs(), funcCallType, builder);
-    CJC_ASSERT(vtableRes.size() == 1);
+    auto vtableRes = GetFuncIndexInVTable(*thisType.StripAllRefs(), funcCallType, builder).value();
     auto wrapperName = CHIRMangling::GenerateVirtualFuncMangleName(
-        &callee, *vtableRes[0].originalDef, vtableRes[0].halfInstSrcParentType, false);
+        &callee, *vtableRes.originalDef, vtableRes.halfInstSrcParentType, false);
     auto it = mutFuncWrappers.find(wrapperName);
     CJC_ASSERT(it != mutFuncWrappers.end());
     return it->second;

@@ -951,7 +951,7 @@ protected:
     VirMethodContext virMethodCtx;
 
 private:
-    std::vector<VTableSearchRes> GetVirtualMethodInfo(CHIRBuilder& builder) const;
+    VTableSearchRes GetVirtualMethodInfo(CHIRBuilder& builder) const;
 };
 
 /**

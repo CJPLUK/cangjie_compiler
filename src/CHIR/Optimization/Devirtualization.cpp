@@ -513,8 +513,8 @@ std::pair<Function*, Type*> Devirtualization::FindRealCallee(
             auto funcType = builder.GetType<FuncType>(paramTypes, builder.GetUnitTy());
             FuncCallType funcCallType{method.name, funcType, method.typeArgs};
             auto res = def->GetFuncIndexInVTable(funcCallType, replaceTable, builder);
-            if (!res.empty() && !res[0].instance->IsPureAbstract()) {
-                target = res[0].instance;
+            if (res.has_value() && !res.value().instance->IsPureAbstract()) {
+                target = res.value().instance;
                 break;
             }
         }

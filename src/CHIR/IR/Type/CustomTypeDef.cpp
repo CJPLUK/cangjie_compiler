@@ -286,10 +286,11 @@ Function* CustomTypeDef::GetExpectedFunc(
     return foundFunc;
 }
 
-std::vector<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallType& funcCallType,
+std::optional<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallType& funcCallType,
     std::unordered_map<const GenericType*, Type*>& replaceTable, CHIRBuilder& builder) const
 {
     std::vector<VTableSearchRes> res;
+    std::vector<FuncType*> candidateTypes;
     for (const auto& vtableIt : vtable.GetTypeVTables()) {
         for (size_t i = 0; i < vtableIt.GetMethodNum(); ++i) {
             const auto& funcInfo = vtableIt.GetVirtualMethods()[i];
@@ -306,11 +307,44 @@ std::vector<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallT
                     .attr = funcInfo.GetAttributeInfo(),
                     .offset = i
                 });
-                break;
+                /** open class A<X> {
+                 *  open public func test<T>(x: X, y: X): Unit {
+                 *          println("a");
+                 *      }
+                 *  }
+                 *
+                 *  open class B<X> <: A<X> {
+                 *  open public func test<Y>(x: C<Y>, y: C<Y>): Unit {
+                 *          println("b");
+                 *      }
+                 *  }
+                 *
+                 *  class C<T> {}
+                 *
+                 *  main() {
+                 *      let x: C<Int64> = C<Int64>()
+                 *      B<C<Int64>>().test<Int64>(x, x)
+                 *  }
+                 *  face to this example, we can get two candidates for func call `B<C<Int64>>().test<Int64>(x, x)`
+                 *  one is A<X>.test<T>(x: X, y: X), the other is B<X>.test<Y>(x: C<Y>, y: C<Y>)
+                 *  we need to choose which one is better, according to spec, we need to instantiate func type,
+                 *  but only instantiate generic type which defined in class decl, not in func decl,
+                 *  so our candidate types are:
+                 *  1. (C<Int64>, C<Int64>), instantiated result of A<X>.test<T>(x: X, y: X)
+                 *      because generic type `X` is instantiated by `C<Int64>`
+                 *  2. (C<Y>, C<Y>), instantiated result of B<X>.test<Y>(x: C<Y>, y: C<Y>)
+                 *      because generic type `Y` is defined in func decl, not in class decl
+                 *
+                 */
+                auto instTy = ReplaceRawGenericArgType(*funcInfo.GetCondition().funcType, replaceTable, builder);
+                candidateTypes.emplace_back(StaticCast<FuncType*>(instTy));
             }
         }
     }
-    return res;
+    if (res.empty()) {
+        return std::nullopt;
+    }
+    return res[GetBestMatchingResultIndex(candidateTypes, builder)];
 }
 
 std::string CustomTypeDef::ToString() const

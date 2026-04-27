@@ -901,7 +901,12 @@ FuncType* DynamicDispatch::GetMethodType() const
     return virMethodCtx.originalFuncType;
 }
 
-std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& builder) const
+const std::vector<GenericType*>& DynamicDispatch::GetGenericTypeParams() const
+{
+    return virMethodCtx.genericTypeParams;
+}
+
+VTableSearchRes DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& builder) const
 {
     auto thisTypeDeref = thisType->StripAllRefs();
     if (thisTypeDeref->IsThis()) {
@@ -917,13 +922,8 @@ std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& 
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
     FuncCallType funcCallType{virMethodCtx.srcCodeIdentifier, instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
-    CJC_ASSERT(!res.empty());
-    return res;
-}
-
-const std::vector<GenericType*>& DynamicDispatch::GetGenericTypeParams() const
-{
-    return virMethodCtx.genericTypeParams;
+    CJC_ASSERT(res.has_value());
+    return res.value();
 }
 
 size_t DynamicDispatch::GetVirtualMethodOffset(CHIRBuilder* builder) const
@@ -933,37 +933,20 @@ size_t DynamicDispatch::GetVirtualMethodOffset(CHIRBuilder* builder) const
         return offset.value();
     } else {
         CJC_NULLPTR_CHECK(builder);
-        return GetVirtualMethodInfo(*builder)[0].offset;
+        return GetVirtualMethodInfo(*builder).offset;
     }
 }
 
 ClassType* DynamicDispatch::GetInstSrcParentCustomTypeOfMethod(CHIRBuilder& builder) const
 {
-    for (auto& r : GetVirtualMethodInfo(builder)) {
-        if (r.offset == GetVirtualMethodOffset()) {
-            auto def = r.instSrcParentType->GetClassDef();
-            const auto& parentFuncInfo = def->GetDefVTable().GetExpectedTypeVTable(*def->GetType());
-            auto originalType = parentFuncInfo.GetVirtualMethods()[r.offset].GetOriginalFuncType();
-            if (VirMethodTypeIsMatched(*originalType, *GetMethodType())) {
-                CJC_NULLPTR_CHECK(r.instSrcParentType);
-                return r.instSrcParentType;
-            }
-        }
-    }
-    CJC_ABORT();
-    return nullptr;
+    const auto& r = GetVirtualMethodInfo(builder);
+    return r.instSrcParentType;
 }
 
 AttributeInfo DynamicDispatch::GetVirtualMethodAttr(CHIRBuilder& builder) const
 {
-    for (auto& r : GetVirtualMethodInfo(builder)) {
-        if (r.offset == GetVirtualMethodOffset()) {
-            CJC_NULLPTR_CHECK(r.instSrcParentType);
-            return r.attr;
-        }
-    }
-    CJC_ABORT();
-    return AttributeInfo{};
+    const auto& r = GetVirtualMethodInfo(builder);
+    return r.attr;
 }
 
 std::string DynamicDispatch::OperandsToString() const
