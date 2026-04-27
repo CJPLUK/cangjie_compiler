@@ -101,11 +101,6 @@ public:
         return IsOptionLikeNonRef() || IsOptionLikeT() || IsZeroSizeEnum() || IsAllAssociatedValuesAreNonRef();
     }
 
-    llvm::StructType* GetLayoutType() const
-    {
-        return layoutType;
-    }
-
     CGEnumTypeKind GetCGEnumTypeKind() const
     {
         return cgEnumTypeKind;

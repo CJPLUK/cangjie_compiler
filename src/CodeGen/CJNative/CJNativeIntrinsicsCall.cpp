@@ -4,6 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include "Base/CGTypes/CGVArrayType.h"
 #include "IRBuilder.h"
 
 #include "Base/CGTypes/CGArrayType.h"
@@ -265,7 +266,7 @@ void IRBuilder2::CallArrayIntrinsicSet(
             auto structType = llvm::cast<llvm::StructType>(elemType);
             auto layOut = GetLLVMModule()->getDataLayout().getStructLayout(structType);
             auto size = getInt64(layOut->getSizeInBytes());
-            CallGCWriteAgg({array, elePtr, value, size});
+            CallGCWriteAgg(structType, {array, elePtr, value, size});
         } else {
             auto layOut =
                 GetCGModule().GetLLVMModule()->getDataLayout().getStructLayout(llvm::cast<llvm::StructType>(elemType));
@@ -276,7 +277,7 @@ void IRBuilder2::CallArrayIntrinsicSet(
         }
     } else if (elemType->isArrayTy()) {
         auto size = getInt64(GetLLVMModule()->getDataLayout().getTypeAllocSize(elemType));
-        CallGCWriteAgg({array, elePtr, value, size});
+        CallGCWriteAgg(elemCGType->GetLayoutType(), {array, elePtr, value, size});
     } else if (elemType == CGType::GetRefType(GetLLVMContext())) {
         CallGCWrite({value, array, elePtr});
     } else {
@@ -375,14 +376,13 @@ void IRBuilder2::CreateRefStore(CGValue* cgValue, llvm::Value* basePtr, llvm::Va
         }
     }
     if (valueCGType->IsStructPtrType()) {
-        if (isDstAddrspace1 && IsTypeContainsRef(valueCGType->GetPointerElementType()->GetLLVMType())) {
-            auto structType = llvm::cast<llvm::StructType>(valueCGType->GetPointerElementType()->GetLLVMType());
+        auto structType = llvm::cast<llvm::StructType>(valueCGType->GetPointerElementType()->GetLLVMType());
+        if (isDstAddrspace1 && IsTypeContainsRef(structType)) {
             auto layOut = cgMod.GetLLVMModule()->getDataLayout().getStructLayout(structType);
             auto size = llvm::ConstantInt::get(llvm::Type::getInt64Ty(GetLLVMContext()), layOut->getSizeInBytes());
-            CallGCWriteAgg({base, place, value, size});
+            CallGCWriteAgg(structType, {base, place, value, size});
         } else {
-            auto layOut = GetCGModule().GetLLVMModule()->getDataLayout().getStructLayout(
-                llvm::cast<llvm::StructType>(valueCGType->GetPointerElementType()->GetLLVMType()));
+            auto layOut = GetCGModule().GetLLVMModule()->getDataLayout().getStructLayout(structType);
             CJC_NULLPTR_CHECK(layOut);
             auto size = layOut->getSizeInBytes();
             auto align = layOut->getAlignment();
@@ -391,7 +391,7 @@ void IRBuilder2::CreateRefStore(CGValue* cgValue, llvm::Value* basePtr, llvm::Va
     } else if (isDstAddrspace1 && valueCGType->IsVArrayPtrType()) {
         auto valueType = valueCGType->GetPointerElementType()->GetLLVMType();
         auto size = getInt64(cgMod.GetLLVMModule()->getDataLayout().getTypeAllocSize(valueType));
-        CallGCWriteAgg({base, place, value, size});
+        CallGCWriteAgg(valueCGType->GetPointerElementType()->GetLayoutType(), {base, place, value, size});
     } else if (isDstAddrspace1 && valueCGType->IsRefType()) {
         CallGCWrite({value, base, place});
     } else {
