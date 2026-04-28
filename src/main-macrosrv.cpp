@@ -79,10 +79,6 @@ bool IsArgsValid(const std::vector<std::string>& args)
         Errorln("Macro srv: Arg of write handle is not number");
         return false;
     }
-    if (args.size() > IDX_OF_PPID && !IsNumber(args[IDX_OF_PPID])) {
-        Errorln("Macro srv: Arg of ppid is not number");
-        return false;
-    }
     if (args[IDX_OF_CJC_FOLDER].empty()) {
         Errorln("Macro srv: Arg of cjc folder is empty");
         return false;
