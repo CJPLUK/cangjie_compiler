@@ -810,6 +810,113 @@ void ReplaceOperandWithAutoEnvWrapperClass(
         user->ReplaceOperand(&op, &autoEnvWrapperClass);
     }
 }
+
+ClassType* GetAutoEnvGenericBase(ClassType& closureType, CHIRBuilder& builder)
+{
+    if (closureType.IsAutoEnvGenericBase()) {
+        return &closureType;
+    }
+    auto superType = closureType.GetSuperClassTy(&builder);
+    return GetAutoEnvGenericBase(*superType, builder);
+}
+
+ClassType* InstantiateAutoEnvGenericBaseType(ClassType& closureType, const Expression& e, CHIRBuilder& builder)
+{
+    /** there are some scenario we need to discuss:
+     *  1. lambda recursively call itself directly
+     *  func foo(): Unit {
+     *      func goo<T>(a: T): Unit {
+     *          goo<Int64>(1)
+     *          goo<Bool>(true)
+     *      }
+     *  }
+     *  after closure conversion:
+     *  abstract class AutoEnvGenericBase<T1, T2> {
+     *      open public func $GenericVirtualFunc(p: T1): T2
+     *  }
+     *  class AutoEnvGoo<T> <: AutoEnvGenericBase<T, Unit> {
+     *      override public func goo_&g(a: T): Unit {
+     *          goo<T>(this, a)
+     *      }
+     *  }
+     *  func goo<T>(env: AutoEnvGoo<T>&, a: T): Unit {
+     *      ...
+     *      %1: Unit = Apply(AutoEnvGoo<Int64>& -> goo_&g, env, a) // goo<Int64>(1)
+     *      %2: Unit = Apply(AutoEnvGoo<Bool>& -> goo_&g, env, a)  // goo<Bool>(true)
+     *  }
+     *  env's type is always `AutoEnvGoo<T>&`, but in different `Apply`, ThisType should be different,
+     *  otherwise, we will lost instantiated type info and some APIs might get wrong result
+     *
+     *  2. lambda recursively call itself indirectly
+     *  func foo(): Unit {
+     *      func goo<T>(a: T): Unit {
+     *          func hoo() {
+     *              goo<Int64>(1)
+     *              goo<Bool>(true)
+     *          }
+     *      }
+     *  }
+     *  after closure conversion:
+     *  abstract class AutoEnvGenericBase1<T1> {
+     *      open public func $GenericVirtualFunc(): T1
+     *  }
+     *  abstract class AutoEnvGenericBase2<T1, T2> {
+     *      open public func $GenericVirtualFunc(p: T1): T2
+     *  }
+     *  class AutoEnvGoo<T> <: AutoEnvGenericBase2<T, Unit> {
+     *      override public func $GenericVirtualFunc(a: T): Unit {
+     *          goo<T>(this, a)
+     *      }
+     *  }
+     *  abstract class AutoEnvInstBase <: AutoEnvGenericBase1<Unit> {
+     *      open public func $InstVirtualFunc(): Unit
+     *  }
+     *  class AutoEnvHoo<T> <: AutoEnvInstBase {
+     *      var v1: AutoEnvGenericBase<T, Unit>&
+     *      override public func $GenericVirtualFunc(): Box<Unit>& {
+     *          hoo<T>(this)
+     *      }
+     *      override public func $InstVirtualFunc(): Unit {
+     *          hoo<T>(this)
+     *      }
+     *  }
+     *  func hoo<T>(env: AutoEnvHoo<T>&): Unit {
+     *      ...
+     *      %1: AutoEnvGenericBase<T, Unit>& = env.v1
+     *      %2: Int64 = Constant(1)
+     *      %3: Unit = Invoke(AutoEnvGenericBase<Int64, Unit>& -> $GenericVirtualFunc, %1, %2) // goo<Int64>(1)
+     *      %4: Bool = Constant(true)
+     *      %5: Unit = Invoke(AutoEnvGenericBase<Bool, Unit>& -> $GenericVirtualFunc, %1, %4)  // goo<Bool>(true)
+     *  }
+     *  the same reason with scenario 1
+     */
+    if (!closureType.IsGenericRelated()) {
+        return &closureType;
+    }
+    std::vector<Type*> funcTypeArgs;
+    if (auto apply = Cangjie::DynamicCast<const Apply*>(&e)) {
+        for (auto arg : apply->GetArgs()) {
+            funcTypeArgs.emplace_back(arg->GetType());
+        }
+    } else if (auto applyE = Cangjie::DynamicCast<const ApplyWithException*>(&e)) {
+        for (auto arg : applyE->GetArgs()) {
+            funcTypeArgs.emplace_back(arg->GetType());
+        }
+    } else {
+        return &closureType;
+    }
+    funcTypeArgs.emplace_back(e.GetResultType());
+    auto autoEnvGenericBase = GetAutoEnvGenericBase(closureType, builder);
+    auto autoEnvTypeArgs = autoEnvGenericBase->GetGenericArgs();
+    std::unordered_map<const GenericType*, Type*> replaceTable;
+    CJC_ASSERT(autoEnvTypeArgs.size() == funcTypeArgs.size());
+    for (size_t i = 0; i < funcTypeArgs.size(); ++i) {
+        if (autoEnvTypeArgs[i]->IsGeneric() && !funcTypeArgs[i]->IsGeneric()) {
+            replaceTable.emplace(Cangjie::StaticCast<GenericType*>(autoEnvTypeArgs[i]), funcTypeArgs[i]);
+        }
+    }
+    return StaticCast<ClassType*>(ReplaceRawGenericArgType(closureType, replaceTable, builder));
+}
 } // namespace
 
 ClosureConversion::ClosureConversion(Package& package, CHIRBuilder& builder, const GlobalOptions& opts,
@@ -2009,12 +2116,16 @@ void ClosureConversion::ReplaceUserPoint(
     auto it = convertedCache.find(&srcFunc);
     CJC_ASSERT(it != convertedCache.end());
     auto globalFunc = it->second;
+    Type* thisTy = nullptr;
     if (user.GetTopLevelFunc() == globalFunc) {
+        // maybe we should call itself, not method in AutoEnvObj
         autoEnvObj = user.GetTopLevelFunc()->GetParam(0);
+        thisTy = builder.GetType<RefType>(InstantiateAutoEnvGenericBaseType(
+            *StaticCast<ClassType*>(autoEnvObj->GetType()->StripAllRefs()), user, builder));
     } else {
         autoEnvObj = CreateAutoEnvImplObject(*curBlock, *autoEnvImplType, envs, user, *srcFunc.GetResult());
+        thisTy = autoEnvObj->GetType();
     }
-
     if (auto apply = DynamicCast<Apply*>(&user); apply && apply->GetCallee() == srcFunc.GetResult()) {
         auto methods = autoEnvImplDef.GetMethods();
         auto newCallee = methods.back();
@@ -2022,7 +2133,6 @@ void ClosureConversion::ReplaceUserPoint(
         newArgs.insert(newArgs.begin(), autoEnvObj);
         auto retType = apply->GetResult()->GetType();
         auto loc = apply->GetDebugLocation();
-        auto thisTy = autoEnvObj->GetType();
 
         auto newApply = builder.CreateExpression<Apply>(loc, retType, newCallee, FuncCallContext{
             .args = newArgs,
@@ -2035,7 +2145,6 @@ void ClosureConversion::ReplaceUserPoint(
         newArgs.insert(newArgs.begin(), autoEnvObj);
         auto retType = awe->GetResult()->GetType();
         auto loc = awe->GetDebugLocation();
-        auto thisTy = autoEnvObj->GetType();
 
         auto newApply = builder.CreateExpression<ApplyWithException>(loc, retType, newCallee, FuncCallContext{
             .args = newArgs,
@@ -2117,13 +2226,13 @@ void ClosureConversion::ConvertApplyToInvoke(Apply& apply)
         // callee is still func type
         autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(*funcType);
         instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, *funcType, builder);
+        instParentType = InstantiateAutoEnvGenericBaseType(*instParentType, apply, builder);
     } else {
         // callee has been replaced in closure conversion, then apply must be converted to invoke
         instParentType = StaticCast<ClassType*>(StaticCast<RefType*>(callee->GetType())->GetBaseType());
         autoEnvBaseDef = instParentType->GetClassDef();
     }
     auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
-
     auto invokeInfo = InvokeCallContext {
         .caller = callee,
         .funcCallCtx = FuncCallContext {
@@ -2150,13 +2259,13 @@ void ClosureConversion::ConvertApplyWithExceptionToInvokeWithException(ApplyWith
         // callee is still func type
         autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(*funcType);
         instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, *funcType, builder);
+        instParentType = InstantiateAutoEnvGenericBaseType(*instParentType, apply, builder);
     } else {
         // callee has been replaced in closure conversion, then apply must be converted to invoke
         instParentType = StaticCast<ClassType*>(StaticCast<RefType*>(callee->GetType())->GetBaseType());
         autoEnvBaseDef = instParentType->GetClassDef();
     }
     auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
-
     auto invokeInfo = InvokeCallContext {
         .caller = callee,
         .funcCallCtx = FuncCallContext {

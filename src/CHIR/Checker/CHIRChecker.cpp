@@ -390,6 +390,85 @@ bool isAllowedToHaveAbstractMethod(const CustomTypeDef& def)
     }
     return false;
 }
+
+bool ClosureTypeIsExpected(const Type& argType, const Type& thisType, CHIRBuilder& builder)
+{
+    /** there are some scenario we need to discuss:
+     *  1. lambda recursively call itself directly
+     *  func foo(): Unit {
+     *      func goo<T>(a: T): Unit {
+     *          goo<Int64>(1)  // in order to translate `Int64`, we generate a little strange expr
+     *          goo<Bool>(true) // in order to translate `Bool`, we generate a little strange expr
+     *      }
+     *  }
+     *  after closure conversion:
+     *  abstract class AutoEnvGenericBase<T1, T2> {
+     *      open public func $GenericVirtualFunc(p: T1): T2
+     *  }
+     *  class AutoEnvGoo<T> <: AutoEnvGenericBase<T, Unit> {
+     *      override public func goo_&g(a: T): Unit {
+     *          goo<T>(this, a)
+     *      }
+     *  }
+     *  func goo<T>(env: AutoEnvGoo<T>&, a: T): Unit {
+     *      ...
+     *      %1: Unit = Apply(AutoEnvGoo<Int64>& -> goo_&g, env, a) // goo<Int64>(1)
+     *      %2: Unit = Apply(AutoEnvGoo<Bool>& -> goo_&g, env, a)  // goo<Bool>(true)
+     *  }
+     *  env's type is always `AutoEnvGoo<T>&`, but in different `Apply`, ThisType is different,
+     *  so if we calculate env's instantiated type should be, we will get `AutoEnvGoo<Int64>&` or `AutoEnvGoo<Bool>&`,
+     *  nerther of them is `AutoEnvGoo<T>&`, so we can't judge env's type whether is illegal by arg's type can
+     *  be passed to instantiated param type, because `AutoEnvGoo<T>&` can't be passed to `AutoEnvGoo<Int64>&`,
+     *  so we guard this scenario by `IsEqualOrInstantiatedTypeOf`
+     *
+     *  2. lambda recursively call itself indirectly
+     *  func foo(): Unit {
+     *      func goo<T>(a: T): Unit {
+     *          func hoo() {
+     *              goo<Int64>(1)
+     *              goo<Bool>(true)
+     *          }
+     *      }
+     *  }
+     *  after closure conversion:
+     *  abstract class AutoEnvGenericBase1<T1> {
+     *      open public func $GenericVirtualFunc(): T1
+     *  }
+     *  abstract class AutoEnvGenericBase2<T1, T2> {
+     *      open public func $GenericVirtualFunc(p: T1): T2
+     *  }
+     *  class AutoEnvGoo<T> <: AutoEnvGenericBase2<T, Unit> {
+     *      override public func $GenericVirtualFunc(a: T): Unit {
+     *          goo<T>(this, a)
+     *      }
+     *  }
+     *  abstract class AutoEnvInstBase <: AutoEnvGenericBase1<Unit> {
+     *      open public func $InstVirtualFunc(): Unit
+     *  }
+     *  class AutoEnvHoo<T> <: AutoEnvInstBase {
+     *      var v1: AutoEnvGenericBase<T, Unit>&
+     *      override public func $GenericVirtualFunc(): Box<Unit>& {
+     *          hoo<T>(this)
+     *      }
+     *      override public func $InstVirtualFunc(): Unit {
+     *          hoo<T>(this)
+     *      }
+     *  }
+     *  func hoo<T>(env: AutoEnvHoo<T>&): Unit {
+     *      ...
+     *      %1: AutoEnvGenericBase<T, Unit>& = env.v1
+     *      %2: Int64 = Constant(1)
+     *      %3: Unit = Invoke(AutoEnvGenericBase<Int64, Unit>& -> $GenericVirtualFunc, %1, %2) // goo<Int64>(1)
+     *      %4: Bool = Constant(true)
+     *      %5: Unit = Invoke(AutoEnvGenericBase<Bool, Unit>& -> $GenericVirtualFunc, %1, %4)  // goo<Bool>(true)
+     *  }
+     *  the same reason with scenario 1
+     */
+    if (!argType.IsAutoEnv() || !thisType.IsAutoEnv()) {
+        return false;
+    }
+    return thisType.IsEqualOrInstantiatedTypeOf(argType, builder);
+}
 } // namespace
 
 CHIRChecker::CHIRChecker(const Package& package, const Cangjie::GlobalOptions& opts, CHIRBuilder& builder)
@@ -2133,7 +2212,8 @@ void CHIRChecker::CheckApplyFuncArgs(const std::vector<Value*>& args,
     }
     // 3. func arg can set to func param
     for (size_t i = 0; i < instParamTypes.size(); ++i) {
-        if (!TypeIsExpected(*args[i]->GetType(), *instParamTypes[i])) {
+        if (!TypeIsExpected(*args[i]->GetType(), *instParamTypes[i]) &&
+            !ClosureTypeIsExpected(*args[i]->GetType()->StripAllRefs(), *instParamTypes[i]->StripAllRefs(), builder)) {
             TypeCheckError(expr, *args[i], instParamTypes[i]->ToString(), topLevelFunc);
         }
     }
@@ -2297,7 +2377,8 @@ bool CHIRChecker::CheckInvokeThisType(
             ErrorInFunc(topLevelFunc, errMsg);
             return false;
         }
-    } else if (!thisDerefTy->IsEqualOrSubTypeOf(*objType.StripAllRefs(), builder)) {
+    } else if (!thisDerefTy->IsEqualOrSubTypeOf(*objType.StripAllRefs(), builder) &&
+        !ClosureTypeIsExpected(*objType.StripAllRefs(), *thisDerefTy, builder)) {
         // 7. thisType is custom type or builtin type now, so object's type must be thisType's parent type
         auto errMsg = "type mismatched, in `" + GetExpressionString(expr) +
             "`, ThisType is " + thisType->ToString() + ", but object's type is " + objType.ToString() +
