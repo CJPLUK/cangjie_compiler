@@ -24,7 +24,7 @@ DeadCodeElimination::DeadCodeElimination(CHIRBuilder& builder, DiagAdapter& diag
 namespace {
 const std::string STD_CORE_FUTURE_MANGLED_NAME = "_CNat6Future";
 
-void DumpForDebug(const Ptr<Expression> expr, const Ptr<Func> func, bool isDebug)
+void DumpForDebug(const Ptr<Expression> expr, const Ptr<Function> func, bool isDebug)
 {
     if (!isDebug) {
         return;
@@ -91,7 +91,7 @@ bool CheckUsersOfExpr(const Expression& expr)
     return true;
 }
 
-std::string GetFuncIdent(const Func& func)
+std::string GetFuncIdent(const Function& func)
 {
     if (func.GetFuncKind() == FuncKind::GETTER) {
         return "get";
@@ -101,25 +101,15 @@ std::string GetFuncIdent(const Func& func)
     return func.GetSrcCodeIdentifier();
 }
 
-bool ShouldSkipUselessFuncElimination(const Package& package, const Cangjie::GlobalOptions& opts)
-{
-    if (opts.optimizationLevel < Cangjie::GlobalOptions::OptimizationLevel::O2 ||
-        opts.enableCoverage || opts.enIncrementalCompilation ||
-        package.GetName() == Cangjie::REFLECT_PACKAGE_NAME) {
-        return true;
-    }
-    return false;
-}
-
 void ClearRemovedFuncParamDftValHostFunc(Package& package)
 {
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         if (func->TestAttr(Attribute::IMPORTED)) {
             continue;
         }
         auto hostFunc = func->GetParamDftValHostFunc();
         if (hostFunc != nullptr && hostFunc->IsFuncWithBody() &&
-            Cangjie::StaticCast<Func*>(hostFunc)->GetBody() == nullptr) {
+            Cangjie::StaticCast<Function*>(hostFunc)->GetBody() == nullptr) {
             func->ClearParamDftValHostFunc();
         }
     }
@@ -132,12 +122,12 @@ bool ReflectPackageIsUsed(const Package& package)
             return true;
         }
     }
-    for (auto func: package.GetGlobalFuncs()) {
+    for (auto func: package.GetGlobalFuncsWithBody()) {
         if (func->IsImportedFunc() && func->GetPackageName() == Cangjie::REFLECT_PACKAGE_NAME) {
             return true;
         }
     }
-    for (auto var : package.GetGlobalVars()) {
+    for (auto var : package.GetGlobalVarsWithInit()) {
         if (var->IsImportedVar() && var->GetPackageName() == Cangjie::REFLECT_PACKAGE_NAME) {
             return true;
         }
@@ -180,12 +170,9 @@ std::string DeadCodeElimination::GetLiteralFromExprKind(const ExprKind& kind) co
 
 void DeadCodeElimination::UselessFuncElimination(Package& package, const GlobalOptions& opts)
 {
-    if (ShouldSkipUselessFuncElimination(package, opts)) {
-        return;
-    }
-    auto allFuncs = package.GetGlobalFuncs();
+    auto allFuncs = package.GetGlobalFunctions();
     auto usingReflectPackage = ReflectPackageIsUsed(curPkg);
-    std::vector<Func*> funcsToBeRemoved;
+    std::vector<Function*> funcsToBeRemoved;
     do {
         funcsToBeRemoved.clear();
         auto it = allFuncs.begin();
@@ -206,17 +193,17 @@ void DeadCodeElimination::UselessFuncElimination(Package& package, const GlobalO
             func->DestroySelf();
         }
     } while (!funcsToBeRemoved.empty());
-    package.SetGlobalFuncs(allFuncs);
+    package.SetAllGlobalFuncs(std::move(allFuncs));
     ClearRemovedFuncParamDftValHostFunc(package);
 }
 
 void DeadCodeElimination::ReportUnusedCode(const Package& package, const GlobalOptions& opts)
 {
-    for (auto globalVar : package.GetGlobalVars()) {
+    for (auto globalVar : package.GetGlobalVarsWithInit()) {
         ReportUnusedGlobalVar(*globalVar);
     }
 
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         ReportUnusedFunc(*func, opts);
         bool isCommonFunctionWithoutBody = func->TestAttr(Attribute::SKIP_ANALYSIS);
         if (isCommonFunctionWithoutBody) {
@@ -247,7 +234,7 @@ void DeadCodeElimination::ReportUnusedCodeInFunc(const BlockGroup& body, const G
     }
 }
 
-void DeadCodeElimination::ReportUnusedFunc(const Func& func, const GlobalOptions& opts)
+void DeadCodeElimination::ReportUnusedFunc(const Function& func, const GlobalOptions& opts)
 {
     if (func.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
         return;
@@ -305,7 +292,8 @@ static bool IsExternalDecl(const Value& v)
     }
     // const var/func never have external linkage
     if (!v.TestAttr(Attribute::PRIVATE) && v.TestAttr(Attribute::CONST)) {
-        if (auto gv = DynamicCast<GlobalVar>(&v)) {
+        if (v.IsGlobalVarWithInitializer()) {
+            auto gv = StaticCast<GlobalVar*>(&v);
             return !gv->IsLocalConst();
         }
         return true;
@@ -510,12 +498,12 @@ void DeadCodeElimination::ReportUnusedExpression(Expression& expr)
 
 void DeadCodeElimination::UselessExprElimination(const Package& package, bool isDebug) const
 {
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         UselessExprEliminationForFunc(*func, isDebug);
     }
 }
 
-void DeadCodeElimination::UselessExprEliminationForFunc(const Func& func, bool isDebug) const
+void DeadCodeElimination::UselessExprEliminationForFunc(const Function& func, bool isDebug) const
 {
     std::queue<Expression*> worklist;
     std::unordered_set<Expression*> worklistSet;
@@ -551,7 +539,7 @@ void DeadCodeElimination::UselessExprEliminationForFunc(const Func& func, bool i
 
 void DeadCodeElimination::NothingTypeExprElimination(const Package& package, bool isDebug)
 {
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         bool isCommonFunctionWithoutBody = func->TestAttr(Attribute::SKIP_ANALYSIS);
         if (isCommonFunctionWithoutBody) {
             continue; // Nothing to visit
@@ -679,7 +667,7 @@ void DeadCodeElimination::NothingTypeExprEliminationForFunc(BlockGroup& funcBody
 
 void DeadCodeElimination::UnreachableBlockElimination(const Package& package, bool isDebug) const
 {
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         bool isCommonFunctionWithoutBody = func->TestAttr(Attribute::SKIP_ANALYSIS);
         if (isCommonFunctionWithoutBody) {
             continue; // Nothing to visit
@@ -688,7 +676,7 @@ void DeadCodeElimination::UnreachableBlockElimination(const Package& package, bo
     }
 }
 
-void DeadCodeElimination::UnreachableBlockElimination(const std::vector<const Func*>& funcs, bool isDebug) const
+void DeadCodeElimination::UnreachableBlockElimination(const std::vector<const Function*>& funcs, bool isDebug) const
 {
     for (auto& func : funcs) {
         bool isCommonFunctionWithoutBody = func->TestAttr(Attribute::SKIP_ANALYSIS);
@@ -712,7 +700,7 @@ void DeadCodeElimination::UnreachableBlockWarningReporter(const Package& package
 void DeadCodeElimination::UnreachableBlockWarningReporterInSerial(
     const Package& package, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks)
 {
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         bool isPrinted = false;
         Visitor::Visit(*func, [this, &isPrinted, &maybeUnreachableBlocks](Block& block) {
             auto it = maybeUnreachableBlocks.find(&block);
@@ -731,7 +719,7 @@ void DeadCodeElimination::UnreachableBlockWarningReporterInParallel(const Packag
     size_t threadsNum, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks)
 {
     Utils::TaskQueue taskQueue(threadsNum);
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         bool isCommonFunctionWithoutBody = func->TestAttr(Attribute::SKIP_ANALYSIS);
         if (isCommonFunctionWithoutBody) {
             continue; // Nothing to visit
@@ -884,7 +872,7 @@ void DeadCodeElimination::BreakBranchConnection(const Block& block) const
 
 void DeadCodeElimination::ClearUnreachableMarkBlock(const Package& package) const
 {
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         bool isCommonFunctionWithoutBody = func->TestAttr(Attribute::SKIP_ANALYSIS);
         if (isCommonFunctionWithoutBody) {
             continue; // Nothing to visit
@@ -909,7 +897,7 @@ void DeadCodeElimination::ClearUnreachableMarkBlockForFunc(const BlockGroup& bod
     }
 }
 
-bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions& opts, bool usingReflectPackage)
+bool DeadCodeElimination::CheckUselessFunc(const Function& func, const GlobalOptions& opts, bool usingReflectPackage)
 {
     if (!func.GetUsers().empty()) {
         return false;

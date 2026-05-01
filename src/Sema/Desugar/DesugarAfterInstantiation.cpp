@@ -98,7 +98,126 @@ void ClearLineInfoAfterSema(Package& pkg)
         Walker(decl, clearGenericInst).Walk();
     }
 }
+
+void IterateTyWithArgs(Ptr<Ty> ty, const std::function<void(Ptr<Ty>)>& func)
+{
+    if (!Ty::IsTyCorrect(ty)) {
+        return;
+    }
+    func(ty);
+    for (auto& tyArg : ty->typeArgs) {
+        IterateTyWithArgs(tyArg, func);
+    }
+}
 } // namespace
+
+VisitAction TypeChecker::TypeCheckerImpl::MarkUsedDecl(Ptr<Decl> decl, unsigned walkerId)
+{
+    // Used generic instantiated declarations and it's original generic declaration should be marked as used.
+    if (decl->TestAttr(Attribute::GENERIC_INSTANTIATED) && decl->genericDecl &&
+        decl->genericDecl->TestAttr(Attribute::IMPORTED)) {
+        MarkUsedNode(decl->genericDecl, walkerId);
+    }
+    // Imported declarations should be marked as used.
+    if (!decl->TestAttr(Attribute::IMPORTED)) {
+        return VisitAction::WALK_CHILDREN;
+    }
+    // Already marked declarations should be skipped to avoid infinite loop.
+    if (decl->isUsedImports) {
+        return VisitAction::SKIP_CHILDREN;
+    }
+    decl->isUsedImports = true;
+    // Property declarations of function declarations should be marked as used.
+    if (auto fd = DynamicCast<FuncDecl>(decl); fd && fd->propDecl) {
+        fd->propDecl->isUsedImports = true;
+    }
+    // If a member is used, then it's enclosing type should be marked as used.
+    if (decl->outerDecl) {
+        MarkUsedNode(decl->outerDecl, walkerId);
+    }
+    if (!decl->IsNominalDecl()) {
+        return VisitAction::WALK_CHILDREN;
+    }
+    // Extends of nominal types should be marked as used.
+    auto extends = typeManager.GetAllExtendsByTy(*decl->ty);
+    for (auto extend : extends) {
+        if (extend == decl || !extend->TestAttr(Attribute::IMPORTED)) {
+            continue;
+        }
+        MarkUsedNode(extend, walkerId);
+    }
+    return VisitAction::WALK_CHILDREN;
+}
+
+void TypeChecker::TypeCheckerImpl::MarkUsedNode(Ptr<Node> node, unsigned walkerId)
+{
+    std::function<VisitAction(Ptr<Node>)> collectUsed = [this, &walkerId, &collectUsed](Ptr<Node> node) -> VisitAction {
+        auto procTy = [&walkerId, &collectUsed](Ptr<Ty> ty) {
+            if (auto decl = Ty::GetDeclOfTy(ty)) {
+                Walker(decl, walkerId, collectUsed).Walk();
+            }
+        };
+        IterateTyWithArgs(node->ty, procTy);
+        if (auto type = DynamicCast<Type>(node); type && !Ty::IsInitialTy(type->aliasTy)) {
+            IterateTyWithArgs(type->aliasTy, procTy);
+        } else if (auto decl = DynamicCast<Decl>(node)) {
+            return MarkUsedDecl(decl, walkerId);
+        } else if (auto ae = DynamicCast<ArrayExpr>(node); ae && ae->initFunc) {
+            Walker(ae->initFunc, walkerId, collectUsed).Walk();
+        }
+        Ptr<Decl> target = node->GetTarget();
+        if (auto ce = DynamicCast<CallExpr>(node); ce && ce->resolvedFunction) {
+            target = ce->resolvedFunction;
+        }
+        if (!target) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        Walker(target, walkerId, collectUsed).Walk();
+        return VisitAction::WALK_CHILDREN;
+    };
+    Walker(node, walkerId, collectUsed).Walk();
+}
+/*
+ * Mark used declarations of imported package.
+ * 1. Uesd global variables.
+ * 2. Uesd global functions.
+ * 3. Uesd custom type and all members.
+ * 4. Uesd custom type's extends and all members.
+ * 5. Built-in type's extends and all members.
+ * 6. Uesd type alias decl and it's target.
+ *
+ * All imported declarations without 'Attribute::USED_IMPORTS' will be ignored on mangling and chir.
+ */
+void TypeChecker::TypeCheckerImpl::MarkUsedPackageInFile(Ptr<Package> pkg)
+{
+    const std::unordered_set<std::string_view> implicitUsedDecls = {"CJ_CORE_ExecAtexitCallbacks", "getCommandLineArgs",
+        "eprintln", "handleException", "NegativeArraySizeException", "createOverflowExceptionMsg",
+        "createArithmeticExceptionMsg", "SpawnException"};
+    unsigned walkerId = Walker::GetNextWalkerID();
+    // Step 1: Mark implicit used declarations.
+    for (auto implicitUsedDecl : implicitUsedDecls) {
+        auto decl = importManager.GetCoreDecl(std::string(implicitUsedDecl));
+        MarkUsedNode(decl, walkerId);
+    }
+    // Step 2: Mark used extend of builtin types.
+    for (auto& [_, builtinExtends] : typeManager.builtinTyToExtendMap) {
+        for (auto& extend : builtinExtends) {
+            MarkUsedNode(extend, walkerId);
+        }
+    }
+    // Step 3: Mark used declarations in files.
+    for (auto& file : pkg->files) {
+        MarkUsedNode(file.get(), walkerId);
+    }
+    // Step 4: Mark used declarations of generic instantiated declarations and it's dependencies.
+    for (auto& instDecl : pkg->genericInstantiatedDecls) {
+        MarkUsedNode(instDecl.get(), walkerId);
+    }
+    // Delete unused imported declarations.
+    auto isUnusedDecls = [](Ptr<Decl> decl) { return !decl->isUsedImports; };
+    Utils::EraseIf(pkg->srcImportedNonGenericDecls, isUnusedDecls);
+    Utils::EraseIf(pkg->inlineFuncDecls, isUnusedDecls);
+}
 
 void TypeChecker::TypeCheckerImpl::PerformDesugarAfterInstantiation([[maybe_unused]] ASTContext& ctx, Package& pkg)
 {
@@ -115,6 +234,8 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterInstantiation([[maybe_unus
     if (ci->invocation.globalOptions.enableCoverage) {
         ClearLineInfoAfterSema(pkg);
     }
+    Utils::ProfileRecorder markUnusedRecord("PerformDesugarAfterInstantiation", "MarkUsedPackageInFile");
+    MarkUsedPackageInFile(&pkg);
 }
 
 bool AutoBoxing::NeedBoxOption(Ty& child, Ty& target)

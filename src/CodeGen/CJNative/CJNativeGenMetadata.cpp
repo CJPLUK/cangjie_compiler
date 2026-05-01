@@ -81,7 +81,7 @@ llvm::MDTuple* MetadataInfo::GenerateParametersMetadata(
     for (auto arg : argsInfo) {
         auto argId = arg->GetSrcCodeIdentifier();
         // If this is non-static member function, the first parameter is "this" added by the compiler.
-        // And we don't generate metadata for "this" since it is known by runtime.
+        // And we don't generate metadata for "this" since it is unknown by runtime.
         if (arg == argsInfo.front() && hasThis) {
             continue;
         }
@@ -89,28 +89,7 @@ llvm::MDTuple* MetadataInfo::GenerateParametersMetadata(
         res.AddSubItem(MetadataVector(llvmCtx)
                            .Concat(argId)
                            .Concat(GetTiName(*arg->GetType()))
-                           .Concat(GenerateAttrsMetadata(CHIR::AttributeInfo(), {}, arg->GetAnnoInfo().mangledName)));
-    }
-    return res.CreateMDTuple();
-}
-
-llvm::MDTuple* MetadataInfo::GenerateParametersMetadata(
-    const std::vector<CHIR::AbstractMethodParam>& paramInfos, bool hasThis) const
-{
-    llvm::LLVMContext& llvmCtx = module.GetLLVMContext();
-    MetadataVector res(llvmCtx);
-    for (auto& param : paramInfos) {
-        auto paramId = param.paramName;
-        // If this is non-static member function, the first parameter is "this" added by the compiler.
-        // And we don't generate metadata for "this" since it is known by runtime.
-        if (&param == &paramInfos.front() && hasThis) {
-            continue;
-        }
-        // {!param name, !type name, !attributes}
-        res.AddSubItem(MetadataVector(llvmCtx)
-                           .Concat(paramId)
-                           .Concat(GetTiName(*param.type))
-                           .Concat(GenerateAttrsMetadata(CHIR::AttributeInfo(), {}, param.annoInfo.mangledName)));
+                           .Concat(GenerateAttrsMetadata(CHIR::AttributeInfo(), {}, arg->GetAnnoInfo())));
     }
     return res.CreateMDTuple();
 }
@@ -127,7 +106,7 @@ llvm::MDTuple* MetadataInfo::GenerateParametersMetadata(const std::vector<CHIR::
 }
 
 llvm::MDTuple* MetadataInfo::GenerateAttrsMetadata(const CHIR::AttributeInfo& attrs, ExtraAttribute extraAttr,
-    const std::string& gettingAnnotationMethod, uint8_t hasSRetMode, const std::string& enumKind,
+    const CHIR::AnnoInfo& annoInfo, uint8_t hasSRetMode, const std::string& enumKind,
     bool isUnknownSize) const
 {
     static const std::map<CHIR::Attribute, std::string> TEST_ATTRS{
@@ -188,9 +167,10 @@ llvm::MDTuple* MetadataInfo::GenerateAttrsMetadata(const CHIR::AttributeInfo& at
         (void)ops.Concat(str);
     }
 
-    (void)ops.Concat(gettingAnnotationMethod);
-    if (gettingAnnotationMethod != "none") {
-        auto chirFunc = module.GetCGContext().GetCGPkgContext().FindCHIRGlobalValue(gettingAnnotationMethod);
+    auto annoFactoryFuncName = annoInfo.GetAnnoFactoryFuncMangledName();
+    (void)ops.Concat(annoFactoryFuncName);
+    if (annoInfo.IsAvailable()) {
+        auto chirFunc = module.GetCGContext().GetCGPkgContext().FindCHIRGlobalValue(annoFactoryFuncName);
         (void)module.GetOrInsertCGFunction(chirFunc);
     }
 
@@ -235,11 +215,11 @@ llvm::MDTuple* MetadataInfo::GenerateInstanceFieldMetadata(const CHIR::MemberVar
         .Concat(GenerateAttrsMetadata(field.attributeInfo,
             field.TestAttr(CHIR::Attribute::READONLY) ? ExtraAttribute::IMMUTABLE_FIELD
                                                        : ExtraAttribute::MUTABLE_FIELD,
-            field.annoInfo.mangledName))
+            field.annoInfo))
         .CreateMDTuple();
 }
 
-llvm::MDTuple* MetadataInfo::GenerateStaticFieldMetadata(const CHIR::GlobalVarBase& staticField)
+llvm::MDTuple* MetadataInfo::GenerateStaticFieldMetadata(const CHIR::GlobalVar& staticField)
 {
     llvm::LLVMContext& llvmCtx = module.GetLLVMContext();
     return MetadataVector(llvmCtx)
@@ -249,11 +229,11 @@ llvm::MDTuple* MetadataInfo::GenerateStaticFieldMetadata(const CHIR::GlobalVarBa
         .Concat(GenerateAttrsMetadata(staticField.GetAttributeInfo(),
             staticField.TestAttr(CHIR::Attribute::READONLY) ? ExtraAttribute::IMMUTABLE_FIELD
                                                              : ExtraAttribute::MUTABLE_FIELD,
-            staticField.GetAnnoInfo().mangledName))
+            staticField.GetAnnoInfo()))
         .CreateMDTuple();
 }
 
-llvm::MDTuple* MetadataInfo::GenerateMethodMetadata(const CHIR::FuncBase& method, bool isFromInterface)
+llvm::MDTuple* MetadataInfo::GenerateMethodMetadata(const CHIR::Function& method, bool isFromInterface)
 {
     llvm::LLVMContext& llvmCtx = module.GetLLVMContext();
     CJC_ASSERT(method.GetType()->IsFunc());
@@ -264,32 +244,15 @@ llvm::MDTuple* MetadataInfo::GenerateMethodMetadata(const CHIR::FuncBase& method
     MetadataVector methodMD(llvmCtx);
     methodMD.Concat(methodName).Concat(retTypeInfo).Concat(methodLinkageName);
     auto extraAttr = isFromInterface ? ExtraAttribute::METHOD_FROM_INTERFACE : ExtraAttribute::METHOD;
-    if (method.IsFuncWithBody()) {
-        auto methodValue = StaticCast<CHIR::Func*>(&method);
-        CJC_NULLPTR_CHECK(methodValue);
-        uint8_t hasSRetMode = GetSRetMode(*funcType->GetReturnType(), *module.GetOrInsertCGFunction(methodValue));
-        methodMD
-            .Concat(method.TestAttr(CHIR::Attribute::STATIC)
-                    ? GenerateParametersMetadata(methodValue->GetParams())
-                    : GenerateParametersMetadata(methodValue->GetParams(), true))
-            .Concat(GenerateParametersMetadata(methodValue->GetGenericTypeParams()))
-            .Concat(GenerateAttrsMetadata(
-                method.GetAttributeInfo(), extraAttr, methodValue->GetAnnoInfo().mangledName, hasSRetMode));
-        (void)module.GetOrInsertCGFunction(methodValue);
-    } else {
-        auto importedMethodValue = StaticCast<CHIR::ImportedFunc*>(&method);
-        CJC_NULLPTR_CHECK(importedMethodValue);
-        uint8_t hasSRetMode =
-            GetSRetMode(*funcType->GetReturnType(), *module.GetOrInsertCGFunction(importedMethodValue));
-        methodMD
-            .Concat(method.TestAttr(CHIR::Attribute::STATIC)
-                    ? GenerateParametersMetadata(importedMethodValue->GetParamInfo())
-                    : GenerateParametersMetadata(importedMethodValue->GetParamInfo(), true))
-            .Concat(GenerateParametersMetadata(importedMethodValue->GetGenericTypeParams()))
-            .Concat(GenerateAttrsMetadata(
-                method.GetAttributeInfo(), extraAttr, importedMethodValue->GetAnnoInfo().mangledName, hasSRetMode));
-        (void)module.GetOrInsertCGFunction(importedMethodValue);
-    }
+    uint8_t hasSRetMode = GetSRetMode(*funcType->GetReturnType(), *module.GetOrInsertCGFunction(&method));
+    methodMD
+        .Concat(method.TestAttr(CHIR::Attribute::STATIC)
+                ? GenerateParametersMetadata(method.GetParams())
+                : GenerateParametersMetadata(method.GetParams(), true))
+        .Concat(GenerateParametersMetadata(method.GetGenericTypeParams()))
+        .Concat(GenerateAttrsMetadata(
+            method.GetAttributeInfo(), extraAttr, method.GetAnnoInfo(), hasSRetMode));
+    (void)module.GetOrInsertCGFunction(&method);
     return methodMD.CreateMDTuple();
 }
 
@@ -394,7 +357,7 @@ void StructMetadataInfo::GenerateStructMetadata(const CHIR::StructDef& sd, std::
     MetadataTypeItem item(llvm::MDString::get(llvmCtx, tiOrTTName), llvm::MDString::get(llvmCtx, declaredGenericTi),
         GenerateStructFieldMetadata(sd), GenerateStructStaticFieldMetadata(sd), llvm::MDTuple::get(llvmCtx, methodsVec),
         llvm::MDTuple::get(llvmCtx, staticMethodsVec),
-        GenerateAttrsMetadata(sd.GetAttributeInfo(), ExtraAttribute::STRUCT, sd.GetAnnoInfo().mangledName,
+        GenerateAttrsMetadata(sd.GetAttributeInfo(), ExtraAttribute::STRUCT, sd.GetAnnoInfo(),
             SRetMode::NO_SRET, "", isUnknownSize));
 
     auto mdTuple = item.CreateMDTuple(llvmCtx);
@@ -503,19 +466,13 @@ void ClassMetadataInfo::GenerateClassLikeMethodMetadata(
         if (method->TestAttr(CHIR::Attribute::NO_REFLECT_INFO)) {
             continue;
         }
-        auto methodMD = GenerateMethodMetadata(*method, cd.IsInterface());
-        if (method->TestAttr(CHIR::Attribute::STATIC)) {
-            staticMethodsVec.push_back(methodMD);
+        llvm::MDNode* methodMD = nullptr;
+        if (method->IsPureAbstract()) {
+            methodMD = GenerateClassAbsMethodMetadata(*method);
         } else {
-            methodsVec.push_back(methodMD);
+            methodMD = GenerateMethodMetadata(*method, cd.IsInterface());
         }
-    }
-    for (auto& absMethod : cd.GetAbstractMethods()) {
-        if (absMethod.TestAttr(CHIR::Attribute::NO_REFLECT_INFO) || absMethod.hasBody) {
-            continue;
-        }
-        auto methodMD = GenerateClassAbsMethodMetadata(absMethod);
-        if (absMethod.TestAttr(CHIR::Attribute::STATIC)) {
+        if (method->TestAttr(CHIR::Attribute::STATIC)) {
             staticMethodsVec.push_back(methodMD);
         } else {
             methodsVec.push_back(methodMD);
@@ -523,35 +480,28 @@ void ClassMetadataInfo::GenerateClassLikeMethodMetadata(
     }
 }
 
-llvm::MDNode* ClassMetadataInfo::GenerateClassAbsMethodMetadata(const CHIR::AbstractMethodInfo& absMethod)
+llvm::MDNode* ClassMetadataInfo::GenerateClassAbsMethodMetadata(const CHIR::Function& absMethod)
 {
     auto& llvmCtx = module.GetLLVMContext();
-    auto methodType = absMethod.methodTy;
-    CJC_ASSERT(methodType->IsFunc());
-    auto funcTy = StaticCast<CHIR::FuncType*>(methodType);
+    auto funcTy = absMethod.GetFuncType();
     // Since the metadata corresponding to the type is collected in the process
     // of `GetCodeGenType`, and the abstract method does not need to generate
     // the corresponding ir, naturally, `GetCodeGenType` won't be invoked for the
     // formal parameter. To collect the metadata corresponding to the parameter
     // type, we need to explicitly call `GetCodeGenType`.
-    // Handle params.
-    std::vector<CHIR::AbstractMethodParam> params = absMethod.paramInfos;
-    if (!absMethod.TestAttr(CHIR::Attribute::STATIC) && !params.empty()) {
-        // The first parameter name of a non-static function should be `this`.
-        params[0].paramName = "this";
-    }
-    auto attr = absMethod.attributeInfo;
+    auto attr = absMethod.GetAttributeInfo();
     if (!absMethod.TestAttr(CHIR::Attribute::STATIC)) {
         attr.SetAttr(CHIR::Attribute::VIRTUAL, true);
     }
     auto retTypeInfo = GetTiName(*funcTy->GetReturnType());
     auto mdTuple = MetadataVector(llvmCtx)
-                       .Concat(absMethod.methodName)
+                       .Concat(absMethod.GetSrcCodeIdentifier())
                        .Concat(retTypeInfo)
                        .Concat("")
-                       .Concat(GenerateParametersMetadata(params, !absMethod.TestAttr(CHIR::Attribute::STATIC)))
-                       .Concat(GenerateParametersMetadata(absMethod.methodGenericTypeParams))
-                       .Concat(GenerateAttrsMetadata(attr, ExtraAttribute::METHOD, absMethod.annoInfo.mangledName))
+                       .Concat(GenerateParametersMetadata(
+                            absMethod.GetParams(), !absMethod.TestAttr(CHIR::Attribute::STATIC)))
+                       .Concat(GenerateParametersMetadata(absMethod.GetGenericTypeParams()))
+                       .Concat(GenerateAttrsMetadata(attr, ExtraAttribute::METHOD, absMethod.GetAnnoInfo()))
                        .CreateMDTuple();
     return mdTuple;
 }
@@ -594,7 +544,7 @@ llvm::MDTuple* ClassMetadataInfo::GenerateClassLikeTypeAttrsMetadata(const CHIR:
     if (IsClassForBoxType(cd.GetSrcCodeIdentifier())) {
         metadataType = ExtraAttribute::BOX_CLASS;
     }
-    return GenerateAttrsMetadata(cd.GetAttributeInfo(), metadataType, cd.GetAnnoInfo().mangledName);
+    return GenerateAttrsMetadata(cd.GetAttributeInfo(), metadataType, cd.GetAnnoInfo());
 }
 
 void EnumMetadataInfo::GenerateAllEnumsMetadata()
@@ -629,7 +579,7 @@ void EnumMetadataInfo::GenerateEnumMetadata(const CHIR::EnumDef& ed)
                            .Concat(tiOrTTName)
                            .Concat(GenerateEnumConstructorMetadata(ed))
                            .Concat(GenerateAttrsMetadata(ed.GetAttributeInfo(), ExtraAttribute::ENUM,
-                               ed.GetAnnoInfo().mangledName, SRetMode::NO_SRET, GetEnumKindName(module, ed)))
+                               ed.GetAnnoInfo(), SRetMode::NO_SRET, GetEnumKindName(module, ed)))
                            .CreateMDTuple();
         typesMD->addOperand(mdTuple);
         reflectTIOrTT->addMetadata("Reflection", *mdTuple);
@@ -644,7 +594,7 @@ void EnumMetadataInfo::GenerateEnumMetadata(const CHIR::EnumDef& ed)
     MetadataTypeItem item(llvm::MDString::get(llvmCtx, tiOrTTName), llvm::MDString::get(llvmCtx, declaredGenericTi),
         GenerateEnumConstructorMetadata(ed), llvm::MDTuple::get(llvmCtx, {}), llvm::MDTuple::get(llvmCtx, methodsVec),
         llvm::MDTuple::get(llvmCtx, staticMethodsVec),
-        GenerateAttrsMetadata(ed.GetAttributeInfo(), ExtraAttribute::ENUM, ed.GetAnnoInfo().mangledName,
+        GenerateAttrsMetadata(ed.GetAttributeInfo(), ExtraAttribute::ENUM, ed.GetAnnoInfo(),
             SRetMode::NO_SRET, GetEnumKindName(module, ed)));
     auto mdTuple = item.CreateMDTuple(llvmCtx, true);
     typesMD->addOperand(mdTuple);
@@ -687,7 +637,6 @@ std::string EnumMetadataInfo::GenerateCtorFn(
         irBuilder.SetInsertPoint(entryBB);
         llvm::Value* ti{nullptr};
         auto ctorInfo = enumDef.GetCtor(index);
-        std::string mangledName = ctorInfo.annoInfo.mangledName;
         auto chirEnumType = StaticCast<CHIR::EnumType*>(enumDef.GetType());
         if (CGType::GetOrCreate(module, chirEnumType)->IsDynamicGI()) {
             auto tt = module.GetOrCreateEnumCtorTIOrTT(*chirEnumType, index);
@@ -747,7 +696,7 @@ void GFMetadataInfo::GenerateAllFunctionsMetadata()
                     .Concat(GenerateParametersMetadata(gf->GetParams()))
                     .Concat(GenerateParametersMetadata(gf->GetGenericTypeParams()))
                     .Concat(GenerateAttrsMetadata(gf->GetAttributeInfo(), ExtraAttribute::METHOD,
-                        gf->GetAnnoInfo().mangledName, hasSRetMode))
+                        gf->GetAnnoInfo(), hasSRetMode))
                     .CreateMDTuple();
             functionsMdNode->addOperand(funcMD);
             func->addMetadata("ReflectionFunc", *funcMD);
@@ -800,6 +749,6 @@ llvm::MDNode* GVMetadataInfo::GenerateVariableMetadata(const CHIR::GlobalVar& va
         .Concat(GenerateAttrsMetadata(variable.GetAttributeInfo(),
             variable.TestAttr(CHIR::Attribute::READONLY) ? ExtraAttribute::IMMUTABLE_FIELD
                                                           : ExtraAttribute::MUTABLE_FIELD,
-            variable.GetAnnoInfo().mangledName))
+            variable.GetAnnoInfo()))
         .CreateMDTuple();
 }

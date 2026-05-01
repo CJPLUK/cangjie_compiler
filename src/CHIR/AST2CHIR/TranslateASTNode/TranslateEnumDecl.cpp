@@ -114,8 +114,5 @@ Ptr<Value> Translator::Visit(const AST::EnumDecl& decl)
         auto realType = StaticCast<ClassType*>(StaticCast<RefType*>(astType)->GetBaseType());
         enumDef->AddImplementedInterfaceTy(*realType);
     }
-
-    // step 6: collect annotation info of the type and members for annotation target check
-    CollectTypeAnnotation(decl, *def);
     return nullptr;
 }

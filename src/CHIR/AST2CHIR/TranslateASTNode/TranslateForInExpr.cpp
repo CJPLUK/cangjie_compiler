@@ -212,7 +212,7 @@ Ptr<Value> Translator::GetOuterMostExpr()
             (currentBlock->GetTopLevelFunc() && bg == currentBlock->GetTopLevelFunc()->GetBody())) {
             return finalValidExpr != nullptr ? finalValidExpr : nullptr;
         }
-        if (ownedExpr && (Is<ForIn>(ownedExpr) || ownedExpr->GetExprKind() == ExprKind::IF)) {
+        if (ownedExpr && Is<ForIn>(ownedExpr)) {
             finalValidExpr = ownedExpr->GetResult();
         }
     }
@@ -278,7 +278,7 @@ ForIn* Translator::InitForInExprSkeleton(const AST::ForInExpr& forInExpr, Ptr<Va
 {
     auto forInloc = TranslateLocation(forInExpr);
     auto forInType = TranslateType(*forInExpr.ty);
-    Func* parentFunc = currentBlock->GetTopLevelFunc();
+    Function* parentFunc = currentBlock->GetTopLevelFunc();
     CJC_NULLPTR_CHECK(parentFunc);
     BlockGroup* bodyBlockGrp = builder.CreateBlockGroup(*parentFunc);
     BlockGroup* latchBlockGrp = builder.CreateBlockGroup(*parentFunc);
@@ -1036,7 +1036,7 @@ protected:
 
     ForinBGs CreateRetAndBGs()
     {
-        Func* parentFunc = tr.currentBlock->GetTopLevelFunc();
+        Function* parentFunc = tr.currentBlock->GetTopLevelFunc();
         CJC_NULLPTR_CHECK(parentFunc);
         BlockGroup* bodyBlockGrp = tr.builder.CreateBlockGroup(*parentFunc);
         BlockGroup* condBlockGrp = tr.builder.CreateBlockGroup(*parentFunc);

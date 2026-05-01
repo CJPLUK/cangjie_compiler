@@ -237,7 +237,7 @@ void EnumCtorTIOrTTGenerator::GenerateNonGenericEnumCtorTypeInfo(llvm::GlobalVar
     auto meta = llvm::MDTuple::get(llvmCtx, {llvm::MDString::get(llvmCtx, layoutType->getStructName().str())});
     ti.setMetadata(GC_TYPE_META_NAME, meta);
     if (!cgCtx.GetCompileOptions().disableReflection) {
-        std::string mangledName = ctors[ctorIndex].annoInfo.mangledName;
+        std::string mangledName = ctors[ctorIndex].annoInfo.GetAnnoFactoryFuncMangledName();
         auto innerNode = llvm::MDTuple::get(
             llvmCtx, {llvm::MDString::get(llvmCtx, "enumCtor"), llvm::MDString::get(llvmCtx, mangledName)});
         auto outerNode = llvm::MDTuple::get(llvmCtx, {innerNode});
@@ -327,7 +327,7 @@ void EnumCtorTIOrTTGenerator::GenerateGenericEnumCtorTypeTemplate(llvm::GlobalVa
         llvm::ConstantPointerNull::get(CGType::GetOrCreateExtensionDefPtrType(llvmCtx)->getPointerTo());
     typeTemplateVec[static_cast<size_t>(TYPETEMPLATE_INHERITED_CLASS_NUM)] = llvm::ConstantInt::get(i16Ty, 0U);
     if (!cgCtx.GetCompileOptions().disableReflection) {
-        std::string mangledName = ctors[ctorIndex].annoInfo.mangledName;
+        std::string mangledName = ctors[ctorIndex].annoInfo.GetAnnoFactoryFuncMangledName();
         auto innerNode = llvm::MDTuple::get(llvmCtx,
             {llvm::MDString::get(llvmCtx, "enumCtor"),llvm::MDString::get(llvmCtx, mangledName)});
         auto outerNode = llvm::MDTuple::get(llvmCtx, {innerNode});

@@ -20,9 +20,6 @@ int64_t Translator::CalculateDelayExitLevelForBreak()
             ++level;
             break;
         }
-        if (expr && expr->GetExprKind() == ExprKind::IF) {
-            ++level;
-        }
     }
     return level;
 }

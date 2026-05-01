@@ -14,6 +14,7 @@
 #define CANGJIE_BASIC_DIAGNOSTICENGINE_H
 
 #include <list>
+#include <vector>
 
 #include "cangjie/AST/Node.h"
 #include "cangjie/Basic/Position.h"
@@ -77,17 +78,11 @@ enum class DiagKind {
 #undef NOTE
 };
 
-constexpr const char* const DIAG_KIND_STR[]{
-#define NOTE(Kind, Info) #Kind,
-#define ERROR(Kind, Info) #Kind,
-#define WARNING(Kind, Group, Info) #Kind,
-#include "cangjie/Basic/DiagnosticsAll.def"
-#undef ERROR
-#undef WARNING
-#undef NOTE
-};
+// Diagnostic kind strings, defined in DiagnosticEngine.cpp.
+extern const std::vector<std::string_view> DIAG_KIND_STR;
 
-constexpr size_t DIAG_KIND_STR_SIZE = sizeof(DIAG_KIND_STR) / sizeof(*DIAG_KIND_STR);
+// Diagnostic kind strings size, defined in DiagnosticEngine.cpp.
+extern const size_t DIAG_KIND_STR_SIZE;
 
 enum class DiagSeverity : uint8_t { DS_ERROR, DS_WARNING, DS_NOTE, DS_HINT };
 
@@ -104,35 +99,14 @@ enum class DiagCategory : uint8_t {
     OTHER
 };
 
-constexpr const DiagSeverity DiagSeveritys[]{
-#define ERROR(Kind, Info) DiagSeverity::DS_ERROR,
-#define NOTE(Kind, Info) DiagSeverity::DS_NOTE,
-#define WARNING(Kind, Group, Info) DiagSeverity::DS_WARNING,
-#include "cangjie/Basic/DiagnosticsAll.def"
-#undef ERROR
-#undef WARNING
-#undef NOTE
-};
+// Diagnostic severitys, defined in DiagnosticEngine.cpp.
+extern const std::vector<DiagSeverity> DiagSeveritys;
 
-constexpr const char* const DiagMessages[] = {
-#define ERROR(Kind, Info) Info,
-#define WARNING(Kind, Group, Info) Info,
-#define NOTE(Kind, Info) Info,
-#include "cangjie/Basic/DiagnosticsAll.def"
-#undef ERROR
-#undef WARNING
-#undef NOTE
-};
+// Diagnostic messages, defined in DiagnosticEngine.cpp.
+extern const std::vector<std::string_view> DiagMessages;
 
-constexpr const WarnGroup warnGroups[] = {
-#define ERROR(Kind, ...) WarnGroup::NONE,
-#define WARNING(Kind, Group, ...) WarnGroup::Group,
-#define NOTE(Kind, Info) WarnGroup::NONE,
-#include "cangjie/Basic/DiagnosticsAll.def"
-#undef WARNING
-#undef ERROR
-#undef NOTE
-};
+// Diagnostic warnGroups, defined in DiagnosticEngine.cpp.
+extern const std::vector<WarnGroup> warnGroups;
 
 /**
  * This is class to keep diagnostic data for single error.
@@ -161,13 +135,7 @@ struct ErrorData {
 /**
  *  This is new diagKind for refactoring, will replace previous DiagKind if all diag have been modified.
  */
-const ErrorData errorData[] = {
-#define ERROR(Kind, ...) {__VA_ARGS__},
-#define WARNING(Kind, Group, ...) {__VA_ARGS__},
-#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
-#undef WARNING
-#undef ERROR
-};
+extern const std::vector<ErrorData> errorData;
 
 const std::map<DiagSeverity, DiagColor> SEVE_TO_COLOR{
     {DiagSeverity::DS_ERROR, DiagColor::RED}, {DiagSeverity::DS_WARNING, DiagColor::YELLOW},
@@ -177,28 +145,13 @@ const DiagKind DEFAULT_KIND = DiagKind::sema_diag_begin;
 /**
  *  This is new diagKind for refactoring, will replace previous DiagKind if all diag have been modified.
  */
-constexpr const DiagSeverity rDiagSeveritys[] = {
-#define ERROR(Kind, ...) DiagSeverity::DS_ERROR,
-#define WARNING(Kind, ...) DiagSeverity::DS_WARNING,
-#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
-#undef WARNING
-#undef ERROR
-};
+extern const std::vector<DiagSeverity> rDiagSeveritys;
 
-constexpr const WarnGroup rWarnGroups[] = {
-#define ERROR(Kind, ...) WarnGroup::NONE,
-#define WARNING(Kind, Group, ...) WarnGroup::Group,
-#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
-#undef WARNING
-#undef ERROR
-};
+extern const std::vector<WarnGroup> rWarnGroups;
 
-constexpr const char* warnGroupDescrs[] = {
-#define WARN_GROUP(DESCR, KIND) DESCR,
-#include "cangjie/Basic/DiagRefactor/DiagnosticWarnGroupKind.def"
-#undef WARN_GROUP
-};
-constexpr size_t WARN_GROUP_DESCRS_SIZE = sizeof(warnGroupDescrs) / sizeof(*warnGroupDescrs);
+extern const std::vector<std::string_view> warnGroupDescrs;
+
+extern const size_t WARN_GROUP_DESCRS_SIZE;
 
 /**
  *  This is new diagKind for refactoring, will replace previous DiagKind if all diag have been modified.
@@ -211,15 +164,12 @@ enum class DiagKindRefactor : unsigned {
 #undef ERROR
 };
 
-constexpr const char* const RE_DIAG_KIND_STR[]{
-#define ERROR(Kind, ...) #Kind,
-#define WARNING(Kind, ...) #Kind,
-#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
-#undef WARNING
-#undef ERROR
-};
+// Diagnostic kind strings, defined in DiagnosticEngine.cpp.
+extern const std::vector<std::string_view> RE_DIAG_KIND_STR;
 
-constexpr size_t RE_DIAG_KIND_STR_SIZE = sizeof(RE_DIAG_KIND_STR) / sizeof(*RE_DIAG_KIND_STR);
+// Diagnostic kind strings size, defined in DiagnosticEngine.cpp.
+extern const size_t RE_DIAG_KIND_STR_SIZE;
+
 struct Range {
     Position begin;
     Position end;
@@ -370,7 +320,7 @@ public:
     Diagnostic(const Position s, const Position e, const DiagKind kind, const Args... args) : start(s), end(e),
         kind(kind), args{args...}
     {
-        diagSeverity = DiagSeveritys[static_cast<int>(kind)];
+        diagSeverity = DiagSeveritys[static_cast<size_t>(kind)];
         diagCategory = GetDiagnoseCategory(kind);
         warnGroup = warnGroups[static_cast<unsigned>(kind)];
         // Refactor kind is set by default.
@@ -400,7 +350,7 @@ public:
 
     Diagnostic()
     {
-        diagSeverity = DiagSeveritys[static_cast<int>(kind)];
+        diagSeverity = DiagSeveritys[static_cast<size_t>(kind)];
         diagCategory = GetDiagnoseCategory(kind);
         warnGroup = warnGroups[static_cast<unsigned>(kind)];
     };

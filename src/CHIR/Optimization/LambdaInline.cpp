@@ -7,19 +7,34 @@
 #include "cangjie/CHIR/Optimization/LambdaInline.h"
 
 namespace Cangjie::CHIR {
-
-namespace {
-std::vector<Expression*> GetNonDebugUsers(const Value& val)
+bool LambdaIsUnused(const Lambda& lambda)
 {
-    std::vector<Expression*> res;
-    for (auto expr: val.GetUsers()) {
-        if (expr->GetExprKind() != CHIR::ExprKind::DEBUGEXPR) {
-            res.emplace_back(expr);
+    auto users = lambda.GetResult()->GetUsers();
+    bool isUnused = true;
+    auto isInLambdaBody = [&lambda](const Expression& expr) {
+        auto group = expr.GetParentBlockGroup();
+        while (true) {
+            if (group == lambda.GetBody()) {
+                return true;
+            }
+            if (auto owner = group->GetOwnerExpression()) {
+                group = owner->GetParentBlockGroup();
+            } else {
+                // meet a func body, quit
+                break;
+            }
         }
+        return false;
+    };
+    for (auto user : users) {
+        if (user->GetExprKind() == ExprKind::DEBUGEXPR || isInLambdaBody(*user)) {
+            continue;
+        }
+        isUnused = false;
+        break;
     }
-    return res;
+    return isUnused;
 }
-}  // namespace
 
 bool CheckLambdaUsingForMultiThread(const Lambda& lambda)
 {
@@ -88,7 +103,7 @@ bool LambdaInline::IsLambdaPassToEasyFunc(const Lambda& lambda) const
         return false;
     }
     // 2. judge lambda is only used in one callee apply.
-    auto func = VirtualCast<Func*>(apply->GetCallee());
+    auto func = StaticCast<Function*>(apply->GetCallee());
     CJC_ASSERT(index < func->GetParams().size());
     auto lambdaArg = func->GetParams()[index];
     auto lambdaArgUsers = GetNonDebugUsers(*lambdaArg);
@@ -106,7 +121,7 @@ bool LambdaInline::IsLambdaPassToEasyFunc(const Lambda& lambda) const
 void LambdaInline::RunOnLambda(Lambda& lambda)
 {
     auto users = lambda.GetResult()->GetUsers();
-    if (GetNonDebugUsers(*lambda.GetResult()).empty() && !opts.enableCompileDebug) {
+    if (LambdaIsUnused(lambda) && !opts.enableCompileDebug) {
         for (auto user : users) {
             user->RemoveSelfFromBlock();
         }

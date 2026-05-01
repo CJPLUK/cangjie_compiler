@@ -384,7 +384,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
 Value* Translator::GetWrapperFuncFromMemberAccess(Type& thisType, const std::string funcName,
     FuncType& instFuncType, bool isStatic, std::vector<Type*>& funcInstTypeArgs)
 {
-    FuncBase* result = nullptr;
+    Function* result = nullptr;
     if (auto genericType = DynamicCast<GenericType*>(&thisType)) {
         auto& upperBounds = genericType->GetUpperBounds();
         CJC_ASSERT(!upperBounds.empty());
@@ -393,7 +393,7 @@ Value* Translator::GetWrapperFuncFromMemberAccess(Type& thisType, const std::str
             return GetWrapperFuncFromMemberAccess(*upperClassType, funcName, instFuncType, isStatic, funcInstTypeArgs);
         }
     } else if (auto customTy = DynamicCast<CustomType*>(&thisType)) {
-        result = customTy->GetExpectedFunc(funcName, instFuncType, true, funcInstTypeArgs, builder, false).first;
+        result = customTy->GetExpectedFunc(funcName, instFuncType, true, funcInstTypeArgs, builder, false);
     } else {
         std::unordered_map<const GenericType*, Type*> replaceTable;
         auto classInstArgs = thisType.GetTypeArgs();
@@ -406,9 +406,9 @@ Value* Translator::GetWrapperFuncFromMemberAccess(Type& thisType, const std::str
                     replaceTable.emplace(genericTy, classInstArgs[i]);
                 }
             }
-            auto [func, done] =
+            auto func =
                 ex->GetExpectedFunc(funcName, instFuncType, true, replaceTable, funcInstTypeArgs, builder, false);
-            if (done) {
+            if (func != nullptr) {
                 result = func;
                 break;
             }
@@ -494,7 +494,8 @@ Ptr<Value> Translator::TransformThisType(Value& rawThis, Type& expectedTy, Lambd
         expr = builder.CreateExpression<Load>(&expectedTy, &rawThis, curLambda.GetParentBlock());
     } else {
         // case e
-        expr = StaticCast<LocalVar*>(TypeCastOrBoxIfNeeded(rawThis, expectedTy, INVALID_LOCATION))->GetExpr();
+        expr = StaticCast<LocalVar*>(
+            CHIR::TypeCastOrBoxIfNeeded(rawThis, expectedTy, builder, *curLambda.GetParentBlock()))->GetExpr();
     }
     // this is really hack, should change this
     if (expr->GetResult() != &rawThis) {

@@ -269,12 +269,6 @@ Value::ValueKind DeSerialize(const PackageFormat::ValueKind& kind)
         case ValueKind_PARAMETER:
             ret = Value::ValueKind::KIND_PARAMETER;
             break;
-        case ValueKind_IMPORTED_FUNC:
-            ret = Value::ValueKind::KIND_IMP_FUNC;
-            break;
-        case ValueKind_IMPORTED_VAR:
-            ret = Value::ValueKind::KIND_IMP_VAR;
-            break;
         case ValueKind_LOCALVAR:
             ret = Value::ValueKind::KIND_LOCALVAR;
             break;
@@ -543,13 +537,7 @@ ExprKind DeSerialize(const PackageFormat::CHIRExprKind& kind)
         case CHIRExprKind_STORE_ELEMENT_BY_NAME:
             ret = ExprKind::STORE_ELEMENT_BY_NAME;
             break;
-            // Complext
-        case CHIRExprKind_IF:
-            ret = ExprKind::IF;
-            break;
-        case CHIRExprKind_LOOP:
-            ret = ExprKind::LOOP;
-            break;
+        // Complext
         case CHIRExprKind_FORIN_RANGE:
             ret = ExprKind::FORIN_RANGE;
             break;

@@ -202,36 +202,56 @@ std::pair<InitOrder, bool> AST2CHIR::SortGlobalVarDecl(const AST::Package& pkg)
 
 void AST2CHIR::CreateGlobalVarSignature(const std::vector<Ptr<const AST::Decl>>& decls, bool isLocalConst)
 {
+    auto tr = CreateTranslator();
     for (auto& decl : decls) {
         CJC_ASSERT(decl->astKind == AST::ASTKind::VAR_DECL || decl->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL);
         if (decl->astKind == AST::ASTKind::VAR_DECL) {
-            CreateAndCacheGlobalVar(*StaticCast<const AST::VarDecl*>(decl), isLocalConst);
+            auto gv = CreateAndCacheGlobalVar(*StaticCast<const AST::VarDecl*>(decl), isLocalConst);
+            // static member var will create annotation info in `TranslateClassDecl`
+            if (gv->TestAttr(Attribute::STATIC)) {
+                continue;
+            }
+            auto annoInfo = tr.CreateAnnoFactoryFuncSig(*decl, nullptr);
+            if (annoInfo.IsAvailable()) {
+                gv->SetAnnoInfo(std::move(annoInfo));
+            }
         } else if (decl->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL) {
-            FlatternPattern(*(StaticCast<const AST::VarWithPatternDecl*>(decl)->irrefutablePattern), isLocalConst);
+            std::vector<AST::VarDecl*> varDecls;
+            FlatternPattern(
+                *(StaticCast<const AST::VarWithPatternDecl*>(decl)->irrefutablePattern), isLocalConst, varDecls);
+            for (auto varDecl : varDecls) {
+                auto gv = CreateAndCacheGlobalVar(*varDecl, isLocalConst);
+                // we have to use VarWithPatternDecl, not VarDecl, because it's difficult for SEMA to pass
+                // the annotation info and initializer to the sub var decls，maybe we can improve SEMA later.
+                auto annoInfo = tr.CreateAnnoFactoryFuncSig(*decl, nullptr);
+                if (annoInfo.IsAvailable()) {
+                    CJC_ASSERT(!gv->TestAttr(Attribute::STATIC));
+                    gv->SetAnnoInfo(std::move(annoInfo));
+                }
+            }
         }
     }
 }
 
-void AST2CHIR::FlatternPattern(const AST::Pattern& pattern, bool isLocalConst)
+void AST2CHIR::FlatternPattern(const AST::Pattern& pattern, bool isLocalConst, std::vector<AST::VarDecl*>& varDecls)
 {
     switch (pattern.astKind) {
         case AST::ASTKind::VAR_PATTERN: {
             auto varPattern = StaticCast<const AST::VarPattern*>(&pattern);
-            auto varDecl = varPattern->varDecl.get();
-            CreateAndCacheGlobalVar(*varDecl, isLocalConst);
+            varDecls.emplace_back(varPattern->varDecl.get());
             break;
         }
         case AST::ASTKind::TUPLE_PATTERN: {
             auto tuplePattern = StaticCast<const AST::TuplePattern*>(&pattern);
             for (auto& subPattern : tuplePattern->patterns) {
-                FlatternPattern(*subPattern, isLocalConst);
+                FlatternPattern(*subPattern, isLocalConst, varDecls);
             }
             break;
         }
         case AST::ASTKind::ENUM_PATTERN: {
             auto enumPattern = StaticCast<const AST::EnumPattern*>(&pattern);
             for (auto& subPattern : enumPattern->patterns) {
-                FlatternPattern(*subPattern, isLocalConst);
+                FlatternPattern(*subPattern, isLocalConst, varDecls);
             }
             break;
         }
@@ -255,12 +275,10 @@ void AST2CHIR::SetInitFuncForStaticVar()
         }
         CJC_ASSERT(skipedStaticVar->astKind == AST::ASTKind::VAR_DECL);
         // Also set the init func here
-        if (auto skipedStaticVarInCHIR = DynamicCast<GlobalVar*>(skipedStaticVarVal)) {
-            auto staticInitFuncInAST = staticInitFuncInfoMap.at(skipedStaticVar->outerDecl).staticInitFunc;
-            auto staticInitFuncInCHIR = DynamicCast<Func*>(globalCache.Get(*staticInitFuncInAST));
-            CJC_NULLPTR_CHECK(staticInitFuncInCHIR);
-            skipedStaticVarInCHIR->SetInitFunc(*staticInitFuncInCHIR);
-        }
+        auto skipedStaticVarInCHIR = StaticCast<GlobalVar*>(skipedStaticVarVal);
+        auto staticInitFuncInAST = staticInitFuncInfoMap.at(skipedStaticVar->outerDecl).staticInitFunc;
+        auto staticInitFuncInCHIR = StaticCast<Function*>(globalCache.Get(*staticInitFuncInAST));
+        skipedStaticVarInCHIR->SetInitFunc(*staticInitFuncInCHIR);
     }
 }
 
@@ -344,9 +362,36 @@ void AST2CHIR::SetGenericDecls() const
                 if (chirIns == nullptr) {
                     continue;
                 }
-                VirtualCast<FuncBase*>(chirIns)->SetGenericDecl(*VirtualCast<FuncBase*>(chirGeneric));
+                StaticCast<Function*>(chirIns)->SetGenericDecl(*StaticCast<Function*>(chirGeneric));
             }
         }
+    }
+}
+
+void AST2CHIR::TranslateAnnotationRelatedDecls()
+{
+    for (auto& it : annotationTargets) {
+        auto var = it.first;
+        auto expr = it.second;
+        auto initFunc = var->GetInitFunc();
+        CJC_NULLPTR_CHECK(initFunc);
+        auto entry = initFunc->GetBody()->GetEntryBlock();
+        auto trans = CreateTranslator();
+        trans.SetCurrentBlock(*entry);
+        auto value = Translator::TranslateASTNode(*expr, trans);
+        auto loc = var->GetDebugLocation();
+        auto parentBlock = trans.GetCurrentBlock();
+        parentBlock->AppendExpression(
+            builder.CreateExpression<Store>(std::move(loc), builder.GetUnitTy(), value, var, parentBlock));
+        CJC_ASSERT(parentBlock->GetTerminator() == nullptr);
+        parentBlock->AppendExpression(builder.CreateTerminator<Exit>(parentBlock));
+    }
+
+    // the parallel helper does not accept this type, use serialised translation
+    for (auto decl : annoFactoryFuncs) {
+        auto trans = CreateTranslator();
+        trans.SetTopLevel(*decl.first);
+        trans.TranslateAnnoFactoryFuncBody(*decl.first, *decl.second);
     }
 }
 
@@ -359,13 +404,20 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
     // step 2: translate initialization of global var
     TranslateInitOfGlobalVars(pkg, initOrder);
 
+    // step 3: create global var for class def with @Annotation
+    // this step must be after init of global var, because we need to store const init function into
+    // `initFuncsForConstVar` by order, we need to store func from imported package, and then current package.
+    for (auto& pair : classDeclWithAnnotation) {
+        SetAnnotationTargets(*pair.second, *pair.first);
+    }
+
     // do this after init of gv to ensure gvinit of CustomAnnotations go after real gv's
     // this is always safe because such gvinit's are generated by CHIR and cannot be referenced in source
     for (auto decl : annoOnlyDecls) {
         CreateAnnoOnlyDeclSig(*decl);
     }
 
-    // step 3: translate body of all funcs, the process can be run in parallel according to the compilation option
+    // step 4: translate body of all funcs, the process can be run in parallel according to the compilation option
     Utils::ProfileRecorder::Start("TranslateAllDecls", "TranslateOtherTopLevelDecls");
     if (opts.GetJobs() > 1) {
         TranslateTopLevelDeclsInParallel();
@@ -377,9 +429,6 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
             auto trans = CreateTranslator();
             trans.SetTopLevel(*decl);
             Translator::TranslateASTNode(*decl, trans);
-            if (decl->TestAttr(AST::Attribute::GLOBAL)) {
-                trans.CollectValueAnnotation(*decl);
-            }
         }
         for (auto decl : std::as_const(localConstFuncs.stableOrderValue)) {
             auto trans = CreateTranslator();
@@ -387,19 +436,15 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
             Translator::TranslateASTNode(*decl, trans);
         }
     }
-    // the parallel helper does not accept this type, use serialised translation
-    for (auto decl : annoFactoryFuncs) {
-        auto trans = CreateTranslator();
-        trans.SetTopLevel(*decl.first);
-        trans.TranslateAnnoFactoryFuncBody(*decl.first, *decl.second);
-    }
+
+    TranslateAnnotationRelatedDecls();
     Utils::ProfileRecorder::Stop("TranslateAllDecls", "TranslateOtherTopLevelDecls");
 
-    // step 4: set `CompileTimeValue` for lambda
+    // step 5: set `CompileTimeValue` for lambda
     Utils::ProfileRecorder::Start("TranslateAllDecls", "SetCompileTimeValueFlag");
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         if (func->TestAttr(Attribute::CONST)) {
-            SetCompileTimeValueFlagRecursivly(*func);
+            SetCompileTimeValueFlagRecursively(*func);
         }
     }
     Utils::ProfileRecorder::Stop("TranslateAllDecls", "SetCompileTimeValueFlag");
@@ -522,7 +567,6 @@ bool AST2CHIR::ToCHIRPackage(AST::Package& node)
     package->SetPackageAccessLevel(BuildPackageAccessLevel(node.accessible));
     RegisterAllSources();
     CJC_NULLPTR_CHECK(package);
-    dependencyPkg = importManager.GetAllDependentPackageNames(node.fullPackageName);
 
     // step 1: collect all top-level decls
     CollectTopLevelDecls(node);

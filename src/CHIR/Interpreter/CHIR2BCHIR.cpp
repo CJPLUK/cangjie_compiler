@@ -35,7 +35,7 @@ static const std::set<std::string> CONST_FUNCTIONS = {"@_CNat19ArithmeticExcepti
     "@_CNat6String7toArrayHv"};
 
 template <bool ForConstEval> void CHIR2BCHIR::TranslatePackage(
-    const Package& chirPkg, const std::vector<CHIR::FuncBase*>& initFuncsForConstVar)
+    const Package& chirPkg, const std::vector<CHIR::Function*>& initFuncsForConstVar)
 {
     bchir.packageName = chirPkg.GetName();
     if (chirPkg.GetName() == CORE_PACKAGE_NAME) {
@@ -62,7 +62,7 @@ static void CollectMethods(const CustomTypeDef& chirClass, Bchir::SClassInfo& cl
                 continue;
             }
             auto methodName = MangleMethodName(funcInfo.GetMethodName(), *funcInfo.GetMethodSigType());
-            if (funcInfo.GetVirtualMethod() != nullptr) {
+            if (!funcInfo.GetVirtualMethod()->IsPureAbstract()) {
                 classInfo.vtable.emplace(methodName, funcInfo.GetVirtualMethod()->GetIdentifierWithoutPrefix());
             } // else, this class/interface does not implement the method
         }
@@ -194,7 +194,7 @@ template <bool ForConstEval> void CHIR2BCHIR::TranslateExtends(const Package& ch
 
 template <bool ForConstEval> void CHIR2BCHIR::TranslateGlobalVars(const Package& chirPkg)
 {
-    for (const auto gv : chirPkg.GetGlobalVars()) {
+    for (const auto gv : chirPkg.GetGlobalVarsWithInit()) {
         if constexpr (ForConstEval) {
             if (!gv->IsCompileTimeValue()) {
                 // Global variable not required for const-evaluation.
@@ -222,7 +222,7 @@ template <bool ForConstEval> void CHIR2BCHIR::TranslateGlobalVars(const Package&
 
 template <bool ForConstEval> void CHIR2BCHIR::TranslateFunctions(const Package& chirPkg)
 {
-    for (const auto f : chirPkg.GetGlobalFuncs()) {
+    for (const auto f : chirPkg.GetGlobalFuncsWithBody()) {
         auto fIdent = f->GetIdentifierWithoutPrefix();
         if (isIncremental && bchir.GetFunctions().find(fIdent) != bchir.GetFunctions().end()) {
             bchir.RemoveFunction(fIdent);
@@ -266,9 +266,9 @@ template <bool ForConstEval> void CHIR2BCHIR::TranslateFunctions(const Package& 
 
 // force instantiation of TranslatePackage with ForConstEval = True and ForConstEval = false
 template void CHIR2BCHIR::TranslatePackage<false>(
-    const Package& chirPkg, const std::vector<CHIR::FuncBase*>& initFuncsForConstVar);
+    const Package& chirPkg, const std::vector<CHIR::Function*>& initFuncsForConstVar);
 template void CHIR2BCHIR::TranslatePackage<true>(
-    const Package& chirPkg, const std::vector<CHIR::FuncBase*>& initFuncsForConstVar);
+    const Package& chirPkg, const std::vector<CHIR::Function*>& initFuncsForConstVar);
 
 Bchir::ByteCodeContent CHIR2BCHIR::GetTypeIdx(Cangjie::CHIR::Type& chirType)
 {
@@ -365,7 +365,7 @@ template <bool ForConstEval> CHIR2BCHIR::Context CHIR2BCHIR::TranslateGlobalVar(
     return ctx;
 }
 
-void CHIR2BCHIR::TranslateFuncDef(Context& ctx, const Func& func)
+void CHIR2BCHIR::TranslateFuncDef(Context& ctx, const Function& func)
 {
     auto args = func.GetParams();
     // function parameters are simply local variables

@@ -146,7 +146,7 @@ void InsertStaticInitCall(InheritableDecl& decl, FuncDecl& staticInit)
     std::vector<OwnedPtr<FuncArg>> args;
     auto initializer = CreateCallExpr(CreateRefExpr(staticInit), std::move(args), &staticInit, unitTy);
     initializer->begin = decl.begin;
-    auto initVar = CreateVarDecl(STATIC_INIT_VAR, std::move(initializer));
+    auto initVar = CreateVarDecl(std::string(STATIC_INIT_VAR), std::move(initializer));
     initVar->fullPackageName = decl.fullPackageName;
     initVar->outerDecl = &decl;
     initVar->EnableAttr(Attribute::STATIC, Attribute::PRIVATE);

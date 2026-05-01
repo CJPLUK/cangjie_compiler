@@ -149,7 +149,7 @@ void MacroExpansion::ReplaceEachFileNode(const File& file)
     ConditionalCompilation cc{ci};
     cc.HandleFileConditionalCompilation(*newFile);
     if (curPackage) {
-        ci->importManager.UpdateFileNodeImportInfo(*curPackage, file, newFile);
+        ci->importManager->UpdateFileNodeImportInfo(*curPackage, file, newFile);
     }
 }
 
@@ -179,7 +179,7 @@ void MacroExpansion::CollectMacros(Package& package)
         auto pos2 = m2.GetBeginPos();
         return std::tie(pos1.fileID, pos1) < std::tie(pos2.fileID, pos2);
     });
-    macroCollector.importedMacroPkgs = ci->importManager.GetImportedPkgsForMacro();
+    macroCollector.importedMacroPkgs = ci->importManager->GetImportedPkgsForMacro();
 }
 
 void MacroExpansion::CheckReplacedEnumCaseMember(MacroCall& macroNode, PtrVector<Decl>& newNodes) const
@@ -437,7 +437,7 @@ void MacroExpansion::Execute(std::vector<OwnedPtr<AST::Package>>& packages)
     }
     if (ci->invocation.globalOptions.enableCompileTest && ci->invocation.globalOptions.CompileExecutable()) {
         TestEntryConstructor::ConstructTestSuite(ci->invocation.globalOptions.moduleName, packages,
-            ci->importManager.GetAllImportedPackages(),
+            ci->importManager->GetAllImportedPackages(),
             ci->invocation.globalOptions.compileTestsOnly);
     }
     for (auto& package : packages) {

@@ -89,7 +89,7 @@ static bool IsMemberFuncOfExtend(const AST::Decl* decl)
     return decl->outerDecl->astKind == AST::ASTKind::EXTEND_DECL;
 }
 
-void Translator::SetRawMangledNameForIncrementalCompile(const AST::FuncDecl& astFunc, Func& chirFunc) const
+void Translator::SetRawMangledNameForIncrementalCompile(const AST::FuncDecl& astFunc, Function& chirFunc) const
 {
     AST::Decl* decl = nullptr;
     if (astFunc.TestAttr(AST::Attribute::HAS_INITIAL)) {
@@ -146,7 +146,7 @@ void Translator::SetRawMangledNameForIncrementalCompile(const AST::FuncDecl& ast
     }
 }
 
-bool NeedCreateDebugForFirstParam(const Func& func)
+bool NeedCreateDebugForFirstParam(const Function& func)
 {
     if (func.TestAttr(Attribute::STATIC)) {
         return false;
@@ -190,7 +190,7 @@ Ptr<Value> Translator::Visit(const AST::FuncDecl& func)
     }
     CJC_ASSERT(!isLifted || IsTopLevel(func));
     // translateTopLevel
-    Func* curFunc = VirtualCast<Func*>(globalSymbolTable.Get(func));
+    Function* curFunc = StaticCast<Function*>(globalSymbolTable.Get(func));
     if (IsCopiedSrcFuncFromInterface(&func)) {
         curFunc->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
     }
@@ -394,7 +394,7 @@ Ptr<Value> Translator::TranslateConstructorFunc(const AST::Decl& parent, const A
     // insert member decl initializer if this constructor does not have delegate this call
     if (!HasDelegatedThisCall(funcBody)) {
         CustomTypeDef* typeDef = GetNominalSymbolTable(parent).get();
-        FuncBase* varInitFunc = typeDef->GetVarInitializationFunc();
+        Function* varInitFunc = typeDef->GetVarInitializationFunc();
         CJC_NULLPTR_CHECK(varInitFunc);
         std::vector<Value*> args{thisVar};
         CreateAndAppendExpression<Apply>(DebugLocation(), varInitFunc->GetReturnType(), varInitFunc, FuncCallContext{
@@ -488,13 +488,17 @@ Ptr<Value> Translator::TranslateNestedFunc(const AST::FuncDecl& func)
     }
 
     std::vector<DebugLocation> paramLoc;
+    std::vector<std::string> paramSrcCodeIdentifiers;
     for (auto& astParam : func.funcBody->paramLists[0]->params) {
         paramLoc.emplace_back(TranslateLocationWithoutScope(builder.GetChirContext(), astParam->begin, astParam->end));
+        paramSrcCodeIdentifiers.emplace_back(astParam->identifier.GetRawText());
     }
     auto paramTypes = funcTy->GetParamTypes();
     CJC_ASSERT(paramTypes.size() == paramLoc.size());
+    CJC_ASSERT(paramTypes.size() == paramSrcCodeIdentifiers.size());
     for (size_t i = 0; i < paramTypes.size(); ++i) {
-        builder.CreateParameter(paramTypes[i], paramLoc[i], *lambda);
+        auto param = builder.CreateParameter(paramTypes[i], paramLoc[i], *lambda);
+        param->SetSrcCodeIdentifier(paramSrcCodeIdentifiers[i]);
     }
 
     SetSymbolTable(func, *lambda->GetResult());

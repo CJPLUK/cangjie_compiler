@@ -74,7 +74,7 @@ public:
         return chirExpr.GetParentBlock();
     }
 
-    CHIR::Func* GetTopLevelFunc() const
+    CHIR::Function* GetTopLevelFunc() const
     {
         return chirExpr.GetTopLevelFunc();
     }
@@ -150,7 +150,7 @@ public:
     {
         if (GetInstantiatedTypeArgs().size() != GetCalleeTypeArgsNum()) {
 #ifndef NDEBUG
-            Errorln(chirExpr.ToString() + "\n");
+            Errorln(chirExpr.ToString(0) + "\n");
 #endif
             CJC_ASSERT_WITH_MSG(false, "Incorrect ApplyExpr from CHIR, type arguments are missing.");
         }
@@ -160,7 +160,7 @@ public:
     {
         if (GetInstantiatedTypeArgs().size() != GetCalleeTypeArgsNum()) {
 #ifndef NDEBUG
-            Errorln(chirExpr.ToString());
+            Errorln(chirExpr.ToString(0));
 #endif
             CJC_ASSERT_WITH_MSG(false, "Incorrect ApplyExpr from CHIR, type arguments are missing.");
         }
@@ -208,7 +208,7 @@ public:
     bool IsCalleeMethod() const override
     {
         bool isCallee = false;
-        if (auto func = DynamicCast<CHIR::FuncBase*>(GetCallee())) {
+        if (auto func = DynamicCast<CHIR::Function*>(GetCallee())) {
             isCallee = func->IsMemberFunc();
         }
         return isCallee;
@@ -225,7 +225,7 @@ public:
             return false;
         }
 
-        auto outer = VirtualCast<CHIR::FuncBase*>(GetCallee())->GetOuterDeclaredOrExtendedDef();
+        auto outer = StaticCast<CHIR::Function*>(GetCallee())->GetOuterDeclaredOrExtendedDef();
         return outer && outer->IsStruct();
     }
 
@@ -245,7 +245,7 @@ public:
         }
         if (!res) {
 #ifndef NDEBUG
-            Errorln("Should not get a nullptr:\n", chirExpr.ToString());
+            Errorln("Should not get a nullptr:\n", chirExpr.ToString(0));
 #endif
             CJC_ASSERT(false);
         }
@@ -261,7 +261,7 @@ private:
     size_t GetCalleeTypeArgsNum() const
     {
         if (GetCallee()->IsFunc()) {
-            return VirtualCast<CHIR::FuncBase*>(GetCallee())->GetGenericTypeParams().size();
+            return StaticCast<CHIR::Function*>(GetCallee())->GetGenericTypeParams().size();
         }
         return 0;
     }
@@ -384,7 +384,7 @@ public:
         }
         if (!res) {
 #ifndef NDEBUG
-            Errorln("Should not get a nullptr:\n", chirExpr.ToString());
+            Errorln("Should not get a nullptr:\n", chirExpr.ToString(0));
 #endif
             CJC_ASSERT(false);
         }
@@ -511,7 +511,7 @@ public:
         }
         if (!res) {
 #ifndef NDEBUG
-            Errorln("Should not get a nullptr:\n", chirExpr.ToString());
+            Errorln("Should not get a nullptr:\n", chirExpr.ToString(0));
 #endif
             CJC_ASSERT(false);
         }
@@ -670,7 +670,7 @@ public:
         }
     }
 
-    CHIR::FuncBase* GetExecuteClosure() const
+    CHIR::Function* GetExecuteClosure() const
     {
         if (GetExprKind() == CHIR::ExprKind::SPAWN) {
             return StaticCast<const CHIR::Spawn&>(chirExpr).GetExecuteClosure();

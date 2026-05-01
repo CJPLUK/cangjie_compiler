@@ -31,47 +31,24 @@ public:
     {
         return anno.Get<T>();
     }
-    template <class T>
-    T& GetAnno()
+
+    template <class T> T& GetAnno()
     {
         return anno.GetAnno<T>();
     }
 
-    virtual const DebugLocation& GetDebugLocation() const { return anno.GetDebugLocation(); }
-    inline void SetDebugLocation(const DebugLocation& loc)
-    {
-        anno.SetDebugLocation(loc);
-    }
-    inline void SetDebugLocation(DebugLocation&& loc)
-    {
-        anno.SetDebugLocation(std::move(loc));
-    }
-
-    void CopyAnnotationMapFrom(const Base& other)
-    {
-        anno = other.anno;
-    }
-
-    std::string ToStringAnnotationMap() const { return anno.ToString(); }
-
-    const AnnotationMap& GetAnno() const
-    {
-        return anno;
-    }
-
-    AnnotationMap MoveAnnotation()
-    {
-        return std::move(anno);
-    }
-    void SetAnnotation(AnnotationMap&& ot)
-    {
-        anno = std::move(ot);
-    }
+    virtual const DebugLocation& GetDebugLocation() const;
+    void SetDebugLocation(const DebugLocation& newLoc);
+    void SetDebugLocation(DebugLocation&& newLoc);
+    void CopyBaseInfoFrom(const Base& other);
+    std::string BaseCommentToString() const;
+    const AnnotationMap& GetAnno() const;
 
     virtual ~Base() = default;
 
 private:
     AnnotationMap anno;
+    DebugLocation loc{};
 };
 }
 #endif

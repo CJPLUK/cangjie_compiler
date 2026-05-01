@@ -43,7 +43,7 @@ bool InvokeMethod(MacroCall& macCall, CompilerInstance* ci)
 void FindMacroDefPkg(MacroCall& macCall, CompilerInstance* ci)
 {
     auto macroDefFunc = macCall.GetDefinition();
-    auto importedMacroPackages = ci->importManager.GetImportedStdMacroPackages();
+    auto importedMacroPackages = ci->importManager->GetImportedStdMacroPackages();
     auto foundStdMacroPkg = std::find_if(importedMacroPackages.begin(), importedMacroPackages.end(),
         [&macroDefFunc](const std::string packageName) {
             return packageName == macroDefFunc->fullPackageName;
@@ -59,10 +59,10 @@ void FindMacroDefPkg(MacroCall& macCall, CompilerInstance* ci)
         auto libName = "lib-macro_" + FileUtil::ToCjoFileName(macroDefFunc->fullPackageName) + LIB_SUFFIX;
         auto names = Utils::SplitQualifiedName(macroDefFunc->fullPackageName);
         auto fileName = FileUtil::ToCjoFileName(names.front()) + DIR_SEPARATOR + libName;
-        macCall.libPath = FileUtil::FindFileByName(fileName, ci->importManager.GetSearchPath()).value_or("");
+        macCall.libPath = FileUtil::FindFileByName(fileName, ci->importManager->GetSearchPath()).value_or("");
         if (macCall.libPath.empty()) {
             // Temporarily, find file indirectly when the package is root package.
-            macCall.libPath = FileUtil::FindFileByName(libName, ci->importManager.GetSearchPath()).value_or("");
+            macCall.libPath = FileUtil::FindFileByName(libName, ci->importManager->GetSearchPath()).value_or("");
         }
     }
 }
@@ -77,7 +77,7 @@ bool MacroCall::GetAllDeclsForMacroName(const std::string &macroName, std::vecto
         // We may have alias for package name: import p0.* as p1.* , p1 is the alias for p0.
         std::string pkgNameMaybeAlias = macroName.substr(0, macroName.rfind("."));
         auto [packageDecl, isConflicted] =
-            ci->importManager.GetImportedPackageDecl(node, pkgNameMaybeAlias);
+            ci->importManager->GetImportedPackageDecl(node, pkgNameMaybeAlias);
         if (packageDecl == nullptr) {
             (void)ci->diag.Diagnose(begin, DiagKind::macro_undefined_pkg_name, pkgNameMaybeAlias);
             return false;
@@ -85,10 +85,10 @@ bool MacroCall::GetAllDeclsForMacroName(const std::string &macroName, std::vecto
             (void)ci->diag.Diagnose(begin, DiagKind::sema_package_name_conflict, pkgNameMaybeAlias);
             return false;
         }
-        auto foundDecls = ci->importManager.GetPackageMembersByName(*packageDecl->srcPackage, invocation->identifier);
+        auto foundDecls = ci->importManager->GetPackageMembersByName(*packageDecl->srcPackage, invocation->identifier);
         decls.insert(decls.end(), foundDecls.begin(), foundDecls.end());
     } else {
-        decls = ci->importManager.GetImportedDeclsByName(*file, invocation->identifier);
+        decls = ci->importManager->GetImportedDeclsByName(*file, invocation->identifier);
     }
     return true;
 }

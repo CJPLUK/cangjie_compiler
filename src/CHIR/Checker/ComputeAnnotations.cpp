@@ -18,7 +18,7 @@ static_assert(sizeof(Number) == 8);
 std::unordered_map<const CustomTypeDef*, const InheritableDecl*> g_typeMap{};
 std::unordered_map<const Value*, AnnoInstanceValue> g_valueMap{};
 /// map annoFactoryFunc to original Decl, used to write back annotation info
-std::unordered_map<const Func*, const AST::Decl*> g_annoFactoryMap{};
+std::unordered_map<const Function*, const AST::Decl*> g_annoFactoryMap{};
 
 AnnoInstanceValue GetValue(const Value& v);
 AnnoInstanceValue CreateValue(const LiteralValue& v)
@@ -90,7 +90,7 @@ AnnoInstanceValue CreateValueOfCustomTypeDef(const Value& v)
             auto nothingExprCheck = StaticCast<LocalVar>(store->GetValue())->GetExpr();
             if (auto constant = DynamicCast<Constant>(nothingExprCheck)) {
                 if (constant->GetValue()->IsNullLiteral()) {
-                    std::cerr << nothingExprCheck->GetResult()->ToString() << '\n';
+                    std::cerr << nothingExprCheck->GetResult()->ToString(0) << '\n';
                     CJC_ASSERT(false && "Invalid node from interpreter.");
                 }
             }
@@ -145,9 +145,10 @@ AnnoInstanceValue CreateValue(const Value& v)
             }
         }
         if (auto l = DynamicCast<Load>(obj->GetExpr())) {
-            if (auto gv = DynamicCast<GlobalVar>(l->GetLocation())) {
+            if (l->GetLocation()->IsGlobalVarWithInitializer()) {
                 // load of gv, valid iff the location is a const global variable lifted from annotationsArray.
                 // Threotically we check it's of Annotation class type, but we do not have such utilities.
+                auto gv = StaticCast<GlobalVar*>(l->GetLocation());
                 CJC_ASSERT(gv->GetType()->StripAllRefs()->IsClass());
                 auto ret = GetValue(*gv);
                 CJC_ASSERT(ret.Object());
@@ -170,7 +171,7 @@ AnnoInstanceValue GetValue(const Value& v)
     return CreateValue(v);
 }
 
-std::vector<AnnoInstance> CreateAnnoInstFromConstEval(const Func& func)
+std::vector<AnnoInstance> CreateAnnoInstFromConstEval(const Function& func)
 {
     auto arrRef = func.GetReturnValue();
     auto users = arrRef->GetUsers();
@@ -203,7 +204,7 @@ std::vector<AnnoInstance> CreateAnnoInstFromConstEval(const Func& func)
 AnnoMap CreateAnnoInstFromConstEvalRes(ConstEvalResult& ev)
 {
     std::unordered_map<const Decl*, std::vector<AnnoInstance>> annoInstMap{};
-    for (auto func : ev.pkg->GetGlobalFuncs()) {
+    for (auto func : ev.pkg->GetGlobalFuncsWithBody()) {
         if (func->GetFuncKind() == FuncKind::ANNOFACTORY_FUNC) {
             auto v = CreateAnnoInstFromConstEval(*func);
             if (!v.empty()) {

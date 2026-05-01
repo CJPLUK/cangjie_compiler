@@ -205,7 +205,7 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP)
     diag.Reset();
 
     std::vector<uint8_t> astData;
-    defInstance->importManager.ExportAST(false, astData, *defInstance->GetSourcePackages()[0]);
+    defInstance->importManager->ExportAST(false, astData, *defInstance->GetSourcePackages()[0]);
     std::string astFile = definePath + "define.cjo";
     ASSERT_TRUE(FileUtil::WriteBufferToASTFile(astFile, astData));
 
@@ -289,7 +289,7 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP_Paralle)
     diag.Reset();
 
     std::vector<uint8_t> astData;
-    defInstance->importManager.ExportAST(false, astData, *defInstance->GetSourcePackages()[0]);
+    defInstance->importManager->ExportAST(false, astData, *defInstance->GetSourcePackages()[0]);
     std::string astFile = definePath + "define.cjo";
     ASSERT_TRUE(FileUtil::WriteBufferToASTFile(astFile, astData));
 

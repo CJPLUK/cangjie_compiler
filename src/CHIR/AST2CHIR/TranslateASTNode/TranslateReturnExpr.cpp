@@ -27,8 +27,6 @@ int64_t Translator::CalculateDelayExitLevelForReturn()
             // cond blockGroup need sub 1, and in the end of for-in node
             // need also sub 1, so here set to 2.
             level += 2U;
-        } else if (expr && expr->GetExprKind() == ExprKind::IF) {
-            ++level;
         }
     }
     return level;
@@ -45,8 +43,7 @@ Ptr<Value> Translator::GetOuterBlockGroupReturnValLocation()
         reverseBegin != reverseEnd; ++reverseBegin) {
         Ptr<BlockGroup> bg = *reverseBegin;
         Expression* ownedExpr = bg->GetOwnerExpression();
-        if (ownedExpr && (Is<ForIn>(ownedExpr) || ownedExpr->GetExprKind() == ExprKind::IF) &&
-            forInExprReturnMap.count(ownedExpr->GetResult()) != 0) {
+        if (ownedExpr && Is<ForIn>(ownedExpr) && forInExprReturnMap.count(ownedExpr->GetResult()) != 0) {
             return forInExprReturnMap[ownedExpr->GetResult()];
         }
     }

@@ -11,6 +11,7 @@
 #include "cangjie/CHIR/IR/Value/Value.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <type_traits>
@@ -44,7 +45,7 @@ public:
 
     using Value::ToString;
 
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
     /// get static top object.
     static AbstractObject* GetTopObjInstance();

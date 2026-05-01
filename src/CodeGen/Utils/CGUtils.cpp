@@ -646,5 +646,23 @@ void ReplaceDelimiterAfterOrgName(std::string& packageName) {
         packageName.replace(splitterIt, 2U, "/");
     }
 }
+
+std::vector<std::pair<CHIR::Function*, CHIR::FuncType*>> GetInstAbstractMethodTypes(
+    const CHIR::ClassType& interfaceTy, CHIR::CHIRBuilder& builder)
+{
+    std::vector<std::pair<CHIR::Function*, CHIR::FuncType*>> res;
+    auto typeArgs = interfaceTy.GetGenericArgs();
+    auto paramArgs = interfaceTy.GetClassDef()->GetGenericTypeParams();
+    std::unordered_map<const GenericType*, Type*> instMap;
+    CJC_ASSERT(typeArgs.size() == paramArgs.size());
+    for (size_t i = 0; i < typeArgs.size(); ++i) {
+        instMap.emplace(paramArgs[i], typeArgs[i]);
+    }
+    for (auto method : interfaceTy.GetClassDef()->GetMethods()) {
+        auto instFuncType = CHIR::ReplaceRawGenericArgType(*method->GetType(), instMap, builder);
+        res.emplace_back(std::make_pair(method, StaticCast<CHIR::FuncType*>(instFuncType)));
+    }
+    return res;
+}
 } // namespace CodeGen
 } // namespace Cangjie

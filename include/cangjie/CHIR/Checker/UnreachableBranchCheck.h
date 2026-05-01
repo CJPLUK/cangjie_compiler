@@ -23,7 +23,7 @@ public:
 
     void RunOnPackage(const Package& package, size_t threadNum);
 
-    void RunOnFunc(const Ptr<Func> func);
+    void RunOnFunc(const Ptr<Function> func);
 
 private:
     void PrintWarning(const Terminator& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive = false);

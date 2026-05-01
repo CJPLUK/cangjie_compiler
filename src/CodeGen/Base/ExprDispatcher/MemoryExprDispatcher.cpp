@@ -173,7 +173,7 @@ llvm::Value* HandleGetElementRef(IRBuilder2& irBuilder, const CHIR::GetElementRe
     auto opTy = DeRef(*getEleRef.GetOperand(0)->GetType());
     bool isAutoEnv =
         opTy->IsClass() && IsClosureConversionEnvClass(*StaticCast<CHIR::ClassType*>(opTy)->GetClassDef());
-    bool isLambda = dynamic_cast<const CHIR::Func*>(&irBuilder.GetInsertCGFunction()->GetOriginal())->IsLambda();
+    bool isLambda = dynamic_cast<const CHIR::Function*>(&irBuilder.GetInsertCGFunction()->GetOriginal())->IsLambda();
     if (isLambda && irBuilder.GetCGContext().GetCompileOptions().enableCompileDebug && isAutoEnv) {
         irBuilder.CreateEnvDeclare(getEleRef, retValue);
     }

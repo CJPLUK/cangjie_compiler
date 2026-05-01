@@ -30,6 +30,7 @@
 #include "cangjie/FrontendTool/IncrementalCompilerInstance.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 #include "cangjie/Utils/TaskQueue.h"
+#include "cangjie/Utils/Utils.h"
 
 namespace Cangjie::CodeGen {
 void EmitMain(CGModule& cgMod);
@@ -396,9 +397,9 @@ void GenSubCHIRPackage(CGModule& cgMod)
     auto& subCHIRPkg = cgMod.GetCGContext().GetSubCHIRPackage();
     EmitTIOrTTForCustomDefs(cgMod);
     EmitGlobalVariableIR(cgMod, std::vector<CHIR::GlobalVar*>(subCHIRPkg.chirGVs.begin(), subCHIRPkg.chirGVs.end()));
-    EmitFunctionIR(cgMod, std::vector<CHIR::Func*>(subCHIRPkg.chirFuncs.begin(), subCHIRPkg.chirFuncs.end()));
+    EmitFunctionIR(cgMod, std::vector<CHIR::Function*>(subCHIRPkg.chirFuncs.begin(), subCHIRPkg.chirFuncs.end()));
     EmitImportedCFuncIR(cgMod,
-        std::vector<CHIR::ImportedFunc*>(subCHIRPkg.chirImportedCFuncs.begin(), subCHIRPkg.chirImportedCFuncs.end()));
+        std::vector<CHIR::Function*>(subCHIRPkg.chirImportedCFuncs.begin(), subCHIRPkg.chirImportedCFuncs.end()));
     if (subCHIRPkg.mainModule) {
         EmitCJSDKVersion(cgMod);
         EmitMain(cgMod);
@@ -462,9 +463,9 @@ void GenSubCHIRPackage(CGModule& cgMod)
 
 class PackageGeneratorImpl : public IRGeneratorImpl {
 public:
-    PackageGeneratorImpl(CHIR::CHIRBuilder& chirBuilder, const CHIRData& chirData, const GlobalOptions& options,
+    PackageGeneratorImpl(CHIRData& chirData, const GlobalOptions& options,
         bool enableIncrement, const CachedMangleMap& cachedMangleMap)
-        : cgPkgCtx(chirBuilder, chirData, options, enableIncrement, cachedMangleMap)
+        : cgPkgCtx(chirData, options, enableIncrement, cachedMangleMap)
     {
     }
 
@@ -634,16 +635,23 @@ void PackageGeneratorImpl::EmitIR()
 #endif
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(CHIR::CHIRBuilder& chirBuilder, const CHIRData& chirData,
-    const GlobalOptions& options, DefaultCompilerInstance& compilerInstance, bool enableIncrement)
+std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(
+    DefaultCompilerInstance& compilerInstance, bool enableIncrement)
 {
     CachedMangleMap cachedMangleMap;
     if (enableIncrement) {
         cachedMangleMap = StaticCast<Cangjie::IncrementalCompilerInstance&>(compilerInstance).cacheMangles;
     }
-    auto temp = PackageGeneratorImpl(chirBuilder, chirData, options, enableIncrement, cachedMangleMap);
-    temp.EmitIR();
-    return temp.ReleaseLLVMModules();
+    std::vector<std::unique_ptr<llvm::Module>> llvmModules;
+    {
+        auto temp = PackageGeneratorImpl(
+            *compilerInstance.chirData, compilerInstance.invocation.globalOptions, enableIncrement, cachedMangleMap);
+        temp.EmitIR();
+        llvmModules = temp.ReleaseLLVMModules();
+    }
+    compilerInstance.FreeCHIRData();
+    Utils::FreeIdleMemoryToOS();
+    return llvmModules;
 }
 #endif
 

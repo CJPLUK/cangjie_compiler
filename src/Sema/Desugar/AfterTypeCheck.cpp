@@ -278,6 +278,22 @@ void DesugarSetForPropDecl(TypeManager& tyMgr, Expr& expr)
     }
     expr.desugarExpr = std::move(lastCallExpr);
 }
+
+void UpdatePosForMacroExpandedNodes(const std::vector<Ptr<AST::Package>>& pkgs)
+{
+    auto visit = [](Ptr<AST::Node> curNode) -> AST::VisitAction {
+        if (!curNode->IsExpr() || !curNode->curMacroCall) {
+            return AST::VisitAction::WALK_CHILDREN;
+        }
+        curNode->begin = curNode->GetDebugPos(curNode->begin);
+        curNode->end = curNode->GetDebugPos(curNode->end);
+        return AST::VisitAction::WALK_CHILDREN;
+    };
+    for (auto pkg : pkgs) {
+        AST::Walker walker(pkg, visit);
+        walker.Walk();
+    }
+}
 } // namespace
 
 void TypeChecker::PerformDesugarAfterSema(std::vector<Ptr<Package>>& pkgs) const
@@ -458,6 +474,11 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterSema(std::vector<Ptr<AST::
             : saveFileWithAbsPath;
         importManager.ExportDeclsWithContent(saveAbsPath, *pkg);
     }
+    // Update positions of macro-expanded nodes for user-facing locations.
+    // Affects exception stack line numbers, coverage hit lines, and cjdb jump/source locations.
+    if (ci->invocation.globalOptions.enableCompileDebug || ci->invocation.globalOptions.displayLineInfo) {
+        UpdatePosForMacroExpandedNodes(pkgs);
+    }
 }
 
 void TypeChecker::TypeCheckerImpl::GenerateMainInvoke()
@@ -497,9 +518,10 @@ void TypeChecker::TypeCheckerImpl::GenerateMainInvoke()
     auto funcParamList = MakeOwnedNode<FuncParamList>();
     Ptr<VarDecl> argPtr = nullptr;
     if (!mainFunc->funcBody->paramLists[0]->params.empty()) {
-        auto param = CreateFuncParam("v", ASTCloner::Clone(mainFunc->funcBody->paramLists[0]->params[0]->type.get()));
-        argPtr = param.get();
-        funcParamList->params.emplace_back(std::move(param));
+        const auto& param = mainFunc->funcBody->paramLists[0]->params[0];
+        auto newParam = CreateFuncParam("v", ASTCloner::Clone(param->type.get()), nullptr, param->ty);
+        argPtr = newParam.get();
+        funcParamList->params.emplace_back(std::move(newParam));
     }
     funcBody->paramLists.push_back(std::move(funcParamList));
 

@@ -51,7 +51,7 @@ const Apply* GetOrThrowResultDomain::CheckGetOrThrowResult(const Value* location
 template <> const std::string Analysis<GetOrThrowResultDomain>::name = "getOrThrow-result";
 template <> const std::optional<unsigned> Analysis<GetOrThrowResultDomain>::blockLimit = std::nullopt;
 
-GetOrThrowResultAnalysis::GetOrThrowResultAnalysis(const Func* func, bool isDebug) : Analysis(func, isDebug)
+GetOrThrowResultAnalysis::GetOrThrowResultAnalysis(const Function* func, bool isDebug) : Analysis(func, isDebug)
 {
     size_t argIdx = 0;
     for (auto bb : func->GetBody()->GetBlocks()) {

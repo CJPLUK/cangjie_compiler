@@ -439,6 +439,9 @@ inline bool IsExternalDefinedType(const CHIR::Type& type)
 bool IsModifiableClass(const CHIR::Type& chirTy);
 bool IsSizeTrustedInCompileUnit(CGModule& cgMod, const CHIR::Type& chirTy);
 void ReplaceDelimiterAfterOrgName(std::string& packageName);
+
+std::vector<std::pair<CHIR::Function*, CHIR::FuncType*>> GetInstAbstractMethodTypes(
+    const CHIR::ClassType& interfaceTy, CHIR::CHIRBuilder& builder);
 } // namespace CodeGen
 } // namespace Cangjie
 

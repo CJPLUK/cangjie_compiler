@@ -96,7 +96,7 @@ public:
             return "bottom";
         } else {
             CJC_NULLPTR_CHECK(elem);
-            return elem->ToString();
+            return elem->ToString(0);
         }
     }
 

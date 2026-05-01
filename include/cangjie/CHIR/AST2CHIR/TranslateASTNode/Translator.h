@@ -36,10 +36,10 @@ public:
         const ElementList<Ptr<const AST::Decl>>& localConstVars,
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, const IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
-        std::vector<std::pair<const AST::Decl*, Func*>>& annoFactories,
+        std::vector<std::pair<const AST::Decl*, Function*>>& annoFactories,
         std::unordered_map<Block*, Terminator*>& maybeUnreachable,
         bool computeAnnotations,
-        std::vector<CHIR::Func*>& initFuncForAnnoFactory,
+        std::vector<CHIR::Function*>& initFuncForAnnoFactory,
         const Cangjie::TypeManager& typeManager)
         : builder(builder),
           chirTy(chirTy),
@@ -350,7 +350,7 @@ public:
      * @param isConst The global var is const or not.
      * @return A pointer to the created function.
      */
-    Ptr<Func> CreateEmptyGVInitFunc(const std::string& mangledName, const std::string& identifier,
+    Ptr<Function> CreateEmptyGVInitFunc(const std::string& mangledName, const std::string& identifier,
         const std::string& rawMangledName, const std::string& pkgName, const Linkage& linkage,
         const DebugLocation& loc, bool isConst);
     
@@ -406,10 +406,10 @@ public:
      * @param decl The declaration.
      * @param func The function to translate the body for.
      */
-    void TranslateAnnoFactoryFuncBody(const AST::Decl& decl, Func& func);
-    void TranslateAnnotationsArrayBody(const AST::Decl& decl, Func& func);
-    std::vector<GlobalVar*> TranslateAnnotationsArraySig(const AST::ArrayLit& annos, const Func& func);
-    GlobalVar* TranslateCustomAnnoInstanceSig(const AST::Expr& expr, const Func& func, size_t i);
+    void TranslateAnnoFactoryFuncBody(const AST::Decl& decl, Function& func);
+    void TranslateAnnotationsArrayBody(const AST::Decl& decl, Function& func);
+    std::vector<GlobalVar*> TranslateAnnotationsArraySig(const AST::ArrayLit& annos, const Function& func);
+    GlobalVar* TranslateCustomAnnoInstanceSig(const AST::Expr& expr, const Function& func, size_t i);
 
     /**
      * @brief Creates annotation information for a function parameter.
@@ -516,9 +516,6 @@ public:
     /// 2. translating the initialiser of a discarded pattern
     void TranslateSubExprToDiscarded(const AST::Node& node);
 
-    void CollectValueAnnotation(const AST::Decl& decl);
-    void CollectTypeAnnotation(const AST::InheritableDecl& decl, const CustomTypeDef& cl);
-
     /**
      * @brief Creates var init func for class/struct decls, because of cjmp.
      *
@@ -547,8 +544,8 @@ private:
     /** Used for store side effect expressions and other expression which does not have associated valid ast. */
     AST2CHIRNodeMap<Value> exprValueTable;
     // Since property's getter and setter will share same annotation function, we need to cache the function name.
-    std::unordered_map<Ptr<const AST::Decl>, std::string> annotationFuncMap;
-    static std::unordered_map<std::string, Ptr<Func>> jAnnoFuncMap;
+    std::unordered_map<Ptr<const AST::Decl>, AnnoInfo> annotationFuncMap;
+    static std::unordered_map<std::string, Ptr<Function>> jAnnoFuncMap;
     std::vector<Ptr<BlockGroup>> blockGroupStack;
     Ptr<Block> currentBlock;
     Ptr<Value> delayExitSignal;
@@ -618,10 +615,10 @@ private:
     const IncreKind& increKind;
     const bool mergingSpecific; // add by cjmp
     const std::unordered_map<std::string, Value*>& deserializedVals; // add by cjmp
-    std::vector<std::pair<const AST::Decl*, Func*>>& annoFactoryFuncs;
+    std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs;
     std::unordered_map<Block*, Terminator*>& maybeUnreachable;
     bool isComputingAnnos{};
-    std::vector<CHIR::Func*>& initFuncsForAnnoFactory;
+    std::vector<CHIR::Function*>& initFuncsForAnnoFactory;
     const Cangjie::TypeManager& typeManager;
 
     class ScopeContext {
@@ -662,7 +659,7 @@ private:
     }
     void SetFuncBlockGroup(BlockGroup& group);
     bool OverloadableExprMayThrowException(const AST::OverloadableExpr& expr, const Type& leftValTy) const;
-    void SetRawMangledNameForIncrementalCompile(const AST::FuncDecl& astFunc, Func& chirFunc) const;
+    void SetRawMangledNameForIncrementalCompile(const AST::FuncDecl& astFunc, Function& chirFunc) const;
 
     /** @brief Wrapped expression creation to handle both normal context and try-catch context.*/
     template <typename TExpr, typename... Args> Expression* TryCreate(Block* parent, Args&&... args)
@@ -749,13 +746,11 @@ private:
     Ptr<FuncType> CreateVirtualFuncType(const AST::FuncDecl& decl);
     void AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl);
     inline bool IsOpenSpecificReplaceAbstractCommon(ClassDef& classDef, const AST::FuncDecl& decl) const;
-    inline void RemoveAbstractMethod(ClassDef& classDef, const AST::FuncDecl& decl) const;
     void TranslateClassLikeMemberFuncDecl(ClassDef& classDef, const AST::FuncDecl& decl);
     bool SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::FuncDecl& decl);
     void AddMemberFunctionGenericInstantiations(
         ClassDef& classDef, const std::vector<AST::FuncDecl*>& instFuncs, const AST::FuncDecl& originalDecl);
     void AddMemberPropDecl(CustomTypeDef& def, const AST::PropDecl& decl);
-    void TranslateAbstractMethod(ClassDef& classDef, const AST::FuncDecl& decl, bool hasBody);
 
     /* Add methods for CJMP. */
     // Micro refactoring for CJMP.
@@ -763,11 +758,11 @@ private:
     void SetClassImplementedInterface(ClassDef& classDef, const AST::ClassLikeDecl& decl);
     // Translate member var init func for common/specific decls.
     // Return empty `xxx$varInit` func for member var of common/specific decl, otherwise return nullptr.
-    Func* ClearOrCreateVarInitFunc(const AST::Decl& decl);
+    Function* ClearOrCreateVarInitFunc(const AST::Decl& decl);
     // Translate `xxx$varInit` func for member var of common/specific decl, otherwise return nullptr.
-    Func* TranslateVarInit(const AST::VarDecl& varDecl);
+    Function* TranslateVarInit(const AST::VarDecl& varDecl);
     // Translate `A$varInit` func for member vars of common/specific decl, otherwise return nullptr.
-    Func* TranslateVarsInit(const AST::Decl& decl);
+    Function* TranslateVarsInit(const AST::Decl& decl);
     // Add `apply` `xxx$varInit` func of all fields into `A$varInit` func.
     void TranslateVariablesInit(const AST::Decl& parent, CHIR::Parameter& thisVar);
     // Add inlined apply for xxx$varInit func.
@@ -855,7 +850,7 @@ private:
     Value* TranslateCompoundAssign(const AST::AssignExpr& assign);
     Value* TranslateTrivialAssign(const AST::AssignExpr& assign);
 
-    Func* GetCurrentFunc() const
+    Function* GetCurrentFunc() const
     {
         CJC_ASSERT(!blockGroupStack.empty());
         return blockGroupStack.front()->GetOwnerFunc();

@@ -616,7 +616,7 @@ llvm::Value* GenerateBuiltinCall(IRBuilder2& irBuilder, const CHIRIntrinsicWrapp
 #endif
         default:
 #ifndef NDEBUG
-            Errorln("unsupported intrinsic kind: ", CHIR::INTRINSIC_KIND_TO_STRING_MAP.at(kind));
+            Errorln("unsupported intrinsic kind: ", CHIR::IntrinsicKindToString(kind));
 #endif
             break;
     }

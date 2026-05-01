@@ -7,14 +7,27 @@
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
+#include "cangjie/CHIR/Utils/ToStringUtils.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include <pthread.h>
+#include <sstream>
 
 using namespace Cangjie::CHIR;
 
+std::string FuncSigInfo::ToString() const
+{
+    std::stringstream ss;
+    ss << funcName;
+    CJC_NULLPTR_CHECK(funcType);
+    ss << TypeVecToString("<", genericTypeParams, ">");
+    ss << "(" << TypeVecToString("", funcType->GetParamTypes(), "") << ")";
+    ss << " -> " << funcType->GetReturnType()->ToString();
+    return ss.str();
+}
+
 VirtualMethodInfo::VirtualMethodInfo(
-    FuncSigInfo&& c, FuncBase* func, const AttributeInfo& a, FuncType& o, Type& p, Type& r)
+    FuncSigInfo&& c, Function* func, const AttributeInfo& a, FuncType& o, Type& p, Type& r)
     : condition(std::move(c)), instance(func), attr(a), originalType(&o), parentType(&p), returnType(&r)
 {
 }
@@ -24,7 +37,7 @@ AttributeInfo VirtualMethodInfo::GetAttributeInfo() const
     return attr;
 }
 
-FuncBase* VirtualMethodInfo::GetVirtualMethod() const
+Function* VirtualMethodInfo::GetVirtualMethod() const
 {
     return instance;
 }
@@ -72,7 +85,7 @@ bool VirtualMethodInfo::FuncSigIsMatched(const FuncSigInfo& other, CHIRBuilder& 
 }
 
 bool VirtualMethodInfo::FuncSigIsMatched(const FuncCallType& other,
-    std::unordered_map<const GenericType*, Type*>& replaceTable, CHIRBuilder& builder) const
+    std::unordered_map<const GenericType*, Type*> replaceTable, CHIRBuilder& builder) const
 {
     if (condition.funcName != other.funcName) {
         return false;
@@ -130,7 +143,7 @@ Type* VirtualMethodInfo::GetMethodInstRetType() const
     return returnType;
 }
 
-void VirtualMethodInfo::SetVirtualMethod(FuncBase* newFunc)
+void VirtualMethodInfo::SetVirtualMethod(Function* newFunc)
 {
     instance = newFunc;
 }
@@ -279,7 +292,7 @@ void VTableInDef::ConvertPrivateType(
 }
 
 void VTableInDef::UpdateItemInTypeVTable(
-    ClassType& srcClassTy, size_t index, FuncBase* newFunc, Type* newParentTy, const std::string& newName)
+    ClassType& srcClassTy, size_t index, Function* newFunc, Type* newParentTy, const std::string& newName)
 {
     for (auto& vtableIt : vtables) {
         if (vtableIt.GetSrcParentType() != &srcClassTy) {

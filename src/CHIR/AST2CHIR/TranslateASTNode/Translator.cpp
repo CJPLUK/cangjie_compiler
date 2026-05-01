@@ -162,11 +162,11 @@ Ptr<Block> Translator::GetCurrentBlock() const
     return currentBlock;
 }
 
-Ptr<Func> Translator::CreateEmptyGVInitFunc(const std::string& mangledName, const std::string& identifier,
+Ptr<Function> Translator::CreateEmptyGVInitFunc(const std::string& mangledName, const std::string& identifier,
     const std::string& rawMangledName, const std::string& pkgName, const Linkage& linkage, const DebugLocation& loc,
     bool isConst)
 {
-    Func* func = TryGetFromCache<Value, Func>(GLOBAL_VALUE_PREFIX + mangledName, deserializedVals);
+    Function* func = TryGetFromCache<Value, Function>(GLOBAL_VALUE_PREFIX + mangledName, deserializedVals);
     BlockGroup* blockGroup = nullptr;
     if (func) {
         // found deserialized one
@@ -174,7 +174,7 @@ Ptr<Func> Translator::CreateEmptyGVInitFunc(const std::string& mangledName, cons
         func->ReplaceBody(*blockGroup);
     } else {
         auto funcTy = builder.GetType<FuncType>(std::vector<Type*>{}, builder.GetUnitTy());
-        func = builder.CreateFunc(INVALID_LOCATION, funcTy, mangledName, identifier, rawMangledName, pkgName);
+        func = builder.CreateFunction(funcTy, mangledName, identifier, rawMangledName, pkgName);
         blockGroup = builder.CreateBlockGroup(*func);
         func->SetFuncKind(FuncKind::GLOBALVAR_INIT);
         func->EnableAttr(Attribute::NO_REFLECT_INFO);

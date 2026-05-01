@@ -30,8 +30,7 @@ bool IsSpecialFunction(const FuncDecl& fd)
         return true;
     }
     auto isGetCommandLineArgsFunc = fd.fullPackageName == CORE_PACKAGE_NAME && fd.identifier == GET_COMMAND_LINE_ARGS;
-    auto isImplictUsed =
-        Utils::In<std::string>(fd.fullPackageName, {CORE_PACKAGE_NAME, AST_PACKAGE_NAME}) &&
+    auto isImplictUsed = Utils::In<std::string>(fd.fullPackageName, {CORE_PACKAGE_NAME, AST_PACKAGE_NAME}) &&
         fd.TestAttr(Attribute::IMPLICIT_USED);
     auto isToAny = fd.identifier == TO_ANY;
     auto isMainInvoke = fd.identifier == MAIN_INVOKE;

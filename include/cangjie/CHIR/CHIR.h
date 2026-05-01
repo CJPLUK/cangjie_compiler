@@ -27,11 +27,11 @@ public:
           opts(ci.invocation.globalOptions),
           typeManager(ci.typeManager),
           sourceManager(ci.GetSourceManager()),
-          importManager(ci.importManager),
+          importManager(*ci.importManager),
           gim(ci.gim),
           diagEngine(ci.diag),
           cangjieHome(ci.cangjieHome),
-          pkg(pkg),
+          pkg(&pkg),
           outputPath(ci.invocation.globalOptions.output),
           kind(ci.kind),
           cachedInfo(ci.cachedInfo),
@@ -95,16 +95,16 @@ public:
         return builderList;
     }
 
-    std::unordered_map<std::string, CHIR::FuncBase*> GetImplicitFuncs() const
+    std::unordered_map<std::string, CHIR::Function*> GetImplicitFuncs() const
     {
         return implicitFuncs;
     }
 
-    std::vector<CHIR::FuncBase*> GetConstVarInitFuncs() const
+    std::vector<CHIR::Function*> GetConstVarInitFuncs() const
     {
         return initFuncsForConstVar;
     }
-    const std::vector<std::pair<const AST::Decl*, Func*>>& GetAnnoFactoryFuncs() const
+    const std::vector<std::pair<const AST::Decl*, Function*>>& GetAnnoFactoryFuncs() const
     {
         return annoFactoryFuncs;
     }
@@ -139,7 +139,7 @@ private:
     void NothingTypeExprElimination();
     void UselessExprElimination();
     void UnreachableBranchReporter();
-    void UselessFuncElimination();
+    void UselessFuncElimination(const std::string& passName);
     void RedundantLoadElimination();
     void UselessAllocateElimination();
     void RunGetRefToArrayElemOpt();
@@ -163,19 +163,16 @@ private:
     DevirtualizationInfo CollectDevirtualizationInfo();
     bool RunConstantEvaluation();
     bool RunIRChecker(const Phase& phase);
-    void UpdatePosOfMacroExpandNode();
     void RecordCodeInfoAtTheBegin();
     void RecordCodeInfoAtTheEnd();
     void RecordCHIRExprNum(const std::string& suffix);
     bool RunAnalysisForCJLint();
     void RunConstantAnalysis();
-    // run semantic checks that have to be performed on CHIR
-    bool RunAnnotationChecks();
     void EraseDebugExpr();
     void CFFIFuncWrapper();
     void ReplaceSrcCodeImportedValueWithSymbol();
     void Canonicalization();
-    void UpdateMemberVarPath();
+    void ClearASTResources();
 
     template <typename T>
     std::pair<Value*, Apply*> DoCFFIFuncWrapper(T& curFunc, bool isForeign, bool isExternal = true);
@@ -190,7 +187,7 @@ private:
     const GenericInstantiationManager* gim;
     DiagnosticEngine& diagEngine;
     const std::string& cangjieHome;
-    AST::Package& pkg;
+    AST::Package* pkg; // Prohibit the use after the ClearASTResources call.
     std::string outputPath;
     IncreKind kind;
     CompilationCache& cachedInfo;
@@ -212,16 +209,16 @@ private:
     // any change in incremental compilation, rollback is required.
     std::set<std::string> ccOutFuncsRawMangle;
     class DiagAdapter diag;
-    std::unordered_set<Func*> srcCodeImportedFuncs;
+    std::unordered_set<Function*> srcCodeImportedFuncs;
     std::unordered_set<GlobalVar*> srcCodeImportedVars;
     std::unordered_set<ClassDef*> uselessClasses;
-    std::unordered_set<Func*> uselessLambda;
-    std::unordered_map<std::string, FuncBase*> implicitFuncs;
-    std::vector<CHIR::FuncBase*> initFuncsForConstVar;
+    std::unordered_set<Function*> uselessLambda;
+    std::unordered_map<std::string, Function*> implicitFuncs;
+    std::vector<CHIR::Function*> initFuncsForConstVar;
     std::unordered_map<Block*, Terminator*> maybeUnreachable;
     /// Whether this CHIR convertor is translating Annotations
     bool isComputingAnnos{false};
-    std::vector<std::pair<const AST::Decl*, Func*>> annoFactoryFuncs;
+    std::vector<std::pair<const AST::Decl*, Function*>> annoFactoryFuncs;
     AST2CHIRNodeMap<CustomTypeDef> globalNominalCache;
 };
 } // namespace Cangjie::CHIR

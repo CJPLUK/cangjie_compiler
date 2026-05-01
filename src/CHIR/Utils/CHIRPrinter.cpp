@@ -31,7 +31,7 @@ static void ReplaceAll(std::string& str, const std::string& o, const std::string
     }
 }
 
-void CHIRPrinter::PrintCFG(const Func& func, const std::string& path)
+void CHIRPrinter::PrintCFG(const Function& func, const std::string& path)
 {
     std::fstream fout;
     std::string id = func.GetIdentifierWithoutPrefix();
@@ -60,7 +60,7 @@ void CHIRPrinter::PrintCFG(const Func& func, const std::string& path)
             if (LocalVar* res = expr->GetResult(); res != nullptr) {
                 info += res->GetIdentifier() + ": " + res->GetType()->ToString() + " = ";
             }
-            info += expr->ToString();
+            info += expr->ToString(0);
             ReplaceAll(info, "&", "&amp;");
             ReplaceAll(info, "<", "&lt;");
             ReplaceAll(info, ">", "&gt;");
