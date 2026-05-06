@@ -114,6 +114,8 @@ EnumCtorLayout EnumCtorTIOrTTGenerator::GenLayoutForTrivial(const std::string& t
         llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getOrInsertGlobal(name, i32ArrType));
     typeInfoOfFields->setInitializer(llvm::ConstantArray::get(i32ArrType, {llvm::ConstantInt::get(i32Ty, 0)}));
     typeInfoOfFields->setLinkage(llvm::GlobalValue::LinkageTypes::PrivateLinkage);
+    typeInfoOfFields->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+    typeInfoOfFields->setConstant(true);
     typeInfoOfFields->addAttribute(CJTI_OFFSETS_ATTR);
     layout.fieldTypes.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
     layout.offsets = llvm::ConstantExpr::getBitCast(typeInfoOfFields, i32Ty->getPointerTo());
@@ -162,6 +164,8 @@ EnumCtorLayout EnumCtorTIOrTTGenerator::GenLayoutForStructure(const CGEnumType* 
                 llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getOrInsertGlobal(name, i32ArrType));
             typeInfoOfFields->setInitializer(llvm::ConstantArray::get(i32ArrType, offSets));
             typeInfoOfFields->setLinkage(llvm::GlobalValue::LinkageTypes::PrivateLinkage);
+            typeInfoOfFields->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+            typeInfoOfFields->setConstant(true);
             typeInfoOfFields->addAttribute(CJTI_OFFSETS_ATTR);
             layout.offsets = llvm::ConstantExpr::getBitCast(typeInfoOfFields, i32Ty->getPointerTo());
         }
