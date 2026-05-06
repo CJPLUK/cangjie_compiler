@@ -114,6 +114,11 @@ public:
     std::set<Ptr<AST::Ty>> GetInstantiatedTys(Ptr<AST::Ty> ty, const MultiTypeSubst& mts);
     Ptr<AST::Ty> GetBestInstantiatedTy(Ptr<AST::Ty> ty, const MultiTypeSubst& mts);
     Ptr<AST::Ty> GetInstantiatedTy(Ptr<AST::Ty> ty, const TypeSubst& typeMapping);
+    /**
+     * Apply type substitution if typeMapping is not empty.
+     * This is a helper function that combines PackMapping and ApplySubstPack.
+     */
+    Ptr<AST::Ty> ApplyTypeSubstForTy(const TypeSubst& typeMapping, const Ptr<AST::Ty> ty);
     std::set<Ptr<AST::Ty>> ApplyTypeSubstForTys(const TypeSubst& subst, const std::set<Ptr<TyVar>>& tys);
     Ptr<AST::Ty> ApplySubstPack(const Ptr<AST::Ty> declaredTy, const SubstPack& maps, bool ignoreUnsolved = false);
     std::set<Ptr<AST::Ty>> ApplySubstPackNonUniq(
