@@ -30,10 +30,8 @@
 
 #if defined(__GNUC__) || defined(__clang__)
 #define CJC_PRINTF_FORMAT(fmtIdx, firstVarargIdx) __attribute__((format(printf, fmtIdx, firstVarargIdx)))
-#define CJC_WPRINTF_FORMAT(fmtIdx, firstVarargIdx) __attribute__((format(wprintf, fmtIdx, firstVarargIdx)))
 #else
 #define CJC_PRINTF_FORMAT(fmtIdx, firstVarargIdx)
-#define CJC_WPRINTF_FORMAT(fmtIdx, firstVarargIdx)
 #endif
 
 namespace Cangjie {

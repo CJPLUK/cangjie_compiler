@@ -58,7 +58,7 @@ inline TaskType GetMacroTaskType(const std::vector<uint8_t>& msg)
 bool MacroProcMsger::WriteToClientPipe(const uint8_t* buf, size_t size) const
 {
 #ifdef _WIN32
-    return WriteFile(hChildWrite, buf, size, nullptr, nullptr) == TRUE;
+    return WriteFile(hChildWrite, buf, static_cast<DWORD>(size), nullptr, nullptr) == TRUE;
 
 #else
     ssize_t res = write(pipefdC2P[1], buf, size);
@@ -73,7 +73,7 @@ bool MacroProcMsger::WriteToClientPipe(const uint8_t* buf, size_t size) const
 bool MacroProcMsger::ReadFromClientPipe(uint8_t* buf, size_t size) const
 {
 #ifdef _WIN32
-    return ReadFile(hChildRead, buf, size, nullptr, nullptr) == TRUE;
+    return ReadFile(hChildRead, buf, static_cast<DWORD>(size), nullptr, nullptr) == TRUE;
 #else
     ssize_t res = read(pipefdP2C[0], buf, size);
     // res == 0, means end of file; res == -1, indicates error accurred
