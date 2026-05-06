@@ -39,6 +39,32 @@ llvm::Value* TryGetSpecialRetValueStorage(IRBuilder2& irBuilder, const CHIR::All
     auto retValueCGType = CGType::GetOrCreate(irBuilder.GetCGModule(), overrideSrcFuncType->GetReturnType());
     return retValueCGType->GetSize() ? irBuilder.CreateEntryAlloca(*retValueCGType) : nullptr;
 }
+
+void TryEmitNullInitForDebugLocalClass(IRBuilder2& irBuilder, const CHIR::Allocate& alloca, llvm::Value* result)
+{
+    if (irBuilder.GetCGContext().GetCompileOptions().optimizationLevel != GlobalOptions::OptimizationLevel::O0) {
+        return;
+    }
+    auto* localVar = alloca.GetResult();
+    if (!localVar || localVar->GetSrcCodeIdentifier().empty()) {
+        return;
+    }
+    auto chirType = DeRef(*alloca.GetType());
+    if (!chirType->IsClass() || !llvm::isa<llvm::AllocaInst>(result)) {
+        return;
+    }
+
+    // Zero the stack slot for class-type variables at -O0 so cjdb does not read
+    // garbage typeinfo pointers before the variable is initialised.
+    auto allocTy = llvm::cast<llvm::AllocaInst>(result)->getAllocatedType();
+    auto nullPtr = llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(allocTy));
+    auto entryBB = &irBuilder.GetInsertBlock()->getParent()->getEntryBlock();
+    auto savedIP = irBuilder.saveIP();
+    irBuilder.SetInsertPoint(entryBB->getTerminator());
+    auto storeInst = irBuilder.CreateStore(nullPtr, result);
+    storeInst->setDebugLoc(llvm::DebugLoc());
+    irBuilder.restoreIP(savedIP);
+}
 } // namespace
 
 llvm::Value* HandleLoadExpr(IRBuilder2& irBuilder, const CHIR::Load& load)
@@ -257,7 +283,9 @@ llvm::Value* HandleMemoryExpression(IRBuilder2& irBuilder, const CHIR::Expressio
                 return retValueStorage;
             }
             irBuilder.EmitLocation(CHIRExprWrapper(alloca));
-            return GenerateAllocate(irBuilder, CHIRAllocateWrapper(alloca));
+            auto result = GenerateAllocate(irBuilder, CHIRAllocateWrapper(alloca));
+            TryEmitNullInitForDebugLocalClass(irBuilder, alloca, result);
+            return result;
         }
         case CHIR::ExprKind::LOAD: {
             auto& load = StaticCast<const CHIR::Load&>(chirExpr);
