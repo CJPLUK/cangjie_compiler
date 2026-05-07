@@ -459,6 +459,7 @@ void DesugarTrailingClosureExpr(TrailingClosureExpr& trailingClosure)
     } else {
         trailingClosure.desugarExpr = DesugarTrailClosureAsCall(trailingClosure);
     }
+    CopyBasicInfo(&trailingClosure, trailingClosure.desugarExpr.get());
 }
 
 const std::string LEVEL_IDENTGIFIER = "level";
