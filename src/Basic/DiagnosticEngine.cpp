@@ -33,6 +33,9 @@
 namespace Cangjie {
 // Define the errorData array (declaration is in DiagnosticEngine.h)
 const std::vector<ErrorData> errorData = {
+#if defined(ERROR)
+#undef ERROR
+#endif
 #define ERROR(Kind, ...) {__VA_ARGS__},
 #define WARNING(Kind, Group, ...) {__VA_ARGS__},
 #include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
