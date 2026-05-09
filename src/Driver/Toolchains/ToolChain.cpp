@@ -180,7 +180,7 @@ void ToolChain::CheckOtherDependeniesOfStaticLib(
             driverOptions.target.env == Triple::Environment::ANDROID) {
             otherLibs.emplace("-lc++");
             otherLibs.emplace("-lunwind");
-        } else if (!driverOptions.target.IsMacOS()) {
+        } else if (!driverOptions.target.IsMacOS() && !driverOptions.target.IsMinGW()) {
             dynamicLibraries.emplace("-lgcc_s");
         }
     }
