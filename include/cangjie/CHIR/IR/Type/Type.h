@@ -715,7 +715,7 @@ public:
      * @param builder The CHIR builder used for building the function.
      * @return The virtual table search result.
      */
-    std::optional<VTableSearchRes> GetFuncIndexInVTable(
+    std::vector<VTableSearchRes> GetFuncIndexInVTable(
         const FuncCallType& funcCallType, CHIR::CHIRBuilder& builder) const;
 
     /**

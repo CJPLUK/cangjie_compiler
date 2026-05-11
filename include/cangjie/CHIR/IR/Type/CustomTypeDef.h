@@ -235,13 +235,16 @@ public:
         size_t index, Function* newFunc, Type* newParentTy = nullptr, const std::string newName = "");
 
     /**
-    * @brief get virtual function's index in vtable
+    * @brief get virtual function's index in vtable, there may be many results, because for one func signature,
+    *        we can get many results in different src parent class. Because in different class's vtable,
+    *        the offset is different, so we need to store all results and left them to other function to judge,
+    *        we don't have enough infomation to judge which one is best here
     *
     * @param funcCallType function name and type
     * @param replaceTable an auxiliary map
     * @param builder CHIR builder
     */
-    std::optional<VTableSearchRes> GetFuncIndexInVTable(const FuncCallType& funcCallType,
+    std::vector<VTableSearchRes> GetFuncIndexInVTable(const FuncCallType& funcCallType,
         std::unordered_map<const GenericType*, Type*>& replaceTable, CHIRBuilder& builder) const;
 
     // ===--------------------------------------------------------------------===//

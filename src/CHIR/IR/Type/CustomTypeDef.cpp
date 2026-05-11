@@ -15,6 +15,7 @@
 #include <iostream>
 #include <optional>
 #include <sstream>
+#include <unordered_set>
 #include <utility>
 
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
@@ -27,6 +28,60 @@
 #include "cangjie/Utils/Utils.h"
 
 using namespace Cangjie::CHIR;
+
+namespace {
+/**
+ *  we choose the well matching but there may be many results, if there are many results, their `instance` must be same
+ *  so we need to define what function is NOT well matching, of course, the rule is from spec:
+ *  1. you can review how the `candidateTypes` are calculated
+ *  2. we assume that i and j are from `candidateTypes`, we define function `i` is NOT well matching if all parameters
+ *     in function `j` can be forwarded to function `i`, but not all parameters in function `i` can be forwarded to
+ *     function `j`
+ */
+std::vector<VTableSearchRes> GetWellMatchingResults(const std::vector<VTableSearchRes>& candidateRes,
+    const std::vector<FuncType*>& candidateTypes, CHIRBuilder& builder)
+{
+    if (candidateRes.size() <= 1) {
+        return candidateRes;
+    }
+    CJC_ASSERT(candidateRes.size() == candidateTypes.size());
+    auto candidateNum = candidateTypes.size();
+    std::vector<bool> targetMark(candidateNum, true);
+    for (size_t i = 0; i < candidateNum; ++i) {
+        if (!targetMark[i]) {
+            continue;
+        }
+        for (size_t j = i + 1; j < candidateNum; ++j) {
+            if (!targetMark[j]) {
+                continue;
+            }
+            auto iToJ = candidateTypes[i]->IsEqualOrInstantiatedTypeOf(*candidateTypes[j], builder);
+            auto jToI = candidateTypes[j]->IsEqualOrInstantiatedTypeOf(*candidateTypes[i], builder);
+            // according to spec, the more specific type is expected
+            // but if iToJ and jToI are both true, that means i and j have same func signature, we need to store both,
+            // if iToJ and jToI are both false, that means there is genric param in i and j, generic params can't
+            // be forwarded to each other
+            if (iToJ && !jToI) {
+                targetMark[j] = false;
+            } else if (!iToJ && jToI) {
+                targetMark[i] = false;
+                break;
+            }
+        }
+    }
+    std::vector<VTableSearchRes> result;
+    std::unordered_set<Function*> instances;
+    for (size_t i = 0; i < candidateNum; ++i) {
+        if (targetMark[i]) {
+            result.emplace_back(candidateRes[i]);
+            instances.emplace(candidateRes[i].instance);
+        }
+    }
+    CJC_ASSERT(!result.empty());
+    CJC_ASSERT(instances.size() == 1);
+    return result;
+}
+}
 
 void CustomTypeDef::AddMethod(Function* method)
 {
@@ -286,7 +341,7 @@ Function* CustomTypeDef::GetExpectedFunc(
     return foundFunc;
 }
 
-std::optional<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallType& funcCallType,
+std::vector<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallType& funcCallType,
     std::unordered_map<const GenericType*, Type*>& replaceTable, CHIRBuilder& builder) const
 {
     std::vector<VTableSearchRes> res;
@@ -308,13 +363,13 @@ std::optional<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCal
                     .offset = i
                 });
                 /** open class A<X> {
-                 *  open public func test<T>(x: X, y: X): Unit {
+                 *      open public func test<T>(x: X, y: X): Unit {
                  *          println("a");
                  *      }
                  *  }
                  *
                  *  open class B<X> <: A<X> {
-                 *  open public func test<Y>(x: C<Y>, y: C<Y>): Unit {
+                 *      open public func test<Y>(x: C<Y>, y: C<Y>): Unit {
                  *          println("b");
                  *      }
                  *  }
@@ -341,10 +396,7 @@ std::optional<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCal
             }
         }
     }
-    if (res.empty()) {
-        return std::nullopt;
-    }
-    return res[GetBestMatchingResultIndex(candidateTypes, builder)];
+    return GetWellMatchingResults(res, candidateTypes, builder);
 }
 
 std::string CustomTypeDef::ToString() const
