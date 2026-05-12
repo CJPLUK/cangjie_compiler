@@ -272,13 +272,6 @@ bool IsObject(const Node& node);
  */
 bool IsFwdClass(const Node& decl);
 
-/**
- * public func $getJavaRef(): Java_CFFI_JavaEntity {
- *     return Java_CFFI_JavaEntity()
- * }
- */
-void InsertJavaRefGetterStubWithBody(ClassDecl& decl);
-
 bool IsDeclAppropriateForSyntheticClassGeneration(const Node& decl);
 
 std::string GetSyntheticNameFromClassLike(const ClassLikeDecl& cld);
@@ -315,7 +308,7 @@ bool IsDeclAppropriateForSyntheticClassGeneration(const AST::Decl& decl);
  * Example of generated synthetic
  * ```
  * interface CL <: ObjCId {}
- * 
+ *
  * class CL$impl <: CL {}
  * ```
  */

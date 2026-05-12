@@ -679,7 +679,11 @@ public:
     static bool IsInteropLibAccessible(ImportManager& importManager);
 
 private:
-    static constexpr auto INTEROPLIB_VERSION = 9;
+   /**
+    * Version value should be the same as for java interop library for the same SDK.
+    * Version value must be bumped up on: API changes in interop library that require compatibility with cjc.
+    */
+    static constexpr auto INTEROPLIB_VERSION = 10;
     static constexpr auto INTEROPLIB_PACKAGE_NAME = "java.internal";
 
     const std::vector<TypeKind> supportedArrayPrimitiveElementType = {
