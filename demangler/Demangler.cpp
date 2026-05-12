@@ -379,10 +379,10 @@ void Demangler<T>::ErrorLog([[maybe_unused]] const char* msg) const
 }
 
 template<typename T>
-bool Demangler<T>::MatchForward(const char pattern[], uint32_t len) const
+bool Demangler<T>::MatchForward(const char pattern[], size_t len) const
 {
     auto maxLen = mangledName.Length() - currentIndex;
-    len = len > maxLen ? static_cast<uint32_t>(maxLen) : len;
+    len = len > maxLen ? maxLen : len;
     auto prefix = mangledName.SubStr(currentIndex, len);
     return prefix == T{ pattern };
 }
