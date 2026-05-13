@@ -164,7 +164,7 @@ void ToolChain::CheckOtherDependeniesOfStaticLib(
         dynamicLibraries.emplace("-ldl");
     } else if (libName == "libcangjie-std-ast.a") {
         if (driverOptions.target.os == Triple::OSType::DARWIN) {
-            otherLibs.emplace("-lcangjie- std-astFFI");
+            otherLibs.emplace("-lcangjie-std-astFFI");
         } else {
             otherLibs.emplace("-l:libcangjie-std-astFFI.a");
         }
