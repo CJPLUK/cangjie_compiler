@@ -73,9 +73,12 @@ ERROR(driver_cfg_file_read_failed, "read '%s' failed, due to '%s'")
 WARNING(driver_cfg_path_ignored, DRIVER_ARG,
     "conditional compilation has been set by key-value mode, cfg.toml will be ignored")
 
-
 ERROR(driver_invalid_compile_as_exe, "--compile-as-exe only takes effect when lto mode is enabled")
 ERROR(driver_invalid_compile_as_exe_platform, "Windows, Mac, IOS does not support --compile-as-exe")
+
+ERROR(driver_invalid_visible_pkgs, "--lto-keep-pkg-visibility only takes effect when lto mode is enabled")
+ERROR(driver_invalid_visible_pkgs_conflict, "--lto-keep-pkg-visibility and --compile-as-exe cannot be used together")
+WARNING(driver_visible_pkgs_only_for_dylib, DRIVER_ARG, "--lto-keep-pkg-visibility only takes effect when outputting a dylib")
 
 WARNING(driver_useless_option, DEPRECATED, "option '%s' is deprecated and will be removed in the future")
 

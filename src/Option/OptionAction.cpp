@@ -623,6 +623,22 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         return true;
     }},
     { Options::ID::COMPILE_AS_EXE, OPTION_TRUE_ACTION(opts.enableCompileAsExe = true) },
+
+    { Options::ID::LTO_KEEP_PKG_VISIBILITY, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+    if (arg.value.empty()) {
+        opts.ltoHideAllPkgs = true;
+    } else {
+        auto pkgs = SplitString(arg.value, ",");
+        for (auto pkg : pkgs) {
+            TrimString(pkg);
+            if (!pkg.empty()) {
+                opts.AddLtoVisiblePkg(pkg);
+            }
+        }
+    }
+    return true;
+    }},
+
     { Options::ID::TARGET, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         return ParseTargetTriple(opts, arg.value);
     }},
