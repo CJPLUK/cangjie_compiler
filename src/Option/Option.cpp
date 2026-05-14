@@ -268,6 +268,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckSanitizerOptions();
     success = success && CheckLtoOptions();
     success = success && CheckCompileAsExeOptions();
+    success = success && CheckLTOPkgVisibilityOptions();
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
     success = success && ReprocessObfuseOption();
@@ -608,6 +609,28 @@ bool GlobalOptions::CheckCompileAsExeOptions() const
         diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_compile_as_exe_platform, DEFAULT_POSITION);
         return false;
     }
+    return true;
+}
+
+bool GlobalOptions::CheckLTOPkgVisibilityOptions() const
+{
+    if (IsLTOPkgVisibilityEnabled() && !IsLTOEnabled()) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_visible_pkgs, DEFAULT_POSITION);
+        return false;
+    }
+
+    if (!ltoVisiblePkgs.empty() && IsCompileAsExeEnabled()) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_visible_pkgs_conflict, DEFAULT_POSITION);
+        return false;
+    }
+
+    if (IsLTOPkgVisibilityEnabled() && outputMode != OutputMode::SHARED_LIB) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_visible_pkgs_only_for_dylib, DEFAULT_POSITION);
+    }
+
     return true;
 }
 
@@ -993,7 +1016,8 @@ void GlobalOptions::DeprecatedOptionCheck(const OptionArgInstance& arg) const
 {
     // Check if the option is deprecated which will be removed in the future release
     Options::ID id = arg.info.GetID();
-    const std::unordered_set<Options::ID> deprecatedOptions{Options::ID::STATIC_LIBS, Options::ID::DY_LIBS};
+    const std::unordered_set<Options::ID> deprecatedOptions{
+        Options::ID::STATIC_LIBS, Options::ID::DY_LIBS, Options::ID::COMPILE_AS_EXE};
     DiagnosticEngine diag;
     if (deprecatedOptions.find(id) != deprecatedOptions.end()) {
         std::string substitutableOption = "";
