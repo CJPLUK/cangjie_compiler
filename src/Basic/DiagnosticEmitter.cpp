@@ -902,7 +902,7 @@ bool IsTextOnlyWarning(const WarnGroup& warnGroup)
  *
  * @param diagnostic The diagnostic object whose message will be swapped with its note.
  */
-void SwapErrorMessageWithNote(Diagnostic& diagnostic)
+void SwapErrorMessageWithNote(Diagnostic& diagnostic, const SourceManager& sm)
 {
     // Check if the diagnostic is a macro call and has sub-diagnostics.
     if (!diagnostic.curMacroCall || diagnostic.subDiags.empty()) {
@@ -911,7 +911,20 @@ void SwapErrorMessageWithNote(Diagnostic& diagnostic)
     // Check if the diagnostic is in the current file.
     auto pInvocation = diagnostic.curMacroCall->GetInvocation();
     auto mainHint = diagnostic.mainHint;
-    if ((pInvocation && pInvocation->isCurFile) || mainHint.range.begin.isCurFile || diagnostic.start.isCurFile) {
+    // If any branch below is true, the diagnostic already points to user source, so no message-note swap is needed:
+    // 1) macroDiagInfo && macroDiagInfo->isCurFile:
+    //    tokens are not changed after macro expansion.
+    // 2) mainHint.range.begin.isCurFile:
+    //    refactor-style diagnostic main hint is already in original source file.
+    // 3) diagnostic.start.isCurFile:
+    //    legacy diagnostic start position is already in original source file.
+    // 4) !IsInMacroCallSourceFile(mainHint) || !IsInMacroCallSourceFile(diagnostic.start):
+    //    CHIR-stage positions do not carry isCurFile, so we cannot rely on cases 1–3 alone.
+    //    Use whether the position's fileID maps to a *.macrocall source in SourceManager instead.
+    if ((pInvocation && pInvocation->isCurFile) || mainHint.range.begin.isCurFile ||
+        (diagnostic.start != INVALID_POSITION && diagnostic.start.isCurFile) ||
+        !sm.IsInMacroCallSourceFile(mainHint.range.begin) ||
+        (diagnostic.start != INVALID_POSITION && !sm.IsInMacroCallSourceFile(diagnostic.start))) {
         return;
     }
     // Swap error message with note.
@@ -940,7 +953,7 @@ void SwapErrorMessageWithNote(Diagnostic& diagnostic)
 bool DiagnosticEmitterImpl::Emit()
 {
     // Swap error message with note when dealing with macro calls.
-    SwapErrorMessageWithNote(diag);
+    SwapErrorMessageWithNote(diag, sm);
     const std::map<DiagSeverity, std::string_view> seveToStr = {
         {DiagSeverity::DS_ERROR, "error"}, {DiagSeverity::DS_WARNING, "warning"},
         {DiagSeverity::DS_NOTE, "note"},

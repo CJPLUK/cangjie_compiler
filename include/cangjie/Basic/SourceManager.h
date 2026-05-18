@@ -176,6 +176,12 @@ public:
     std::string GetContentBetween(unsigned int fileID, const Position& begin, const Position& end,
         const std::string& importGenericContent = "") const;
 
+    /**
+     * Check whether the given position lies in the macro expansion shadow source (*.macrocall).
+     * @param pos The position to check.
+     */
+    bool IsInMacroCallSourceFile(const Position& pos) const;
+
     static const std::string testPkgSuffix;
 };
 } // namespace Cangjie
