@@ -199,6 +199,11 @@ public:
         return result;
     }
 
+    /**
+     * process std dependency，where 'fullPackageName' comes from .bc inputs
+     */
+    bool AnalyzeDepStdPkgsOfBC(const std::string& fullPackageName);
+    
     bool IsMacroRelatedPackageName(const std::string& fullPackageName) const;
 
     /**
