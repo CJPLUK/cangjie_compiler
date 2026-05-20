@@ -86,8 +86,12 @@ bool CompileStrategy::OverflowStrategy() const
 void CompileStrategy::PerformDesugar() const
 {
     Utils::ProfileRecorder recorder("Semantic", "Desugar Before TypeCheck");
+    const auto found = ci->invocation.globalOptions.passedWhenKeyValue.find("APILevel_level");
+    const std::string compatibleSDKVersion =
+        found == ci->invocation.globalOptions.passedWhenKeyValue.end() ? "" : found->second;
     for (auto& [pkg, ctx] : ci->pkgCtxMap) {
-        Cangjie::PerformDesugarBeforeTypeCheck(*pkg, ci->invocation.globalOptions.enableMacroInLSP);
+        Cangjie::PerformDesugarBeforeTypeCheck(
+            *pkg, ci->invocation.globalOptions.enableMacroInLSP, compatibleSDKVersion);
     }
 }
 

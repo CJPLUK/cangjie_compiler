@@ -386,13 +386,18 @@ ERROR(sema_ifavailable_unknow_arg_name, "unknown parameter name '%s'")
 // @APILevel
 ERROR(sema_apilevel_multi_anno, "annotate more than one '@!APILevel'")
 WARNING(sema_apilevel_missing_arg, APILEVEL_CHECK,
-    "annotation missing named argument '%s' or unable to read as numerical value")
+    "'@!APILevel' annotation provides no valid '%s'; any accompanying error explains the specific cause")
+ERROR(sema_apilevel_invalid_version_format,
+    "invalid version format '%s' in @!APILevel 'since', expected 'major[.minor[.patch]]' with non-negative integers")
 ERROR(sema_only_literal_support, "only %s literal values are supported for now")
 ERROR(sema_apilevel_ref_higher,
     "cannot reference '%s'(level: %s) which higher than level of the current scope(level: %s)")
 WARNING(sema_apilevel_syscap_warning, APILEVEL_CHECK, "inappropriate syscap '%s'")
 ERROR(sema_apilevel_syscap_error, "inappropriate syscap '%s'")
 ERROR(sema_apilevel_multi_diff_syscap, "declaration mark with different syscap")
+ERROR(sema_apilevel_integer_form_unsupported,
+    "'@!APILevel' no longer accepts an integer version literal; use '@!APILevel[since: \"X.Y.Z\"]' with a dotted "
+    "semantic version string instead")
 ERROR(sema_ifavailable_level_limit,
     "`@IfAvaliable` feature is not avaliable in device where the APILevel is less than 19 due to missing capatability "
     "in ROM")

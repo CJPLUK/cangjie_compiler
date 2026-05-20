@@ -58,6 +58,7 @@
 /src/Parse/ParseMacro.cpp @mini-tang
 /src/Sema/ @huohuixin
 /src/Sema/GenericInstantiation @Augus_Jan
+/src/Sema/Plugin/ @Augus_Jan
 /src/Sema/NativeFFI/ @belyaev-mikhail
 /src/Sema/Test/ @belyaev-mikhail
 /src/Sema/CJMP/ @belyaev-mikhail

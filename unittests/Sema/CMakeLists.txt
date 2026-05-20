@@ -45,3 +45,14 @@ target_link_libraries(
     GTest::gtest_main
     TestCompilerInstanceObject)
 add_test(NAME CommentsTest COMMAND CommentsTest)
+
+add_executable(APILevelVersionTest APILevelVersionTest.cpp)
+target_link_libraries(
+    APILevelVersionTest
+    cangjie-lsp
+    ${LINK_LIBS}
+    boundscheck-static
+    GTest::gtest
+    GTest::gtest_main
+    TestCompilerInstanceObject)
+add_test(NAME APILevelVersionTest COMMAND APILevelVersionTest)
