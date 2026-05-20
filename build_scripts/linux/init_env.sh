@@ -50,4 +50,5 @@ if test "0$cjbuildenv" -ne "01"; then
   echo $WORKSPACE
 
   export cjbuildenv=1
+  export CMAKE_BUILD_PARALLEL_LEVEL=$((`nproc`>16 ? 16 : `nproc`))
 fi
