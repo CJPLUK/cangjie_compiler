@@ -96,7 +96,7 @@ public:
     /** This should not be used for source package. */
     const AST::OrderedDeclSet& GetPackageMembersByName(const AST::Package& package, const std::string& name) const;
     /** Get accessible 'targetPackage' decls from 'srcPackage'. NOTE: used by LSP */
-    AST::OrderedDeclSet GetPackageMembers(
+    std::map<std::string, AST::OrderedDeclSet> GetPackageMembers(
         const std::string& srcFullPackageName, const std::string& targetFullPackageName) const;
     std::vector<std::pair<std::string, std::vector<Ptr<AST::Decl>>>> GetImportedDecls(const AST::File& file) const;
 
