@@ -1007,7 +1007,7 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
         } else {
             kind = DiagKindRefactor::sema_need_member_implementation;
         }
-        DiagnosticBuilder builder = diag.DiagnoseRefactor(kind, structDecl.begin, structName);
+        DiagnosticBuilder builder = diag.DiagnoseRefactor(kind, structDecl, structName);
         std::stable_sort(unImplementedMembers.begin(), unImplementedMembers.end(), CompMemberSignatureByPosAndTy);
         for (auto member : unImplementedMembers) {
             std::string identifierName;
@@ -1020,7 +1020,7 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
                 member->decl->outerDecl->astKind == ASTKind::CLASS_DECL ? "abstract" : "interface";
             std::string note =
                 "unimplemented " + abstractType + " " + DeclKindToString(*member->decl) + " " + identifierName;
-            builder.AddNote(member->decl->GetBegin(), note);
+            builder.AddNote(*member->decl, note);
         }
     }
 }

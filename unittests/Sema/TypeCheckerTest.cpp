@@ -360,3 +360,55 @@ TEST_F(TypeCheckerTest, DISABLED_SpawnTest)
     EXPECT_TRUE(ty1->typeArgs.size() == 1);
     EXPECT_TRUE(ty1->typeArgs[0]->kind == TypeKind::TYPE_INT64);
 }
+
+TEST_F(TypeCheckerTest, DiagnosticNodeTest)
+{
+    std::string code = R"(
+interface I {
+    func foo(): Unit
+}
+
+class C1 <: I {}
+struct S1 <: I {}
+
+main() {}
+    )";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->Compile(CompileStage::SEMA);
+
+    auto diags = diag.GetCategoryDiagnostic(DiagCategory::SEMA);
+    int foundDiag = 0;
+    for (auto& d : diags) {
+        if (d.rKind == DiagKindRefactor::sema_class_need_abstract_modifier_or_func_need_impl) {
+            foundDiag++;
+            EXPECT_TRUE(d.node != nullptr);
+            EXPECT_EQ(d.node->astKind, ASTKind::CLASS_DECL);
+            auto classDecl = StaticAs<ASTKind::CLASS_DECL>(d.node);
+            EXPECT_EQ(classDecl->identifier.Val(), "C1");
+            EXPECT_FALSE(d.subDiags.empty());
+            auto noteNode = d.subDiags[0].GetNodeSubDiagAt();
+            EXPECT_TRUE(noteNode != nullptr);
+            EXPECT_EQ(noteNode->astKind, ASTKind::FUNC_DECL);
+            auto funcDecl = StaticAs<ASTKind::FUNC_DECL>(noteNode);
+            EXPECT_EQ(funcDecl->identifier.Val(), "foo");
+            EXPECT_EQ(funcDecl->outerDecl->identifier.Val(), "I");
+        }
+        if (d.rKind == DiagKindRefactor::sema_need_member_implementation) {
+            foundDiag++;
+            EXPECT_TRUE(d.node != nullptr);
+            EXPECT_EQ(d.node->astKind, ASTKind::STRUCT_DECL);
+            auto structDecl = StaticAs<ASTKind::STRUCT_DECL>(d.node);
+            EXPECT_EQ(structDecl->identifier.Val(), "S1");
+            EXPECT_FALSE(d.subDiags.empty());
+            auto noteNode = d.subDiags[0].GetNodeSubDiagAt();
+            EXPECT_TRUE(noteNode != nullptr);
+            EXPECT_EQ(noteNode->astKind, ASTKind::FUNC_DECL);
+            auto funcDecl = StaticAs<ASTKind::FUNC_DECL>(noteNode);
+            EXPECT_EQ(funcDecl->identifier.Val(), "foo");
+            EXPECT_EQ(funcDecl->outerDecl->identifier.Val(), "I");
+        }
+    }
+    EXPECT_EQ(foundDiag, 2);
+}
