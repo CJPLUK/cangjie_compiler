@@ -52,6 +52,15 @@ ToolFuture::State LinuxProcessFuture::GetState()
 
     if (WIFEXITED(uStatus)) {
         exitCode = WEXITSTATUS(uStatus);
+    } else if (WIFSIGNALED(uStatus)) {
+        // Signal termination has no exit status; encode the signal so failures are not reported as exit code 0.
+        constexpr int EXIT_CODE_SIGNAL_BASE = 128;
+        exitCode = EXIT_CODE_SIGNAL_BASE + WTERMSIG(uStatus);
+    }
+    if (result < 0) {
+        // waitpid returns -1 on failure. In this case, we set exitCode to -1 to indicate an error.
+        constexpr int EXIT_CODE_WAITPID_ERROR = -1;
+        exitCode = EXIT_CODE_WAITPID_ERROR;
     }
     if (result < 0 || status != 0) {
         // If an error occurs because the file is deleted, the error information is not printed.
