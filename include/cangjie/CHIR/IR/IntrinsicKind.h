@@ -126,7 +126,6 @@ static const std::string FUTURE_NOTIFYALL_NAME = "futureNotifyAll";    // cjnati
 static const std::string TASK_IS_COMPLETE_NAME = "taskIsComplete";          // cjnative only
 static const std::string TASK_WAIT_NAME = "taskWait";                       // cjnative only
 static const std::string TASK_NOTIFYALL_NAME = "taskNotifyAll";             // cjnative only
-static const std::string TASK_NOTIFY_END_THREAD_NAME = "taskNotifyEndThread"; // cjnative only
 
 // ============================ cjnative only start ==============================
 // REFLECTION
@@ -365,7 +364,6 @@ enum IntrinsicKind : uint16_t {
     TASK_IS_COMPLETE,       // cjnative only
     TASK_WAIT,              // cjnative only
     TASK_NOTIFYALL,         // cjnative only
-    TASK_NOTIFY_END_THREAD, // cjnative only
 
     IS_THREAD_OBJECT_INITED,
     GET_THREAD_OBJECT,
@@ -686,7 +684,6 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {TASK_IS_COMPLETE_NAME, TASK_IS_COMPLETE},
     {TASK_WAIT_NAME, TASK_WAIT},
     {TASK_NOTIFYALL_NAME, TASK_NOTIFYALL},
-    {TASK_NOTIFY_END_THREAD_NAME, TASK_NOTIFY_END_THREAD},
 
     {OBJECT_REFEQ_NAME, OBJECT_REFEQ},
 
@@ -812,7 +809,6 @@ static const std::unordered_map<std::string, IntrinsicKind> cjnativeConcurrentIn
     {TASK_IS_COMPLETE_NAME, TASK_IS_COMPLETE},
     {TASK_WAIT_NAME, TASK_WAIT},
     {TASK_NOTIFYALL_NAME, TASK_NOTIFYALL},
-    {TASK_NOTIFY_END_THREAD_NAME, TASK_NOTIFY_END_THREAD},
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> runtimeIntrinsicMap = {

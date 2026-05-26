@@ -160,7 +160,6 @@ const std::unordered_map<CHIR::IntrinsicKind, IntrinsicFuncInfo> INTRINSIC_KIND_
     {CHIR::IntrinsicKind::TASK_WAIT, {"CJ_MCC_TaskWait", {}}},
     {CHIR::IntrinsicKind::FUTURE_NOTIFYALL, {"CJ_MCC_FutureNotifyAll", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::TASK_NOTIFYALL, {"CJ_MCC_TaskNotifyAll", {FAST_NATIVE_ATTR}}},
-    {CHIR::IntrinsicKind::TASK_NOTIFY_END_THREAD, {"CJ_MCC_TaskNotifyEndThread", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::IS_THREAD_OBJECT_INITED, {"CJ_MCC_IsThreadObjectInited", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::GET_THREAD_OBJECT, {"CJ_MCC_GetCurrentCJThreadObject", {FAST_NATIVE_ATTR}}},
     {CHIR::IntrinsicKind::SET_THREAD_OBJECT, {"CJ_MCC_SetCurrentCJThreadObject", {FAST_NATIVE_ATTR}}},
