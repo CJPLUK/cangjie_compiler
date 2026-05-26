@@ -41,7 +41,7 @@ static void GetChildMessages(std::vector<ChildMessage>& childMessages, const Can
     }
 }
 
-static auto CreatItmeInfoVec(FlatBufferBuilder& builder, const std::vector<Cangjie::ItemInfo>& items)
+static auto CreatItemInfoVec(FlatBufferBuilder& builder, const std::vector<Cangjie::ItemInfo>& items)
 {
     std::vector<Offset<MacroMsgFormat::ItemInfo>> itemsVec;
     for (auto& it : items) {
@@ -97,9 +97,9 @@ static auto CreateDiagVec(FlatBufferBuilder& builder, const std::vector<Cangjie:
 static auto CreateMacroCall(FlatBufferBuilder& builder, const Cangjie::MacroCall& macCall)
 {
     auto& inv = *(macCall.GetInvocation());
-    auto& idPos = inv.identifierPos;
+    auto& idPos = inv.macroCallDiagInfo.identifierPos;
     auto pos = MacroMsgFormat::Position(idPos.fileID, idPos.line, idPos.column);
-    auto id = CreateIdInfo(builder, builder.CreateString(inv.identifier), &pos);
+    auto id = CreateIdInfo(builder, builder.CreateString(inv.macroCallDiagInfo.identifier), &pos);
 
     auto args = builder.CreateVector(CreateTokenVec(builder, inv.args));
     auto attrs = builder.CreateVector(CreateTokenVec(builder, inv.attrs));
@@ -112,7 +112,7 @@ static auto CreateMacroCall(FlatBufferBuilder& builder, const Cangjie::MacroCall
     for (auto& msg : childMessages) {
         auto childName = builder.CreateString(msg.childName);
         childMsgVec.push_back(
-            CreateChildMsg(builder, childName, builder.CreateVector(CreatItmeInfoVec(builder, msg.items))));
+            CreateChildMsg(builder, childName, builder.CreateVector(CreatItemInfoVec(builder, msg.items))));
     }
 
     auto childMsges = builder.CreateVector(childMsgVec);
@@ -237,23 +237,28 @@ static void DeserializeItemsFromItemsBuf(
     uoffset_t num = itemsBuf.size();
     items.resize(num);
     for (uoffset_t i = 0; i < num; i++) {
-        items[i].key = itemsBuf.Get(i)->key()->str();
-        switch (itemsBuf.Get(i)->value_type()) {
+        auto itemBuf = itemsBuf.Get(i);
+        if (itemBuf->key() == nullptr) {
+            Errorln("DeserializeItemsFromItemsBuf key is null");
+            continue; // skip item with empty key
+        }
+        items[i].key = itemBuf->key()->str();
+        switch (itemBuf->value_type()) {
             case OptionValue_sValue:
                 items[i].kind = ItemKind::STRING;
-                items[i].sValue = itemsBuf.Get(i)->value_as_sValue()->str();
+                items[i].sValue = itemBuf->value_as_sValue()->str();
                 break;
             case OptionValue_iValue:
                 items[i].kind = ItemKind::INT;
-                items[i].iValue = itemsBuf.Get(i)->value_as_iValue()->val();
+                items[i].iValue = itemBuf->value_as_iValue()->val();
                 break;
             case OptionValue_bValue:
                 items[i].kind = ItemKind::BOOL;
-                items[i].bValue = itemsBuf.Get(i)->value_as_bValue()->val();
+                items[i].bValue = itemBuf->value_as_bValue()->val();
                 break;
             case OptionValue_tValue:
                 items[i].kind = ItemKind::TKS;
-                DeserializeTokensFromOffsetTokenVec(items[i].tValue, *(itemsBuf.Get(i)->value_as_tValue()->val()));
+                DeserializeTokensFromOffsetTokenVec(items[i].tValue, *(itemBuf->value_as_tValue()->val()));
                 break;
             case OptionValue_NONE:
                 [[fallthrough]]; // error
@@ -322,15 +327,15 @@ bool MacroEvalMsgSerializer::SerializeMacroCallResultMsg(const MacroCall& macCal
     }
     builder.Clear();
     auto& inv = *(macCall.GetInvocation());
-    auto& idPos = inv.identifierPos;
+    auto& idPos = inv.macroCallDiagInfo.identifierPos;
     auto pos = MacroMsgFormat::Position(idPos.fileID, idPos.line, idPos.column);
-    auto id = CreateIdInfo(builder, builder.CreateString(inv.identifier), &pos);
+    auto id = CreateIdInfo(builder, builder.CreateString(inv.macroCallDiagInfo.identifier), &pos);
 
     auto tks = builder.CreateVector(CreateTokenVec(builder, inv.newTokens));
 
     Offset<Vector<Offset<MacroMsgFormat::ItemInfo>>> items;
     if (!macCall.items.empty()) {
-        items = builder.CreateVector(CreatItmeInfoVec(builder, macCall.items));
+        items = builder.CreateVector(CreatItemInfoVec(builder, macCall.items));
     } else if (macCall.recordMacroInfo.size() / MACRO_SETITEM_INFO_NUM > 0) {
         // serialize and free ffi malloc.
         items = CreateItemsVecFromRecordMacroInfo(builder, macCall.recordMacroInfo);

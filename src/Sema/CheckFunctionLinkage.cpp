@@ -259,7 +259,7 @@ private:
         } else if (auto tad = DynamicCast<TypeAliasDecl>(target)) {
             tad->linkage = Linkage::EXTERNAL;
         } else {
-            AddExportedTy(target->ty);
+            AddExportedTy(target->GetTy());
         }
     }
     void SetFuncTargetLinkage(FuncDecl& fd, bool byTy = false);
@@ -334,7 +334,7 @@ void ExternalLinkageAnalyzer::PerformPublicType(const OwnedPtr<Decl>& decl)
         if (super->TestAttr(Attribute::IMPORTED)) {
             continue;
         }
-        AddExportedTy(super->ty);
+        AddExportedTy(super->GetTy());
     }
 
     if (auto classDecl = DynamicCast<ClassDecl>(decl.get())) {
@@ -358,7 +358,7 @@ void ExternalLinkageAnalyzer::HandleMemberDeclInTopLevelDecl(Decl& decl)
             return;
         }
         if (fd->IsExportedDecl()) {
-            AddExportedTy(fd->ty);
+            AddExportedTy(fd->GetTy());
             if (CanBeSrcExported(*fd)) {
                 AddSrcExportedDecl(fd);
             }
@@ -370,7 +370,7 @@ void ExternalLinkageAnalyzer::HandleMemberDeclInTopLevelDecl(Decl& decl)
         return;
     }
     if (IsMemberInMemLayout(*vd)) {
-        AddExportedTy(vd->ty);
+        AddExportedTy(vd->GetTy());
     }
     if (IsInstMemberVarInGenericDecl(*vd)) {
         AddSrcExportedDecl(vd);
@@ -378,7 +378,7 @@ void ExternalLinkageAnalyzer::HandleMemberDeclInTopLevelDecl(Decl& decl)
     if (!vd->IsExportedDecl()) {
         return;
     }
-    AddExportedTy(vd->ty);
+    AddExportedTy(vd->GetTy());
     if (auto pd = DynamicCast<PropDecl>(vd); pd && (pd->isConst || pd->HasAnno(AnnotationKind::FROZEN))) {
         for (auto& getter : std::as_const(pd->getters)) {
             AddSrcExportedDecl(getter.get());
@@ -539,12 +539,12 @@ void ExternalLinkageAnalyzer::SetFuncTargetLinkage(FuncDecl& fd, [[maybe_unused]
     if (CanBeSrcExported(fd)) {
         AddSrcExportedDecl(&fd);
     }
-    AddExportedTy(fd.ty);
+    AddExportedTy(fd.GetTy());
     if (fd.outerDecl) {
         fd.outerDecl->linkage = Linkage::EXTERNAL;
         if (auto id = DynamicCast<InheritableDecl>(fd.outerDecl)) {
             for (auto& type : std::as_const(id->inheritedTypes)) {
-                AddExportedTy(type->ty);
+                AddExportedTy(type->GetTy());
             }
         }
     }
@@ -575,7 +575,8 @@ void ExternalLinkageAnalyzer::SetPropTargetLinkage(PropDecl& pd, bool byTy)
 void ExternalLinkageAnalyzer::SetVarTargetLinkage(VarDecl& vd, bool byTy, bool isConstInCJMP)
 {
     const bool isPrivateStatic = vd.TestAttr(Attribute::PRIVATE, Attribute::STATIC);
-    if (!IsGlobalOrMember(vd) || (byTy && vd.astKind == ASTKind::VAR_DECL && isPrivateStatic && !isConstInCJMP)) {
+    if (!IsGlobalOrMember(vd) ||
+        (byTy && vd.astKind == ASTKind::VAR_DECL && isPrivateStatic && !isConstInCJMP)) {
         return;
     }
     vd.linkage = Linkage::EXTERNAL;
@@ -583,12 +584,12 @@ void ExternalLinkageAnalyzer::SetVarTargetLinkage(VarDecl& vd, bool byTy, bool i
         IsMemberVarShouldBeSrcExported(vd)) {
         AddSrcExportedDecl(&vd);
     }
-    AddExportedTy(vd.ty);
+    AddExportedTy(vd.GetTy());
     if (vd.outerDecl) {
         vd.outerDecl->linkage = Linkage::EXTERNAL;
         if (auto id = DynamicCast<InheritableDecl>(vd.outerDecl)) {
             for (auto& type : std::as_const(id->inheritedTypes)) {
-                AddExportedTy(type->ty);
+                AddExportedTy(type->GetTy());
             }
         }
     }

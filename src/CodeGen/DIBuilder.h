@@ -160,7 +160,7 @@ private:
         }
         return StaticCast<const CHIR::EnumType&>(ty).IsOption();
     }
-    
+
     static std::string GenerateGenericFuncName(
         const std::string& funcName, const std::vector<CHIR::GenericType*>& genericTypeParams)
     {

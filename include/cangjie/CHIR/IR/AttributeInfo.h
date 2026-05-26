@@ -8,9 +8,8 @@
 #define CANGJIE_CHIR_ATTRIBUTEINFO_H
 
 #include <bitset>
-#include <stdint.h>
-#include <unordered_map>
 #include <cstdint>
+#include <unordered_map>
 
 namespace Cangjie::CHIR {
 
@@ -67,6 +66,7 @@ enum class Attribute {
     OBJ_C_MIRROR,     ///< Mark whether it's @ObjCMirror declaration (binding for an Objective-C type).
     HAS_INITED_FIELD, ///< Mark whether a node is a special flag, which marks the class instance as initialized.
     JAVA_HAS_DEFAULT, ///< Mark whether JAVA_MIRROR interface has default method.
+    PREVIOUSLY_DESERIALIZED, /// Mark that deserialization occurs not in the newly created node, but in an existing one.
 
     ATTR_END
 };
@@ -86,7 +86,8 @@ const std::unordered_map<Attribute, std::string> ATTR_TO_STRING{{Attribute::STAT
     {Attribute::SKIP_ANALYSIS, "skip_analysis"}, {Attribute::DESERIALIZED, "deserialized"},
     {Attribute::INITIALIZER, "initializer"},
     {Attribute::UNSAFE, "unsafe"}, {Attribute::JAVA_MIRROR, "javaMirror"}, {Attribute::JAVA_IMPL, "javaImpl"},
-    {Attribute::OBJ_C_MIRROR, "objCMirror"}, {Attribute::HAS_INITED_FIELD, "hasInitedField"}};
+    {Attribute::OBJ_C_MIRROR, "objCMirror"}, {Attribute::HAS_INITED_FIELD, "hasInitedField"},
+    {Attribute::JAVA_HAS_DEFAULT, "javaHasDefault"}, {Attribute::PREVIOUSLY_DESERIALIZED, "previouslyDeserialized"}};
 
 constexpr uint64_t ATTR_SIZE = 64;
 

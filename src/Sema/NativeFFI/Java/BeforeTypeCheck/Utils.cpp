@@ -21,7 +21,7 @@ using namespace Cangjie::Interop::Java;
 void InsertMethodStub(FuncDecl& fd, const ImportManager& importManager, TypeManager& typeManager)
 {
     CJC_ASSERT(fd.funcBody);
-    auto argTy = GetStringDecl(importManager).ty;
+    auto argTy = GetStringDecl(importManager).GetTy();
     auto arg = CreateLitConstExpr(LitConstKind::STRING, "It's compiler generated stub.", argTy);
     std::vector<OwnedPtr<Expr>> args;
     args.emplace_back(std::move(arg));
@@ -64,19 +64,4 @@ void RemoveAbstractAttributeForJavaHasDefaultMethods(const InterfaceDecl& decl)
         }
     }
 }
-
-ClassDecl& GetExceptionDecl(const ImportManager& importManager)
-{
-    const auto exceptionDecl = importManager.GetCoreDecl("Exception");
-    CJC_NULLPTR_CHECK(exceptionDecl);
-    
-    ClassDecl* exception = nullptr;
-    if (auto ex = As<ASTKind::CLASS_DECL>(exceptionDecl)) {
-        exception = ex;
-    }
-    CJC_NULLPTR_CHECK(exception);
-
-    return *exception;
-}
-
 }

@@ -418,7 +418,6 @@ void TypeAnalysis::PreHandleGetElementRefExpr(TypeDomain& state, const GetElemen
     HandleMemberAccess(state, getElemRef);
 }
 
-/// override value analysis, check if virtual member type has specific type.
 void TypeAnalysis::PreHandleFieldExpr(TypeDomain& state, const Field* field)
 {
     HandleMemberAccess(state, field);

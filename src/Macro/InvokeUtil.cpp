@@ -104,12 +104,12 @@ void RuntimeInit::CloseRuntime()
             InvokeRuntime::FinishRuntime(handle);
             initRuntime = false;
         }
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+#if defined(CANGJIE_CODEGEN_CJNATIVE_BACKEND) && !defined(__ohos__)
         InvokeRuntime::CloseSymbolTable(handle);
 #endif
         handle = nullptr;
     }
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+#if defined(CANGJIE_CODEGEN_CJNATIVE_BACKEND) && !defined(__ohos__)
     // close macro dynamic library
     CloseMacroDynamicLibrary();
 #endif

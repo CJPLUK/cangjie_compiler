@@ -84,6 +84,7 @@ std::string GetErrMessage(int error)
 #else
     auto handleError = [&buf](auto res) -> std::string {
         using T = decltype(res);
+
         if constexpr (std::is_integral_v<T>) {
             // POSIX
             return res != 0 ? "" : std::string(buf);

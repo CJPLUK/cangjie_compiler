@@ -685,7 +685,7 @@ void DesugarIfAvailableExpr(IfAvailableExpr& iae, const std::string& compatibleS
     OwnedPtr<Expr> condition = DesugarIfAvailableCondition(iae, compatibleSDKVersion);
     auto ifBlock = ASTCloner::Clone(iae.GetLambda1()->funcBody->body.get());
     auto elseBlock = ASTCloner::Clone(iae.GetLambda2()->funcBody->body.get());
-    auto ifExpr = CreateIfExpr(std::move(condition), std::move(ifBlock), std::move(elseBlock), iae.ty);
+    auto ifExpr = CreateIfExpr(std::move(condition), std::move(ifBlock), std::move(elseBlock), iae.GetTy());
     ifExpr->sourceExpr = &iae;
     CopyBasicInfo(&iae, ifExpr);
     iae.desugarExpr = std::move(ifExpr);

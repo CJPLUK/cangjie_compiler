@@ -84,15 +84,6 @@ public:
     bool IsStruct() const;
 
     // ===--------------------------------------------------------------------===//
-    // Attribute
-    // ===--------------------------------------------------------------------===//
-    AttributeInfo GetAttributeInfo() const;
-    void AppendAttributeInfo(const AttributeInfo& info);
-    void EnableAttr(Attribute attr);
-    bool TestAttr(Attribute attr) const;
-    void DisableAttr(Attribute attr);
-
-    // ===--------------------------------------------------------------------===//
     // Super Parent
     // ===--------------------------------------------------------------------===//
     void AddImplementedInterfaceTy(ClassType& interfaceTy);
@@ -294,7 +285,6 @@ protected:
     std::vector<ClassType*> implementedInterfaceTys; /**< implemented interfaces */
     std::vector<MemberVarInfo> instanceVars;         /**< local member variables */
     std::vector<GlobalVar*> staticVars;       /**< static member variables */
-    AttributeInfo attributeInfo;                  /**< attribute */
     AnnoInfo annoInfo;                            /**< struct/class/enum annoInfo */
     VTableInDef vtable;
     std::vector<ExtendDef*> extends;

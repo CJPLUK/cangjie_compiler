@@ -43,3 +43,28 @@ const AnnotationMap& Base::GetAnno() const
 {
     return anno;
 }
+
+AttributeInfo Base::GetAttributeInfo() const
+{
+    return attributes;
+}
+
+bool Base::TestAttr(Attribute attr) const
+{
+    return attributes.TestAttr(attr);
+}
+
+void Base::AppendAttributeInfo(const AttributeInfo& info)
+{
+    attributes.AppendAttrs(info);
+}
+
+void Base::EnableAttr(Attribute attr)
+{
+    attributes.SetAttr(attr, true);
+}
+
+void Base::DisableAttr(Attribute attr)
+{
+    attributes.SetAttr(attr, false);
+}

@@ -68,9 +68,9 @@ Ptr<Value> Translator::Visit(const AST::ReturnExpr& expr)
     Ptr<Value> ret = GetOuterBlockGroupReturnValLocation();
     if (ret != nullptr) {
         if (expr.TestAttr(AST::Attribute::COMPILER_ADD)) {
-            CreateWrappedStore(retVal, ret, currentBlock);
+            CreateAndAppendWrappedStore(*retVal, *ret);
         } else {
-            CreateWrappedStore(loc, retVal, ret, currentBlock);
+            CreateAndAppendWrappedStore(*retVal, *ret, loc);
         }
     }
     if (level > 0 && delayExitSignal) {

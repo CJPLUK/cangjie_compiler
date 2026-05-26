@@ -133,7 +133,7 @@ template <typename... Args> inline void Error(Args&&... args)
 }
 
 #ifdef _WIN32
-inline void WErrorf(const wchar_t *fmt, ...)
+inline void WErrorf(const wchar_t* fmt, ...)
 {
     std::optional<std::wstring> werrMark = Cangjie::StringConvertor::StringToWString(RED_ERROR_MARK);
     if (!werrMark.has_value()) {

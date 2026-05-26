@@ -114,26 +114,7 @@ void CHIRPrinter::PrintCHIRSerializeInfo(ToCHIR::Phase phase, const std::string&
         std::cerr << "open file: " << ret << " failed!" << std::endl;
         return;
     }
-    std::string phaseStr{};
-    switch (phase) {
-        case ToCHIR::Phase::RAW:
-            phaseStr = "raw";
-            break;
-        case ToCHIR::Phase::OPT:
-            phaseStr = "opt";
-            break;
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-        case ToCHIR::Phase::PLUGIN:
-            phaseStr = "plugin";
-            break;
-        case ToCHIR::Phase::ANALYSIS_FOR_CJLINT:
-            phaseStr = "analysis for cjlint";
-            break;
-#endif
-        default:
-            CJC_ABORT();
-            break;
-    }
+    std::string phaseStr = PhaseToString(phase);
     fout << "ToCHIRPhase: " << phaseStr << std::endl;
     fout.close();
 }

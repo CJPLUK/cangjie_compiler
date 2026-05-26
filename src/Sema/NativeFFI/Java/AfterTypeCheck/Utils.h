@@ -126,7 +126,7 @@ OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, ClassLikeDecl& mirrorLike)
 OwnedPtr<Expr> CreateJavaRefCall(ClassLikeDecl& mirrorLike, Ptr<File> curFile);
 
 /**
- * Acts like `CreateJavaRefCall(expr, *StaticCast<ClassLikeTy*>(expr->ty))->commonDecl`
+ * Acts like `CreateJavaRefCall(expr, *StaticCast<ClassLikeTy*>(expr->GetTy()))->commonDecl`
  */
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr);
 
@@ -223,6 +223,7 @@ OwnedPtr<Expr> CreateMirrorConstructorCall(
 
 bool IsJArray(const Decl& decl);
 bool IsJArray(const Ty& ty);
+bool IsOptionOfString(Ptr<Ty> ty);
 
 bool IsMirror(const Ty& ty);
 
@@ -244,6 +245,7 @@ std::vector<OwnedPtr<Ret>> Nodes(OwnedPtr<Args>&&... args)
 }
 
 namespace Details {
+
 template <typename T>
 void WrapArg(std::vector<OwnedPtr<FuncArg>>* funcArgs, OwnedPtr<T>&& e)
 {
@@ -254,6 +256,7 @@ void WrapArg(std::vector<OwnedPtr<FuncArg>>* funcArgs, OwnedPtr<T>&& e)
         funcArgs->push_back(CreateFuncArg(std::forward<OwnedPtr<T>>(e)));
     }
 }
+
 } // namespace Details
 
 template <typename... Args>
@@ -267,7 +270,7 @@ OwnedPtr<CallExpr> CreateCall(Ptr<FuncDecl> fd, Ptr<File> curFile, OwnedPtr<Args
 
     (Details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
-    auto funcTy = StaticCast<FuncTy*>(fd->ty);
+    auto funcTy = StaticCast<FuncTy*>(fd->GetTy());
 
     return CreateCallExpr(WithinFile(CreateRefExpr(*fd), curFile), std::move(funcArgs), fd, funcTy->retTy,
                           CallKind::CALL_DECLARED_FUNCTION);

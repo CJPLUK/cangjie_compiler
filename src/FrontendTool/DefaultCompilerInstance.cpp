@@ -55,8 +55,6 @@ private:
     std::string GenerateFileName(const std::string& fullPackageName, const std::string& idx) const;
     std::string GenerateBCFilePathAndUpdateToInvocation(
         const TempFileKind& kind, const std::string& pkgName, const std::string& idx = "");
-
-    std::vector<std::unique_ptr<llvm::Module>> llvmModules;
 };
 
 DefaultCompilerInstance::DefaultCompilerInstance(CompilerInvocation& invocation, DiagnosticEngine& diag)
@@ -67,8 +65,8 @@ DefaultCompilerInstance::DefaultCompilerInstance(CompilerInvocation& invocation,
 
 DefaultCIImpl::~DefaultCIImpl()
 {
-    CodeGen::ClearPackageModules(llvmModules);
 }
+
 DefaultCompilerInstance::~DefaultCompilerInstance()
 {
     delete impl;
@@ -261,7 +259,7 @@ bool DefaultCIImpl::EmitLLVMSimilarBytecode(bool enableIncrement)
         return true;
     }
     auto fullPackageName = curPackage->GetName();
-    llvmModules = CodeGen::GenPackageModules(ci, enableIncrement);
+    auto llvmModules = CodeGen::GenPackageModules(ci, enableIncrement);
 
     // 2. save LLVM IR to bc file
     Utils::ProfileRecorder recorder("CodeGen", "Save bc file");
@@ -291,6 +289,7 @@ bool DefaultCIImpl::EmitLLVMSimilarBytecode(bool enableIncrement)
         }
         taskQueueSaveBitcode.RunAndWaitForAllTasksCompleted();
     }
+    CodeGen::ClearPackageModules(llvmModules);
 
     if (ci.invocation.globalOptions.enIncrementalCompilation) {
         auto fileName = GenerateFileName(fullPackageName, "");

@@ -85,7 +85,7 @@ ConstAnalysisWrapper::AnalysisStrategy ConstAnalysisWrapper::ChooseAnalysisStrat
         return AnalysisStrategy::SkipAnalysis;
     }
     if (IsSTDFunction(func)) {
-        return AnalysisStrategy::FullStatePool;
+        return AnalysisStrategy::FullStatePool;;
     }
     size_t blockSize = CountBlockSize(func);
     if (blockSize > OVERHEAD_BLOCK_SIZE) {

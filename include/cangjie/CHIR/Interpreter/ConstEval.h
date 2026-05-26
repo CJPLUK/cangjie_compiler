@@ -23,7 +23,6 @@
 #include <cangjie/CHIR/Interpreter/InterpreterValueUtils.h>
 #include <cangjie/CHIR/IR/Package.h>
 #include <cangjie/Frontend/CompilerInstance.h>
-#include <cangjie/Mangle/BaseMangler.h>
 #include <cangjie/Option/Option.h>
 
 namespace Cangjie::CHIR::Interpreter {

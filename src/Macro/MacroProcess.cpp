@@ -17,6 +17,8 @@ using namespace Cangjie;
 using namespace AST;
 
 namespace {
+void SyncMacroCallDiagInfo(const Node& node, MacroInvocation& invocation);
+
 bool IsSpecialToken(TokenKind prevTokenKind, TokenKind curTokenKind)
 {
     // For case: A() A[] A<> A?? >> >= ~init.
@@ -60,8 +62,7 @@ size_t GetTokenLenth(const Token& token)
     return GetTokenLength(token.Value().size(), token.kind, token.delimiterNum);
 }
 
-void CollectMacroDebugPosition(
-    MacroInvocation& invocation, const Token& token, unsigned int lastColumn)
+void CollectMacroDebugPosition(MacroInvocation& invocation, const Token& token, unsigned int lastColumn)
 {
     if (!token.Begin().isCurFile || token.kind == TokenKind::COMMENT || token.kind == TokenKind::NL) {
         return;
@@ -83,9 +84,7 @@ void CollectMacroDebugPosition(
 }
 
 static void HandleInterplationStringPosMap(Token& strToken, Position newStartPos,
-                                           const Ptr<MacroInvocation> pMacroInvocation,
-                                           const CompilerInstance& ci,
-                                           bool isMacroMap = false)
+    const Ptr<MacroInvocation> pMacroInvocation, const CompilerInstance& ci, bool isMacroMap = false)
 {
     std::vector<Token> tokens{strToken};
     Lexer lexer(tokens, ci.diag, ci.diag.GetSourceManager());
@@ -106,7 +105,7 @@ static void HandleInterplationStringPosMap(Token& strToken, Position newStartPos
         // first token must be `$` and second token must be `{`
         CJC_ASSERT(!tks.empty());
         for (size_t i = 2; i < tks.size() - 1; i++) {
-            auto &t = tks[i];
+            auto& t = tks[i];
             if (t.kind == TokenKind::COMMENT) {
                 continue;
             }
@@ -114,8 +113,9 @@ static void HandleInterplationStringPosMap(Token& strToken, Position newStartPos
             Position newPos = t.Begin() + deltaBegin;
             if (isMacroMap) {
                 t.SetCurFile(strToken.Begin().isCurFile);
-                auto key = pMacroInvocation->isCurFile ? newPos.Hash32() : static_cast<unsigned int>(newPos.column);
-                pMacroInvocation->new2macroCallPosMap[key] = t.Begin();
+                auto key = pMacroInvocation->macroCallDiagInfo.isCurFile ? newPos.Hash32()
+                                                                         : static_cast<unsigned int>(newPos.column);
+                pMacroInvocation->macroCallDiagInfo.new2macroCallPosMap[key] = t.Begin();
             } else if (t.kind != TokenKind::NL) {
                 Position begin{
                     newStartPos.fileID, newStartPos.line, static_cast<int>(newPos.column), t.Begin().isCurFile};
@@ -124,7 +124,7 @@ static void HandleInterplationStringPosMap(Token& strToken, Position newStartPos
                         t.Begin().isCurFile);
                     begin = newPos;
                 }
-                pMacroInvocation->new2originPosMap[newPos.Hash32()] = t.Begin();
+                pMacroInvocation->macroCallDiagInfo.new2originPosMap[newPos.Hash32()] = t.Begin();
 
                 auto key = t.Begin().Hash64();
                 if (pMacroInvocation->origin2newPosMap.find(key) == pMacroInvocation->origin2newPosMap.end()) {
@@ -151,7 +151,7 @@ static void HandleInterplationStringPosMap(Token& strToken, Position newStartPos
 void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& ci)
 {
     auto pMacroInvocation = node.GetInvocation();
-    if (pMacroInvocation->isCurFile) {
+    if (pMacroInvocation->macroCallDiagInfo.isCurFile) {
         return;
     }
     auto mcPos = node.begin;
@@ -189,11 +189,12 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
         // not stay in same line, impossible to establish a mapping
         Position keyPos(mcPos.line, static_cast<int>(lastColumn));
         if (token.kind == TokenKind::STRING_LITERAL || token.kind == TokenKind::MULTILINE_STRING) {
-            pMacroInvocation->new2originPosMap[keyPos.Hash32()] = token.Begin(); // map original STRING_LITERAL token
-            HandleInterplationStringPosMap(token, Position(mcPos.fileID, mcPos.line, static_cast<int>(lastColumn)),
-                                           pMacroInvocation, ci);
+            pMacroInvocation->macroCallDiagInfo.new2originPosMap[keyPos.Hash32()] =
+                token.Begin(); // map original STRING_LITERAL token
+            HandleInterplationStringPosMap(
+                token, Position(mcPos.fileID, mcPos.line, static_cast<int>(lastColumn)), pMacroInvocation, ci);
         } else if (token.kind != TokenKind::NL && token.kind != TokenKind::COMMENT) {
-            pMacroInvocation->new2originPosMap[keyPos.Hash32()] = token.Begin();
+            pMacroInvocation->macroCallDiagInfo.new2originPosMap[keyPos.Hash32()] = token.Begin();
         }
         auto key = token.Begin().Hash64();
         Position begin = token.Begin();
@@ -228,15 +229,15 @@ void RefreshTokensPosMap(Node& node, SourceManager& sm, CompilerInstance& ci)
     auto find = std::find_if(pMacroInvocation->newTokens.begin(), pMacroInvocation->newTokens.end(),
         [&sm, &node](auto& token) { return !IsCurFile(sm, token, node.begin.fileID); });
     if (find == pMacroInvocation->newTokens.end()) {
-        pMacroInvocation->isCurFile = true;
+        pMacroInvocation->macroCallDiagInfo.isCurFile = true;
     }
     // Generate new tokens in *.macrocall file.
-    pMacroInvocation->mcBegin = node.curFile->macroCallPosBase;
+    pMacroInvocation->macroCallDiagInfo.mcBegin = node.curFile->macroCallPosBase;
     auto tokens = GetTokensFromString(pMacroInvocation->newTokensStr, ci.diag, node.curFile->macroCallPosBase);
     if (tokens.empty()) {
         return;
     }
-    pMacroInvocation->mcEnd = tokens.back().End();
+    pMacroInvocation->macroCallDiagInfo.mcEnd = tokens.back().End();
 
     if (tokens.size() != pMacroInvocation->newTokens.size()) {
         ReportMappingFailedDiag(pMacroInvocation->newTokens, tokens, node.begin, ci);
@@ -253,8 +254,9 @@ void RefreshTokensPosMap(Node& node, SourceManager& sm, CompilerInstance& ci)
     for (size_t i = 0; i < tokens.size(); ++i) {
         if (tokens[i].kind != TokenKind::COMMENT) {
             auto pos = pMacroInvocation->newTokens[i].Begin();
-            auto key = pMacroInvocation->isCurFile ? pos.Hash32() : static_cast<unsigned int>(pos.column);
-            pMacroInvocation->new2macroCallPosMap[key] = tokens[i].Begin();
+            auto key =
+                pMacroInvocation->macroCallDiagInfo.isCurFile ? pos.Hash32() : static_cast<unsigned int>(pos.column);
+            pMacroInvocation->macroCallDiagInfo.new2macroCallPosMap[key] = tokens[i].Begin();
         }
         // only fixed STRING_LITERAL, MULTILINE_STRING still has problem
         if (tokens[i].kind == TokenKind::STRING_LITERAL || tokens[i].kind == TokenKind::MULTILINE_STRING) {
@@ -289,6 +291,7 @@ void RemoveMacroCallFile(File& file)
 void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
     std::map<Ptr<File>, std::vector<Ptr<Node>>>& macroCallMap, CompilerInstance& ci)
 {
+    bool isCjmpFile = ci.invocation.globalOptions.IsCompilingCJMPSpecific();
     auto& sm = ci.GetSourceManager();
     std::string content;
     for (const auto& file : fileSucVec) {
@@ -302,20 +305,26 @@ void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
             }
             // Append source code between macroCalls to newFile.
             content = sm.GetContentBetween(curFilePosBase, node->begin);
-            (void)sm.AppendSource(file->macroCallFilePath, content);
+            (void)sm.AppendSource(file->macroCallFilePath, content, isCjmpFile);
             curFilePosBase = node->end;
             file->macroCallPosBase = sm.GetSource(fileID).GetEndPos();
+            if (auto decl = DynamicCast<MacroExpandDecl>(node)) {
+                for (auto& anno: decl->annotations) {
+                    sm.AppendSource(file->macroCallFilePath, sm.GetContentBetween(anno->begin, anno->end), isCjmpFile);
+                }
+            }
             // Append contents generated by macroCall to newFile.
-            (void)sm.AppendSource(file->macroCallFilePath, pMacroInvocation->newTokensStr);
+            (void)sm.AppendSource(file->macroCallFilePath, pMacroInvocation->newTokensStr, isCjmpFile);
             // Map macro information.
             RefreshTokensPosMap(*node, sm, ci);
-            pMacroInvocation->isForLSP = ci.invocation.globalOptions.enableMacroInLSP;
+            pMacroInvocation->macroCallDiagInfo.isForLSP = ci.invocation.globalOptions.enableMacroInLSP;
+            SyncMacroCallDiagInfo(*node, *pMacroInvocation);
         }
         content = sm.GetContentBetween(curFilePosBase.fileID, curFilePosBase, file->end);
-        (void)sm.AppendSource(file->macroCallFilePath, content);
+        (void)sm.AppendSource(file->macroCallFilePath, content, isCjmpFile);
         // If lsp or debug-macro, then save the expanded macro contents to a file.
         if (ci.invocation.globalOptions.enableMacroInLSP || ci.invocation.globalOptions.enableMacroDebug) {
-            auto source = sm.GetSource(fileID).buffer;
+            auto& source = sm.GetSource(fileID).buffer;
             if (!WriteStringToFile(file->macroCallFilePath, source)) {
                 (void)ci.diag.Diagnose(file->begin, DiagKind::macro_call_save_file_failed);
             }
@@ -326,20 +335,27 @@ void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
     }
 }
 
+void SyncMacroCallDiagInfo(const Node& node, MacroInvocation& invocation)
+{
+    auto& info = invocation.macroCallDiagInfo;
+    info.macroCallBegin = node.begin;
+    info.macroCallEnd = node.end;
+}
+
 bool IsPureCustomAnnotation(MacroInvocation& invocation, CompilerInstance& ci)
 {
-    if (!invocation.isCustom || invocation.newTokens.empty()) {
+    if (!invocation.macroCallDiagInfo.isCustom || invocation.newTokens.empty()) {
         return false;
     }
     // The current macrocall is actually a custom annotation.
-    if (invocation.isCurFile) {
+    if (invocation.macroCallDiagInfo.isCurFile) {
         return true;
     }
     auto& sm = ci.GetSourceManager();
     auto find = std::find_if(invocation.newTokens.begin(), invocation.newTokens.end(),
         [&sm](auto& token) { return !IsCurFile(sm, token); });
     if (find == invocation.newTokens.end()) {
-        invocation.isCurFile = true;
+        invocation.macroCallDiagInfo.isCurFile = true;
         return true;
     }
     // The current custom annotation contains a macrocall inside.

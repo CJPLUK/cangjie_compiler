@@ -22,7 +22,7 @@ Ptr<Value> Translator::Visit(const AST::StructDecl& decl)
     CreateAnnotationInfo<StructDef>(decl, *structDef, structDef);
 
     // set type
-    auto chirType = StaticCast<StructType*>(chirTy.TranslateType(*decl.ty));
+    auto chirType = StaticCast<StructType*>(chirTy.TranslateType(*decl.GetTy()));
     structDef->SetType(*chirType);
     structDef->Set<LinkTypeInfo>(decl.TestAttr(AST::Attribute::GENERIC_INSTANTIATED)
             ? Linkage::INTERNAL

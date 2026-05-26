@@ -33,7 +33,7 @@ void Translator::UpdateDelayExitSignal(int64_t level)
 {
     auto constDepth = CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(),
         *currentBlock, static_cast<uint64_t>(level))->GetResult();
-    CreateWrappedStore(constDepth, delayExitSignal, currentBlock);
+    CreateAndAppendWrappedStore(*constDepth, *delayExitSignal);
 }
 
 Ptr<Value> Translator::Visit(const AST::JumpExpr& jumpExpr)

@@ -14,10 +14,10 @@
 #define CANGJIE_CHIR_CHIR_H
 
 #include "cangjie/CHIR/AST2CHIR/AST2CHIR.h"
-#include "cangjie/CHIR/Analysis/ValueRangeAnalysis.h"
 #include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
+#include "cangjie/CHIR/Analysis/ValueRangeAnalysis.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie::CHIR {
 class ToCHIR {
@@ -150,7 +150,6 @@ private:
     bool RunVarInitChecking();
     void RunConstantPropagation();
     void RunRangePropagation();
-    bool RunNativeFFIChecks();
     void RunArrayListConstStartOpt();
     void RunFunctionInline(DevirtualizationInfo& devirtInfo);
     void RunArrayLambdaOpt();
@@ -208,7 +207,7 @@ private:
     // Raw mangled name of top or mem funcs had closure convert. If there is
     // any change in incremental compilation, rollback is required.
     std::set<std::string> ccOutFuncsRawMangle;
-    class DiagAdapter diag;
+    DiagnosticEngine& diag;
     std::unordered_set<Function*> srcCodeImportedFuncs;
     std::unordered_set<GlobalVar*> srcCodeImportedVars;
     std::unordered_set<ClassDef*> uselessClasses;
@@ -221,5 +220,7 @@ private:
     std::vector<std::pair<const AST::Decl*, Function*>> annoFactoryFuncs;
     AST2CHIRNodeMap<CustomTypeDef> globalNominalCache;
 };
+
+std::string PhaseToString(const ToCHIR::Phase phase);
 } // namespace Cangjie::CHIR
 #endif

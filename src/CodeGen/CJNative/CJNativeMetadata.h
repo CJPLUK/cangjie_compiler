@@ -280,6 +280,8 @@ private:
     void AddPrimitiveTypeInfoToCorePkgInfo() const;
 };
 
+void GenerateReflectionMetadata(CGModule& module, const SubCHIRPackage& subCHIRPkg);
+
 } // namespace CodeGen
 } // namespace Cangjie
 #endif

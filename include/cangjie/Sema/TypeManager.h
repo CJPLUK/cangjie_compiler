@@ -192,7 +192,7 @@ public:
     void GenerateGenericMapping(SubstPack& m, AST::Ty& baseType);
     TypeSubst GenerateGenericMappingFromGeneric(const AST::Decl& parentDecl, const AST::Decl& childDecl) const;
     MultiTypeSubst GenerateStructDeclTypeMapping(const AST::Decl& decl);
-    void ReplaceIdealTy(Ptr<AST::Ty>* ty);
+    Ptr<AST::Ty> ReplaceIdealTy(Ptr<AST::Ty> ty);
     void RestoreJavaGenericsTy(AST::Decl& decl) const;
 
     /**
@@ -337,6 +337,12 @@ public:
     Ptr<AST::Ty> TryGreedySubst(Ptr<AST::Ty> ty);
     // constraints for placeholder type vars
     Constraint constraints;
+
+    /// recursively replace This in type args
+    Ptr<AST::Ty> ReplaceThisTy(Ptr<AST::Ty> now);
+    /// get the class ty that This refers to if it is a This ty
+    Ptr<AST::Ty> GetThisRealTy(Ptr<AST::Ty> now);
+
     /**
      * @brief Obtains the alias type of node if node's ty have alias type reference.
      * @param node the node which map contain alias type reference.

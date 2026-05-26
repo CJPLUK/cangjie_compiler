@@ -168,6 +168,117 @@ TEST_F(SearchPlusTest, IllegalParametersTest)
     instance.reset();
 }
 
+TEST_F(SearchPlusTest, FileIDTest)
+{
+    auto srcFile = srcPath + "testfile_search_01n.cj";
+    std::string failedReason;
+    auto content = FileUtil::ReadFileContent(srcFile, failedReason);
+    if (!content.has_value()) {
+        diag.DiagnoseRefactor(
+            DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, srcFile, failedReason);
+    }
+
+    std::string fileID = Utils::FillZero(~0u, 0);
+    std::unique_ptr<CompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    Parser parser(~0, content.value(), diag, instance->GetSourceManager());
+    OwnedPtr<Package> pkg = MakeOwned<Package>();
+    pkg->files.emplace_back(parser.ParseTopLevel());
+    ASTContext ctx(diag, *pkg);
+    ScopeManager scopeManager;
+    Collector collector(scopeManager);
+    collector.BuildSymbolTable(ctx, pkg.get());
+
+    std::vector<std::string> srcFiles;
+    std::vector<std::string> srcs = {srcFile};
+    for (auto& src : srcs) {
+        srcFiles.push_back(src);
+    }
+    instance->srcFilePaths = srcFiles;
+    instance->PerformParse();
+
+    Searcher searcher;
+    std::vector<Symbol*> res = searcher.Search(ctx, "");
+    EXPECT_EQ(res.size(), 0);
+    res = searcher.Search(ctx, " ");
+    EXPECT_EQ(res.size(), 0);
+    res = searcher.Search(ctx, "name:Day");
+    EXPECT_EQ(res.size(), 13);
+    res = searcher.Search(ctx, "name:Day!name:Day");
+    EXPECT_EQ(res.size(), 0);
+    res = searcher.Search(ctx, "name:Day&&name:Day");
+    EXPECT_EQ(res.size(), 13);
+    res = searcher.Search(ctx, "name:Day||name:Day");
+    EXPECT_EQ(res.size(), 13);
+    res = searcher.Search(ctx, "name:name");
+    EXPECT_EQ(res.size(), 0);
+    res = searcher.Search(ctx, "name:Day,name:Time");
+    EXPECT_EQ(res.size(), 0);
+    res = searcher.Search(ctx, "name:中"); // EXPECTED:illegal symbol '中'
+    EXPECT_TRUE(res.empty());
+    res = searcher.Search(ctx, "key:value"); // EXPECTED:Unknow query term: key!
+    EXPECT_TRUE(res.empty());
+    res = searcher.Search(ctx,
+        "name:abcdefghijklmnopqrstuvwxyabcdefghijklmnopqrstuvwxyabcdefghijklmnopqrstuvwxyabcdefghijklmnopqrstuvwxy");
+    EXPECT_EQ(res.size(), 1);
+    res = searcher.Search(ctx, "name:**"); // EXPECTED :1:6: should be identifer, positive integer, 'foo*' or '*foo'
+    EXPECT_TRUE(res.empty());
+    res = searcher.Search(ctx, "name:D*y");
+    EXPECT_EQ(res.size(), 0);
+    res = searcher.Search(ctx, "name:*i*"); // EXPECTED :1:6: should be identifer, positive integer, 'foo*' or '*foo'
+    EXPECT_TRUE(res.empty());
+    res = searcher.Search(ctx, "name:Da?");
+    EXPECT_EQ(res.size(), 0);
+
+    res = searcher.Search(
+        ctx, "id:1000"); // EXPECTED:Searcher error: id number '128' past the end of array and it would be ignored.
+    EXPECT_TRUE(res.empty());
+    res = searcher.Search(
+        ctx, "id:205 && name:n && scope_name:a0j0k0i && ast_kind:ref_expr && scope_level:3 && _<=(" + fileID + ", 84, 32)");
+    EXPECT_EQ(res.size(), 0);
+
+    res = searcher.Search(ctx, "_=(" + fileID + ", 87, 32) ");
+    EXPECT_EQ(res.size(), 5);
+    res = searcher.Search(ctx, "_>(-1, -86, -32) ");
+    EXPECT_TRUE(res.empty());
+
+    res = searcher.Search(ctx, "scope_name:a0j0*");
+    EXPECT_EQ(res.size(), 49);
+    res = searcher.Search(ctx, "scope_name:*0i"); // scope_name not support suffix
+    EXPECT_TRUE(res.empty());
+    res = searcher.Search(ctx, "scope_name:xxxxxxxx");
+    EXPECT_TRUE(res.empty());
+
+    res = searcher.Search(ctx, "ast_kind:generic_param_decl");
+    EXPECT_EQ(res.size(), 2);
+    res = searcher.Search(ctx, "ast_kind:struct_decl");
+    EXPECT_EQ(res.size(), 2);
+    res = searcher.Search(ctx, "ast_kind:func_decl");
+    EXPECT_EQ(res.size(), 13);
+    res = searcher.Search(ctx, "ast_kind:var_decl");
+    EXPECT_EQ(res.size(), 22);
+    res = searcher.Search(ctx, "ast_kind:class_decl");
+    EXPECT_EQ(res.size(), 6);
+    res = searcher.Search(ctx, "ast_kind:interface_decl");
+    EXPECT_EQ(res.size(), 1);
+    res = searcher.Search(ctx, "ast_kind:enum_decl");
+    EXPECT_EQ(res.size(), 2);
+    res = searcher.Search(ctx, "ast_kind:type_alias_decl");
+    EXPECT_EQ(res.size(), 0);
+    res = searcher.Search(ctx, "ast_kind:class_like_decl");
+    EXPECT_EQ(res.size(), 0);
+    res = searcher.Search(ctx, "ast_kind:*decl");
+    EXPECT_EQ(res.size(), 49);
+    res = searcher.Search(ctx, "ast_kind:c*"); // ast_kind not support prefix
+    EXPECT_TRUE(res.empty());
+    res = searcher.Search(ctx, "ast_kind:*_decl");
+    EXPECT_EQ(res.size(), 49);
+    res = searcher.Search(ctx, "ast_kind:xxxxxxxx");
+    EXPECT_TRUE(res.empty());
+    // AST must be released before ASTContext for correct symbol detaching.
+    pkg.reset();
+    instance.reset();
+}
+
 TEST_F(SearchPlusTest, ScopeTest)
 {
     auto srcFile = srcPath + "testfile_search_02n.cj";

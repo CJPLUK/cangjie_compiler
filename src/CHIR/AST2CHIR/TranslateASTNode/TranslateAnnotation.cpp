@@ -41,7 +41,7 @@ GlobalVar* Translator::TranslateCustomAnnoInstanceSig(const Expr& expr, const Fu
     name += MangleUtils::DecimalToManglingNumber(std::to_string(i));
     auto varName = name + MANGLE_SUFFIX;
     auto gv = builder.CreateGlobalVar(
-        builder.GetType<RefType>(TranslateType(*expr.ty)), varName, varName, "", func.GetPackageName());
+        builder.GetType<RefType>(TranslateType(*expr.GetTy())), varName, varName, "", func.GetPackageName());
     gv->EnableAttr(Attribute::COMPILER_ADD);
     gv->EnableAttr(Attribute::CONST);
     gv->Set<LinkTypeInfo>(Linkage::INTERNAL);
@@ -98,7 +98,7 @@ void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Function& func)
     auto arrayInit = std::find_if(arrayMethods.begin(), arrayMethods.end(),
         [](auto method) { return method->IsConstructor() && method->GetNumOfParams() == 4UL; });
     CJC_ASSERT(arrayInit != arrayMethods.end());
-    auto zero = CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, 0UL);
+    auto zero = CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, 0u);
     // call array init with RawArrayAllocate
     auto callContext = FuncCallContext {
         .args = std::vector<Value*>{array->GetResult(), rawArray->GetResult(), zero->GetResult(), annoArrSize},
@@ -191,7 +191,7 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
     if (found != annotationFuncMap.end()) {
         return found->second; // Property's getters and setters share the same annotation function.
     }
-    Type* returnTy = TranslateType(*annosArray->ty);
+    Type* returnTy = TranslateType(*annosArray->GetTy());
     auto funcType = builder.GetType<FuncType>(std::vector<Type*>{}, returnTy);
     const auto& loc = TranslateLocation(*decl.annotationsArray->children[0]);
     std::string mangledName = CHIRMangling::GenerateAnnotationFuncMangleName(decl.mangledName);

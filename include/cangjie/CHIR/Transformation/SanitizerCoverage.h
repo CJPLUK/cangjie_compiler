@@ -8,7 +8,7 @@
 #define CANGJIE_CHIR_TRANSFORMATION_SANITIZER_COVERAGE_H
 
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
@@ -34,11 +34,11 @@ public:
      * @param isDebug flag whether print debug log.
      * @return flag whether error happens in package.
      */
-    bool RunOnPackage(const Ptr<const Package>& package, DiagAdapter& diag, bool isDebug);
+    bool RunOnPackage(const Ptr<const Package>& package, DiagnosticEngine& diag, bool isDebug);
 
 private:
     void RunOnFunc(const Ptr<Function>& func, bool isDebug);
-    bool CheckSancovOption(DiagAdapter& diag) const;
+    bool CheckSancovOption(DiagnosticEngine& diag) const;
 
     // entry for different sanitizer coverage option
     void InjectTraceForCmp(BinaryExpression& binary, bool isDebug);

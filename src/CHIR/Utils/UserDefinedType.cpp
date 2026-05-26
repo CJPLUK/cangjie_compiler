@@ -26,6 +26,11 @@ std::string FuncSigInfo::ToString() const
     return ss.str();
 }
 
+void FuncSigInfo::Dump() const
+{
+    std::cout << ToString() << std::endl;
+}
+
 VirtualMethodInfo::VirtualMethodInfo(
     FuncSigInfo&& c, Function* func, const AttributeInfo& a, FuncType& o, Type& p, Type& r)
     : condition(std::move(c)), instance(func), attr(a), originalType(&o), parentType(&p), returnType(&r)

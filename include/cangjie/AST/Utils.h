@@ -35,7 +35,7 @@ void AddCurFile(AST::Node& root, Ptr<AST::File> file = nullptr);
  */
 inline bool IsPureAnnotation(const AST::MacroInvocation& invocation)
 {
-    return invocation.isCustom && invocation.isCurFile;
+    return invocation.macroCallDiagInfo.isCustom && invocation.macroCallDiagInfo.isCurFile;
 }
 
 std::vector<Ptr<const AST::Modifier>> SortModifierByPos(const std::set<AST::Modifier>& modifiers);
@@ -315,7 +315,7 @@ bool IsDeclAppropriateForSyntheticClassGeneration(const AST::Decl& decl);
  * Example of generated synthetic
  * ```
  * interface CL <: ObjCId {}
- *
+ * 
  * class CL$impl <: CL {}
  * ```
  */

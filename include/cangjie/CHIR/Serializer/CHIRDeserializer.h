@@ -18,7 +18,7 @@ class CHIRDeserializer {
 
 public:
     static bool Deserialize(const std::string& fileName, Cangjie::CHIR::CHIRBuilder& chirBuilder, ToCHIR::Phase& phase,
-        bool compileSpecific = false);
+        bool compilePlatform = false);
 
 private:
     explicit CHIRDeserializer()

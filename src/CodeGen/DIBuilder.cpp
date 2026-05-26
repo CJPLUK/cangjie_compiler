@@ -114,7 +114,9 @@ void DIBuilder::CreateCompileUnit(const std::string& pkgName)
         // of '.gcno' file for the same package is affected by the '--test' option. Therefore, when compiled with the
         // '--test' option, the "$test" suffix is added to the corresponding '.gcno' file.
         // NB: in the "test-only" mode, packages are already suffixed with "$test".
-        if (cgMod.GetCGContext().GetCompileOptions().enableCompileTest &&
+        // NB: when compiled with '--export-for-test', test conditional compilation is enabled, but "_test.cj" files
+        // are not compiled, so "$test" suffix should not be added.
+        if (cgMod.GetCGContext().GetCompileOptions().parseTest &&
             !cgMod.GetCGContext().GetCompileOptions().compileTestsOnly) {
             tempPkgName += SourceManager::testPkgSuffix;
         }
@@ -1244,6 +1246,9 @@ llvm::DICompositeType* DIBuilder::GetOrCreateEnumCtorType(const CHIR::EnumType& 
             auto enumDITy = createEnumerator(ctorName, fieldIdx);
             ctors.push_back(enumDITy);
             fieldIdx++;
+        }
+        if (isOption) {
+            name = "E2$" + name;
         }
     } else {
         for (auto& it : enumDef->GetCtors()) {

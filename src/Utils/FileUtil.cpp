@@ -1404,8 +1404,8 @@ std::string ToCjoFileName(std::string_view fullPackageName)
     constexpr std::string::difference_type dcSize = 2;
     if (auto it = fullPackageName.find(dc); it != std::string::npos) {
         // packageName@orgName
-        return std::string{fullPackageName.substr(it + dcSize)} + std::string{ORG_NAME_SEPARATOR}
-            + std::string{fullPackageName.substr(0, it)};
+        return std::string{fullPackageName.substr(it + dcSize)} + std::string{ORG_NAME_SEPARATOR} +
+            std::string{fullPackageName.substr(0, it)};
     }
     return std::string{fullPackageName};
 }

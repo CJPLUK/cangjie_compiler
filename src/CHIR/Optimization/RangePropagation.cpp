@@ -35,7 +35,7 @@ std::optional<SInt> CheckSingleSInt(const ValueRange& vr)
 }
 
 RangePropagation::RangePropagation(
-    CHIRBuilder& builder, RangeAnalysisWrapper* rangeAnalysisWrapper, DiagAdapter* diag, bool enIncre)
+    CHIRBuilder& builder, RangeAnalysisWrapper* rangeAnalysisWrapper, DiagnosticEngine& diag, bool enIncre)
     : builder(builder), analysisWrapper(rangeAnalysisWrapper), diag(diag), enIncre(enIncre)
 {
 }
@@ -265,7 +265,7 @@ void RangePropagation::CheckVarrayIndex(const Ptr<Intrinsic>& intrin, const Rang
         auto geLowerBound{ComputeRelIntBinop({indexRange, zeroNode, index, nullptr, ExprKind::GE, false})};
         if (ltUpperBound.IsFalse() || geLowerBound.IsFalse()) {
             auto bd =
-                diag->DiagnoseRefactor(DiagKindRefactor::chir_idx_out_of_bounds, ToRange(intrin->GetDebugLocation()));
+                diag.DiagnoseRefactor(DiagKindRefactor::chir_idx_out_of_bounds, ToRange(intrin->GetDebugLocation()));
             std::stringstream ss;
             ss << "range of index " << i - begin << " is (" << indexRange.ToString()
                << "), however the size of varray is " + std::to_string(size);

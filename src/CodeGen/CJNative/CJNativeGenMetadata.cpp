@@ -18,7 +18,6 @@
 
 using namespace Cangjie;
 using namespace CodeGen;
-using ChirTypeKind = Cangjie::CHIR::Type::TypeKind;
 using CGEnumKind = Cangjie::CodeGen::CGEnumType::CGEnumTypeKind;
 
 namespace {
@@ -45,12 +44,12 @@ std::string GetEnumKindName(CGModule& cgMod, const CHIR::EnumDef& ed)
         case CGEnumKind::EXHAUSTIVE_ASSOCIATED_NONREF:
             return "enumKind3";
         default:
-            CJC_ASSERT(false && "should not reach here");
+            CJC_ASSERT_WITH_MSG(false, "should not reach here");
             return "UNKNOWN";
     }
 }
 
-uint8_t GetSRetMode(CHIR::Type& retTy, const CodeGen::CGFunction& cgFunc)
+uint8_t GetSRetMode(const CHIR::Type& retTy, const CodeGen::CGFunction& cgFunc)
 {
     if (!cgFunc.IsSRet()) {
         return SRetMode::NO_SRET;
@@ -632,11 +631,12 @@ std::string EnumMetadataInfo::GenerateCtorFn(
         llvm::FunctionType* ctorFn =
             llvm::FunctionType::get(llvm::Type::getInt8PtrTy(module.GetLLVMContext()), argTypes, false);
         getTiFn = llvm::Function::Create(ctorFn, llvm::Function::PrivateLinkage, funcName, module.GetLLVMModule());
+        getTiFn->addFnAttr("native-interface-fn");
+        getTiFn->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
         CodeGen::IRBuilder2 irBuilder(module);
         auto entryBB = irBuilder.CreateEntryBasicBlock(getTiFn, "entry");
         irBuilder.SetInsertPoint(entryBB);
         llvm::Value* ti{nullptr};
-        auto ctorInfo = enumDef.GetCtor(index);
         auto chirEnumType = StaticCast<CHIR::EnumType*>(enumDef.GetType());
         if (CGType::GetOrCreate(module, chirEnumType)->IsDynamicGI()) {
             auto tt = module.GetOrCreateEnumCtorTIOrTT(*chirEnumType, index);
@@ -751,4 +751,48 @@ llvm::MDNode* GVMetadataInfo::GenerateVariableMetadata(const CHIR::GlobalVar& va
                                                           : ExtraAttribute::MUTABLE_FIELD,
             variable.GetAnnoInfo()))
         .CreateMDTuple();
+}
+
+void CodeGen::GenerateReflectionMetadata(CGModule& module, const SubCHIRPackage& subCHIRPkg)
+{
+    auto& globalOptions = module.GetCGContext().GetCGPkgContext().GetGlobalOptions();
+    uint8_t reflectionMode = globalOptions.disableReflection
+        ? GenReflectMode::NO_REFLECT
+        : GenReflectMode::FULL_REFLECT;
+
+    const std::array<MetadataKind, 6> allKinds = {
+        CodeGen::MetadataKind::PKG_METADATA,
+        CodeGen::MetadataKind::CLASS_METADATA,
+        CodeGen::MetadataKind::STRUCT_METADATA,
+        CodeGen::MetadataKind::ENUM_METADATA,
+        CodeGen::MetadataKind::GF_METADATA,
+        CodeGen::MetadataKind::GV_METADATA
+    };
+
+    auto runTask = [&](CodeGen::MetadataKind kind) {
+        std::unique_ptr<MetadataInfo> info = nullptr;
+        switch (kind) {
+            case CodeGen::MetadataKind::PKG_METADATA:
+                info = std::make_unique<PkgMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::CLASS_METADATA:
+                info = std::make_unique<ClassMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::STRUCT_METADATA:
+                info = std::make_unique<StructMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::ENUM_METADATA:
+                info = std::make_unique<EnumMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::GF_METADATA:
+                info = std::make_unique<GFMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::GV_METADATA:
+                info = std::make_unique<GVMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            default: break;
+        }
+
+        if (info) {
+            info->Gen();
+        }
+    };
+
+    for (auto kind : allKinds) {
+        runTask(kind);
+    }
 }

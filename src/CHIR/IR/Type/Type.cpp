@@ -762,7 +762,7 @@ Type* CustomType::GetExactParentType(
     // 3. func declared in super interface, including extend def's super interface
     
     // current def
-    if (auto func = GetCustomTypeDef()->GetExpectedFunc(
+    if (GetCustomTypeDef()->GetExpectedFunc(
         funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod)) {
         return this;
     }
@@ -773,7 +773,7 @@ Type* CustomType::GetExactParentType(
         if (!match) {
             continue;
         }
-        if (auto func = ex->GetExpectedFunc(
+        if (ex->GetExpectedFunc(
             funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod)) {
             return ReplaceRawGenericArgType(*ex->GetExtendedType(), replaceTable, builder);
         }

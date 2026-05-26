@@ -77,7 +77,7 @@ EnumCtorLayout EnumCtorTIOrTTGenerator::GenLayoutForReferenceType(const std::str
     layout.size = 8u;
     layout.align = 8u;
     auto cgEnumType = StaticCast<CGEnumType*>(CGType::GetOrCreate(cgMod, &chirEnumType));
-    layout.fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetZeroSizedCGType(cgMod)->GetOriginal()));
+    layout.fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetUnitCGType(cgMod)->GetOriginal()));
     if (cgEnumType->IsOptionLikeT()) {
         layout.fieldTypes.emplace_back(CGType::GetRefTypeOfCHIRInt8(cgMod.GetCGContext().GetCHIRBuilder()));
     } else {
@@ -268,6 +268,7 @@ llvm::Constant* EnumCtorTIOrTTGenerator::GenSuperFnOfTypeTemplate(const std::str
     auto superTiFn =
         llvm::Function::Create(superTiFnType, llvm::Function::PrivateLinkage, funcName, cgMod.GetLLVMModule());
     superTiFn->addFnAttr("native-interface-fn");
+    superTiFn->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     CodeGen::IRBuilder2 irBuilder(cgMod);
     auto entryBB = irBuilder.CreateEntryBasicBlock(superTiFn, "entry");
     irBuilder.SetInsertPoint(entryBB);

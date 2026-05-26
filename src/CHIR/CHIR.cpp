@@ -52,8 +52,6 @@
 #endif
 #include "cangjie/Utils/ProfileRecorder.h"
 
-#include "cangjie/CHIR/Checker/TypeCastCheck.h"
-
 namespace Cangjie::CHIR {
 static void FlattenEffectMap(OptEffectCHIRMap& effectMap)
 {
@@ -238,6 +236,9 @@ void ToCHIR::DumpCHIRToFile(const std::string& suffix, bool needCheckFlag)
         FileUtil::CreateDirs(fullPath);
     }
     CHIRPrinter::PrintPackage(*chirPkg, fullPath);
+    if (suffix == "Broken_CHIR") {
+        printf("broken chir dump to file: %s\n", fullPath.c_str());
+    }
 }
 
 void ToCHIR::DoClosureConversion()
@@ -399,27 +400,17 @@ void ToCHIR::RedundantGetOrThrowElimination()
 
 void ToCHIR::FlatForInExpr()
 {
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    Utils::ProfileRecorder recorder("CHIR", "FlatForInExpr");
+    Utils::ProfileRecorder recorder("AST to CHIR Translation", "FlatForInExpr");
     auto flatForInExpr = CHIR::FlatForInExpr(builder);
     flatForInExpr.RunOnPackage(*chirPkg);
     DumpCHIRToFile("FlatForInExpr");
-#endif
 }
 
 bool ToCHIR::RunVarInitChecking()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "VarInitCheck");
-    auto vic = CHIR::VarInitCheck(&diag);
+    auto vic = CHIR::VarInitCheck(diag);
     vic.RunOnPackage(chirPkg, opts.GetJobs());
-    return diag.GetErrorCount() == 0;
-}
-
-bool ToCHIR::RunNativeFFIChecks()
-{
-    Utils::ProfileRecorder recorder("RulesChecking", "NativeFFIChecks");
-    auto checker = CHIR::NativeFFI::TypeCastCheck(diag);
-    checker.RunOnPackage(*chirPkg, opts.GetJobs());
     return diag.GetErrorCount() == 0;
 }
 
@@ -486,7 +477,7 @@ void ToCHIR::RunMergingBlocks(const std::string& firstName, const std::string& s
 void ToCHIR::RunConstantAnalysis()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "Constant Analysis");
-    constAnalysisWrapper.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), &diag);
+    constAnalysisWrapper.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), diag);
 }
 
 void ToCHIR::RunConstantPropagation()
@@ -535,11 +526,11 @@ void ToCHIR::RunRangePropagation()
     }
     Utils::ProfileRecorder::Start("CHIR Opt", "Range Propagation");
     AnalysisWrapper<RangeAnalysis, RangeDomain> vra(builder);
-    vra.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), &diag);
+    vra.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), diag);
     size_t threadNum = opts.GetJobs();
     DeadCodeElimination dce(builder, diag, *chirPkg);
     if (threadNum == 1) {
-        auto cp = CHIR::RangePropagation(builder, &vra, &diag, opts.enIncrementalCompilation);
+        auto cp = CHIR::RangePropagation(builder, &vra, diag, opts.enIncrementalCompilation);
         cp.RunOnPackage(chirPkg, opts.chirDebugOptimizer);
         MergeEffectMap(cp.GetEffectMap(), effectMap);
         dce.UnreachableBlockElimination(cp.GetFuncsNeedRemoveBlocks(), opts.chirDebugOptimizer);
@@ -554,7 +545,7 @@ void ToCHIR::RunRangePropagation()
         for (size_t idx = 0; idx < funcNum; ++idx) {
             auto func = globalFuncs.at(idx);
             auto cp = std::make_unique<CHIR::RangePropagation>(
-                *builderList[idx], &vra, &diag, opts.enIncrementalCompilation);
+                *builderList[idx], &vra, diag, opts.enIncrementalCompilation);
             taskQueue.AddTask<void>(
                 [rangePropagation = cp.get(), func, isDebug]() { return rangePropagation->RunOnFunc(func, isDebug); });
             cpList.emplace_back(std::move(cp));
@@ -659,7 +650,7 @@ void ToCHIR::RunOptimizationPass()
 
 bool ToCHIR::RunConstantEvaluation()
 {
-    if (!opts.IsConstEvalEnabled() || opts.enIncrementalCompilation || opts.commonPartCjo.has_value()) {
+    if (!opts.IsConstEvalEnabled() || opts.enIncrementalCompilation || !opts.commonPartCjos.empty()) {
         return true;
     }
     Utils::ProfileRecorder recorder("CHIR", "Constant Evaluation");
@@ -717,7 +708,7 @@ bool ToCHIR::RunIRChecker(const Phase& phase)
         rules.emplace(CHIRChecker::Rule::IMPORTED_CONST_VAR_SHOULD_HAVE_INITIALIZER);
     }
     // there may be something wrong, we will check this rule after CJMP's scheme done
-    if (!opts.commonPartCjo.has_value()) {
+    if (opts.commonPartCjos.size() <= 0) {
         rules.emplace(CHIRChecker::Rule::CHECK_FUNC_BODY);
     }
     auto ok = checker.CheckPackage(rules);
@@ -760,13 +751,6 @@ void ToCHIR::RecordCodeInfoAtTheBegin()
     Utils::ProfileRecorder::RecordCodeInfo(
         "import pkg", static_cast<int64_t>(importManager.GetAllImportedPackages(true).size()));
     Utils::ProfileRecorder::RecordCodeInfo("src file", static_cast<int64_t>(pkg->files.size()));
-    Utils::ProfileRecorder::RecordCodeInfo(
-        "global func in CHIR after trans", static_cast<int64_t>(chirPkg->GetGlobalFuncsWithBody().size()));
-    Utils::ProfileRecorder::RecordCodeInfo(
-        "global var in CHIR", static_cast<int64_t>(chirPkg->GetGlobalVarsWithInit().size()));
-    int64_t funcInlineCnt = std::count_if(
-        pkg->inlineFuncDecls.begin(), pkg->inlineFuncDecls.end(), [](auto func) { return func && func->isInline; });
-    Utils::ProfileRecorder::RecordCodeInfo("imported inline func", funcInlineCnt);
     std::function<int64_t(void)> getCurPkgInstantiatedAstNode = [this]() -> int64_t {
         int64_t astNodeCnt = 0;
         for (auto& decl : pkg->genericInstantiatedDecls) {
@@ -878,9 +862,6 @@ bool ToCHIR::RunAnalysisForCJLint()
     NothingTypeExprElimination();
     RunConstantAnalysis();
     if (!RunVarInitChecking()) {
-        return false;
-    }
-    if (!RunNativeFFIChecks()) {
         return false;
     }
     UnreachableBlockElimination();
@@ -1080,7 +1061,6 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     if (!TranslateToCHIR(std::move(annoOnly))) {
         return false;
     }
-    ClearASTResources();
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
         auto fileName =
@@ -1122,9 +1102,6 @@ bool ToCHIR::RulesChecking()
     if (!RunVarInitChecking()) {
         return false;
     }
-    if (!RunNativeFFIChecks()) {
-        return false;
-    }
     UnreachableBranchReporter();
     // this instantance of block elimination is to maintain dead code warnings
     UnreachableBlockElimination();
@@ -1148,6 +1125,8 @@ bool ToCHIR::Run()
     CJC_NULLPTR_CHECK(&needToOptString);
     CJC_NULLPTR_CHECK(&releaseCHIRMemory);
     CJC_NULLPTR_CHECK(&cangjieHome);
+
+    RecordCodeInfoAtTheBegin();
 
     // 1. AST to CHIR
     if (!TranslateToCHIR({})) {
@@ -1174,7 +1153,6 @@ bool ToCHIR::Run()
         return true;
     }
     RecordCHIRExprNum("trans");
-    RecordCodeInfoAtTheBegin();
 
     if (ci.isCJLint) {
         return RunAnalysisForCJLint() && RunIRChecker(Phase::ANALYSIS_FOR_CJLINT);
@@ -1199,12 +1177,9 @@ bool ToCHIR::Run()
         srcCodeImportedFuncs, srcCodeImportedVars, uselessClasses, uselessLambda);
 
     // 10. annotation check depends on const eval
-    if (!AnnotationChecker(*chirPkg, diag.diag).Run()) {
+    if (!AnnotationChecker(*chirPkg, diag).Run()) {
         return false;
     }
-    // It should move to the end of TranslateToCHIR, Waiting for diag to remove its dependency on AST and for CHIR to
-    // stop saving Annotation nodes.
-    ClearASTResources();
 
     RunSanitizerCoverage();
     if (opts.enIncrementalCompilation) {
@@ -1341,15 +1316,7 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
         annoFactoryFuncs = ast2CHIR.GetAnnoFactoryFuncs();
         globalNominalCache = std::move(chirTypeCache.globalNominalCache);
     }
-
-    for (auto& file : pkg->files) {
-        for (auto& macrocall : file->originalMacroCallNodes) {
-            auto key = static_cast<uint64_t>(macrocall->begin.Hash64());
-            diag.posRange2MacroCallMap[key] = macrocall.get();
-            key = static_cast<uint64_t>(macrocall->end.Hash64());
-            diag.posRange2MacroCallMap[key] = nullptr;
-        }
-    }
+    ClearASTResources();
     return true;
 }
 
@@ -1372,10 +1339,39 @@ VarInitDepMap ToCHIR::GetVarInitDepMap() const
 
 void ToCHIR::ClearASTResources()
 {
-    Utils::ProfileRecorder recorder("CHIR", "ClearASTResources");
+    // in cjmp, `save cjo` is after CHIR stage, there is a bug if move `save cjo` before CHIR
+    if (ci.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
+        return;
+    }
+    // cjlint can compile many packages at same time, we can't release all AST resource after one package is done
+    // cjlint need to modify its strategy because cjc can't support to compile many packages at same time
+    if (ci.isCJLint) {
+        return;
+    }
+    Utils::ProfileRecorder recorder("AST to CHIR Translation", "ClearASTResources");
     pkg = nullptr;
     annoFactoryFuncs.clear();
-    diagEngine.EmitCategoryDiagnostics(DiagCategory::CHIR);
     ci.DestroyASTResources();
 }
+
+std::string PhaseToString(const ToCHIR::Phase phase)
+{
+    switch (phase) {
+        case ToCHIR::Phase::RAW:
+            return "raw";
+        case ToCHIR::Phase::OPT:
+            return "opt";
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+        case ToCHIR::Phase::PLUGIN:
+            return "plugin";
+        case ToCHIR::Phase::ANALYSIS_FOR_CJLINT:
+            return  "analysis for cjlint";
+#endif
+        default:
+            CJC_ABORT();
+    }
+    CJC_ABORT();
+    return "";
+}
+
 } // namespace Cangjie::CHIR

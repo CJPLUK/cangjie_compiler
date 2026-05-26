@@ -30,7 +30,8 @@ bool AST2CHIR::HasFailed() const
 void AST2CHIR::RegisterAllSources()
 {
     auto& sources = sourceManager.GetSources();
-    for (auto& source : sources) {
+    for (auto& idToSource : sources) {
+        auto& source = idToSource.second;
         auto filePath = source.path;
         auto absPath = FileUtil::GetAbsPath(source.path);
         if (absPath.has_value()) {
@@ -523,17 +524,16 @@ void AST2CHIR::AST2CHIRCheck()
 /// Return true if chir was deserialized
 bool AST2CHIR::TryToDeserializeCHIR()
 {
-    auto& chirFiles = opts.inputChirFiles;
+    Utils::ProfileRecorder recorder("AST to CHIR Translation", "TryToDeserializeCHIR");
+    auto& chirFiles = opts.commonPartChirs;
     CJC_ASSERT(chirFiles.size() != 0);
     ToCHIR::Phase phase;
-    if (chirFiles.size() == 1) {
-        bool success = CHIRDeserializer::Deserialize(chirFiles.at(0), builder, phase, true);
+    bool success = true;
+    for (auto chirFile : chirFiles) {
+        success &= CHIRDeserializer::Deserialize(chirFile, builder, phase, true);
         mergingSpecific = true;
-        return success;
     }
-    // synthetic limitation, however need to distinguish different chir sources
-    diag.DiagnoseRefactor(DiagKindRefactor::frontend_can_not_handle_to_many_chir, DEFAULT_POSITION);
-    return false;
+    return success;
 }
 
 static Package::AccessLevel BuildPackageAccessLevel(const AST::AccessLevel& level)
@@ -552,7 +552,7 @@ static Package::AccessLevel BuildPackageAccessLevel(const AST::AccessLevel& leve
 bool AST2CHIR::ToCHIRPackage(AST::Package& node)
 {
     // It can be not null in case of part of the package was deserialized from .chir
-    bool needDesCHIR = opts.inputChirFiles.size() != 0;
+    bool needDesCHIR = opts.IsCompilingCJMPSpecific();
     if (!needDesCHIR) {
         package = builder.CreatePackage(node.fullPackageName);
         outputCHIR = opts.outputMode == GlobalOptions::OutputMode::CHIR;

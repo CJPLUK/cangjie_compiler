@@ -8,7 +8,7 @@
 #define CANGJIE_CHIR_TRANSFORMATION_DEAD_CODE_ELIMINATION_H
 
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/Utils/TaskQueue.h"
@@ -25,7 +25,7 @@ public:
      * @param diag cangjie error or warning reporter.
      * @param curPkg this package.
      */
-    explicit DeadCodeElimination(CHIRBuilder& builder, DiagAdapter& diag, const Package& curPkg);
+    explicit DeadCodeElimination(CHIRBuilder& builder, DiagnosticEngine& diag, const Package& curPkg);
 
     /**
      * @brief process to do useless function elimination.
@@ -85,7 +85,7 @@ public:
 
 private:
     CHIRBuilder& builder;
-    DiagAdapter& diag;
+    DiagnosticEngine& diag;
     const Package& curPkg;
 
     // =============== Functions for Useless Variable Check =============== //

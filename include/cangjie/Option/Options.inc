@@ -298,6 +298,9 @@ OPTION("--output-dir", OUTPUT_DIR, SEPARATED, { BACKEND(ALL) },
 OPTION("--output-javagen-dir", OUTPUT_JAVA_GEN_DIR, SEPARATED, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
     "Specify output directory for javagen")
+OPTION("--objc-interop-output-dir", OUTPUT_OBJC_GEN_DIR, SEPARATED, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
+    "Specify output directory for Objective-C generated sources")
 OPTION("--no-prelude", NO_PRELUDE, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Not import cangjie std.core package by default, only applicable when compiling std.core")
@@ -366,9 +369,6 @@ OPTION("--emit-chir", EMIT_CHIR, FLAG_WITH_ARG, {BACKEND(ALL)},
 OPTION("--chir-wfc", CHIR_WFC, SEPARATED, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, simple_on_off_mode, SINGLE_OCCURRENCE,
     "Well-formedness check for CHIR. Candidate modes: ")
-OPTION("--disable-inst", DISABLE_INSTANTIATION, FLAG, { BACKEND(CJNATIVE) },
-    { GROUP(GLOBAL) COMMA GROUP(STABLE)}, nullptr, {}, MULTIPLE_OCCURRENCE,
-    "Disable instantiation")
 OPTION("--enable-chir-redundant-getorthrow-elimination", ENABLE_CHIR_REDUNDANT_GETORTHROW_ELIMINATION, FLAG,
     { BACKEND(CJNATIVE) }, { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Enable CHIR redundant GetOrThrow elimination.")
@@ -584,9 +584,12 @@ OPTION("--import-path", IMPORT_PATH, SEPARATED, { BACKEND(ALL) },
 OPTION("--plugin", PLUGIN_PATH, SEPARATED, { BACKEND(CJNATIVE) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Specify the dynamic library path of compiler plugin")
-OPTION("--common-part-cjo", COMMON_PART_PATH, FLAG_WITH_ARG, { BACKEND(CJNATIVE) },
-    { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
-    "Add .cjo path for common part of package")
+OPTION("--common-part-cjo", COMMON_PART_CJO, SEPARATED, { BACKEND(CJNATIVE) },
+    { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Add .cjo file of package common part")
+OPTION("--common-part-chir", COMMON_PART_CHIR, SEPARATED, { BACKEND(CJNATIVE) },
+    { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Add .chir file of package common part")
 OPTION("--incremental-compile", INCRE_COMPILE, FLAG, {BACKEND(CJNATIVE)},
     {GROUP(GLOBAL) COMMA GROUP(VISIBLE)}, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Enable incremental compilation.")

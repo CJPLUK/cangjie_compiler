@@ -21,7 +21,7 @@ Ptr<Value> Translator::Visit(const AST::ExtendDecl& decl)
     CreateAnnotationInfo<ExtendDef>(decl, *extendDef, extendDef);
 
     // step 2: set extended type
-    auto extendedTy = chirTy.TranslateType(*decl.extendedType->ty);
+    auto extendedTy = chirTy.TranslateType(*decl.extendedType->GetTy());
     if (extendedTy->IsRef()) {
         extendedTy = StaticCast<RefType*>(extendedTy)->GetBaseType();
     }
@@ -101,7 +101,7 @@ Ptr<Value> Translator::Visit(const AST::ExtendDecl& decl)
         CJC_NULLPTR_CHECK(decl.generic);
         auto genericDecl = decl.generic.get();
         for (auto& genericTy : genericDecl->typeParameters) {
-            chirTy.FillGenericArgType(*StaticCast<AST::GenericsTy*>(genericTy->ty));
+            chirTy.FillGenericArgType(*StaticCast<AST::GenericsTy*>(genericTy->GetTy()));
         }
     }
     return nullptr;

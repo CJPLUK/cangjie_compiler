@@ -620,7 +620,7 @@ size_t ForwardTypes(std::string& mangled, std::vector<std::unique_ptr<CJType>>& 
     return idx;
 }
 
-std::string CJMangledCompression(const std::string mangled, bool isType)
+std::string CJMangledCompression(const std::string& mangled, bool isType)
 {
     bool isCompressed = false;
     size_t preIdx = 0;

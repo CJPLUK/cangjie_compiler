@@ -44,14 +44,15 @@ void CompileStrategy::TypeCheck() const
     ci->typeChecker->TypeCheckForPackages(ci->GetSourcePackages());
 }
 
-void CompileStrategy::InteropConfigTomlCheck() {
+void CompileStrategy::InteropConfigTomlCheck()
+{
     Utils::ProfileRecorder recorder("Semantic", "InteropConfigTomlCheck");
     InteropCJPackageConfigReader packagesFullConfig;
     if (ci->invocation.globalOptions.enableInteropCJMapping &&
         ci->invocation.globalOptions.interopCJPackageConfigPath != "./" &&
         !packagesFullConfig.Parse(ci->invocation.globalOptions.interopCJPackageConfigPath)) {
         ci->diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_generic_method_not_get_instance_config,
-                                  DEFAULT_POSITION, ci->invocation.globalOptions.interopCJPackageConfigPath);
+            DEFAULT_POSITION, ci->invocation.globalOptions.interopCJPackageConfigPath);
     }
 }
 
@@ -149,21 +150,6 @@ public:
         }
     }
 
-    bool PreReadCommonPartCjo() const
-    {
-        bool hasInputCHIR = s.ci->invocation.globalOptions.IsCompilingCJMPSpecific();
-        if (hasInputCHIR || s.ci->invocation.globalOptions.commonPartCjo.has_value()) {
-            auto mbFilesFromCommonPart = s.ci->importManager->GetCjoManager()->PreReadCommonPartCjoFiles();
-            if (!mbFilesFromCommonPart) {
-                return false;
-            }
-            std::vector<std::string> filesFromCommonPart = *mbFilesFromCommonPart;
-            s.ci->GetSourceManager().ReserveCommonPartSources(filesFromCommonPart);
-        }
-
-        return true;
-    }
-
     /**
      * Initialize package information from the first file's package specification.
      * @param package The package to initialize
@@ -178,7 +164,7 @@ public:
             package.accessible = !packageSpec->modifier                  ? AccessLevel::PUBLIC
                 : packageSpec->modifier->modifier == TokenKind::PROTECTED ? AccessLevel::PROTECTED
                 : packageSpec->modifier->modifier == TokenKind::INTERNAL  ? AccessLevel::INTERNAL
-                                                                          : AccessLevel::PUBLIC;
+                                                                            : AccessLevel::PUBLIC;
         }
     }
 
@@ -251,26 +237,26 @@ public:
                 [this, curFile]() -> ParseResult {
 #if (defined RELEASE)
 #if (defined __unix__)
-                // Since alternate signal stack is per thread, we have to create an alternate signal stack for each
-                // thread.
-                Cangjie::CreateAltSignalStack();
+                    // Since alternate signal stack is per thread, we have to create an alternate signal stack for each
+                    // thread.
+                    Cangjie::CreateAltSignalStack();
 #elif defined(_WIN32)
-                // When the SIGABRT, SIGFPE, SIGSEGV and SIGILL signals are triggered in a subthread,
-                // the signals cannot be captured and the process exits directly. Therefore,
-                // the signal processing function must be set for each thread.
-                Cangjie::RegisterCrashSignalHandler();
+                    // When the SIGABRT, SIGFPE, SIGSEGV and SIGILL signals are triggered in a subthread,
+                    // the signals cannot be captured and the process exits directly. Therefore,
+                    // the signal processing function must be set for each thread.
+                    Cangjie::RegisterCrashSignalHandler();
 #endif
 #endif
-                auto parser = CreateParser(curFile);
-                parser->SetCompileOptions(s.ci->invocation.globalOptions);
-                auto file = parser->ParseTopLevel();
+                    auto parser = CreateParser(curFile);
+                    parser->SetCompileOptions(s.ci->invocation.globalOptions);
+                    auto file = parser->ParseTopLevel();
 #ifdef SIGNAL_TEST
-                // The interrupt signal triggers the function. In normal cases, this function does not take effect.
+                    // The interrupt signal triggers the function. In normal cases, this function does not take effect.
                     Cangjie::SignalTest::ExecuteSignalTestCallbackFunc(
                         Cangjie::SignalTest::TriggerPointer::PARSER_POINTER);
 #endif
-                return {std::move(file), parser->GetCommentsMap(), parser->GetLineNum()};
-            });
+                    return {std::move(file), parser->GetCommentsMap(), parser->GetLineNum()};
+                });
             taskResults.push_back(std::move(taskResult));
             fileInfoQueue.pop();
         }
@@ -387,7 +373,9 @@ public:
         // Parse source code files to File node list.
         if (s.ci->loadSrcFilesFromCache) {
             for (auto& it : s.ci->bufferCache) {
-                unsigned int fileID = s.ci->GetSourceManager().AddSource(it.first, it.second.code);
+                bool isCjmpFile = s.ci->invocation.globalOptions.IsCompilingCJMP();
+                const unsigned int fileID = s.ci->GetSourceManager().AddSource(it.first, it.second.code,
+                    std::nullopt, isCjmpFile);
                 if (s.fileIds.count(fileID) > 0) {
                     s.ci->diag.DiagnoseRefactor(
                         DiagKindRefactor::module_read_file_conflicted, DEFAULT_POSITION, it.first);
@@ -409,7 +397,9 @@ public:
                     success = false;
                     return;
                 }
-                const unsigned int fileID = s.ci->GetSourceManager().AddSource(file | IdenticalFunc, content.value());
+                bool isCjmpFile = s.ci->invocation.globalOptions.IsCompilingCJMP();
+                const unsigned int fileID = s.ci->GetSourceManager().AddSource(file | IdenticalFunc,
+                    content.value(), std::nullopt, isCjmpFile);
                 if (s.fileIds.count(fileID) > 0) {
                     (void)s.ci->diag.DiagnoseRefactor(
                         DiagKindRefactor::module_read_file_conflicted, DEFAULT_POSITION, file);
@@ -446,9 +436,6 @@ FullCompileStrategy::~FullCompileStrategy()
 
 bool FullCompileStrategy::Parse()
 {
-    if (!impl->PreReadCommonPartCjo()) {
-        return false;
-    }
     bool ret = true;
     if (ci->loadSrcFilesFromCache || ci->compileOnePackageFromSrcFiles) {
         // just incremental parse if srcPkgs is not empty and type checker is not enabled for lsp completion.
@@ -503,7 +490,9 @@ void ParseAndMergeCjd(Ptr<CompilerInstance> ci, std::pair<const std::string, std
     SourceManager& sm = ci->diag.GetSourceManager();
     {
         std::lock_guard<std::mutex> guardOfSm(g_sourceManageLock);
-        fileId = sm.AddSource(cjoPath, sourceCode.value(), cjdInfo.first);
+        bool isCjmpFile = ci->invocation.globalOptions.IsCompilingCJMP() ||
+            !ci->invocation.globalOptions.commonPartCjos.empty();
+        fileId = sm.AddSource(cjoPath, sourceCode.value(), cjdInfo.first, isCjmpFile);
     }
     auto fileAst =
         Parser(fileId, sourceCode.value(), ci->diag, ci->diag.GetSourceManager(), false, true).ParseTopLevel();

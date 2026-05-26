@@ -886,19 +886,19 @@ DynamicDispatch::DynamicDispatch(ExprKind kind, const InvokeCallContext& callCon
     : FuncCall(kind, callContext.funcCallCtx, parent),
       virMethodCtx(callContext.virMethodCtx)
 {
-    CJC_ASSERT(!virMethodCtx.srcCodeIdentifier.empty());
-    CJC_NULLPTR_CHECK(virMethodCtx.originalFuncType);
+    CJC_ASSERT(!virMethodCtx.funcName.empty());
+    CJC_NULLPTR_CHECK(virMethodCtx.funcType);
     CJC_NULLPTR_CHECK(callContext.funcCallCtx.thisType);
 }
 
 const std::string& DynamicDispatch::GetMethodName() const
 {
-    return virMethodCtx.srcCodeIdentifier;
+    return virMethodCtx.funcName;
 }
 
 FuncType* DynamicDispatch::GetMethodType() const
 {
-    return virMethodCtx.originalFuncType;
+    return virMethodCtx.funcType;
 }
 
 const std::vector<GenericType*>& DynamicDispatch::GetGenericTypeParams() const
@@ -920,7 +920,7 @@ std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& 
         instParamTypes.erase(instParamTypes.begin());
     }
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
-    FuncCallType funcCallType{virMethodCtx.srcCodeIdentifier, instFuncType, instantiatedTypeArgs};
+    FuncCallType funcCallType{virMethodCtx.funcName, instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
     CJC_ASSERT(!res.empty());
     return res;

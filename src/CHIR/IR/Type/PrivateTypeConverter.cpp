@@ -88,7 +88,7 @@ void ExprTypeConverter::VisitSubExpression(ApplyWithException& o)
 void ExprTypeConverter::VisitSubExpression(Invoke& o)
 {
     VisitExprDefaultImpl(o);
-    o.virMethodCtx.originalFuncType = ConvertFuncParamsAndRetType(*o.virMethodCtx.originalFuncType);
+    o.virMethodCtx.funcType = ConvertFuncParamsAndRetType(*o.virMethodCtx.funcType);
     o.thisType = ConvertType(*o.thisType);
     for (auto& ty : o.instantiatedTypeArgs) {
         ty = converter(*ty);
@@ -98,7 +98,7 @@ void ExprTypeConverter::VisitSubExpression(Invoke& o)
 void ExprTypeConverter::VisitSubExpression(InvokeWithException& o)
 {
     VisitExprDefaultImpl(o);
-    o.virMethodCtx.originalFuncType = ConvertFuncParamsAndRetType(*o.virMethodCtx.originalFuncType);
+    o.virMethodCtx.funcType = ConvertFuncParamsAndRetType(*o.virMethodCtx.funcType);
     o.thisType = ConvertType(*o.thisType);
     for (auto& ty : o.instantiatedTypeArgs) {
         ty = converter(*ty);
@@ -108,7 +108,7 @@ void ExprTypeConverter::VisitSubExpression(InvokeWithException& o)
 void ExprTypeConverter::VisitSubExpression(InvokeStatic& o)
 {
     VisitExprDefaultImpl(o);
-    o.virMethodCtx.originalFuncType = ConvertFuncParamsAndRetType(*o.virMethodCtx.originalFuncType);
+    o.virMethodCtx.funcType = ConvertFuncParamsAndRetType(*o.virMethodCtx.funcType);
     o.thisType = ConvertType(*o.thisType);
     for (auto& ty : o.instantiatedTypeArgs) {
         ty = converter(*ty);
@@ -118,7 +118,7 @@ void ExprTypeConverter::VisitSubExpression(InvokeStatic& o)
 void ExprTypeConverter::VisitSubExpression(InvokeStaticWithException& o)
 {
     VisitExprDefaultImpl(o);
-    o.virMethodCtx.originalFuncType = ConvertFuncParamsAndRetType(*o.virMethodCtx.originalFuncType);
+    o.virMethodCtx.funcType = ConvertFuncParamsAndRetType(*o.virMethodCtx.funcType);
     o.thisType = ConvertType(*o.thisType);
     for (auto& ty : o.instantiatedTypeArgs) {
         ty = converter(*ty);

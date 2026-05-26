@@ -13,6 +13,7 @@
 #include "cangjie/CHIR/IR/Type/StructDef.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include <iostream>
+#include <string>
 
 using namespace Cangjie::CHIR;
 
@@ -25,9 +26,31 @@ std::string Package::GetName() const
     return name;
 }
 
+GlobalVar* Package::TryGetGlobalVar(const std::string& identifier)
+{
+    for (auto var : globalVars) {
+        if (var->GetIdentifier() == identifier) {
+            return var;
+        }
+    }
+
+    return nullptr;
+}
+
 void Package::AddGlobalVar(GlobalVar* item)
 {
     globalVars.emplace_back(item);
+}
+
+Function* Package::TryGetGlobalFunc(const std::string& identifier)
+{
+    for (auto func : globalFuncs) {
+        if (func->GetIdentifier() == identifier) {
+            return func;
+        }
+    }
+
+    return nullptr;
 }
 
 void Package::AddGlobalFunc(Function* item)
@@ -262,7 +285,7 @@ std::vector<GlobalVar*> Package::GetGlobalVarsWithoutInit() const
 {
     std::vector<GlobalVar*> importedGlobalVars;
     for (auto var : globalVars) {
-        if (var->TestAttr(Attribute::IMPORTED) && !var->IsSrcCodeImported()) {
+        if (var->GetInitializerValue() == nullptr) {
             importedGlobalVars.emplace_back(var);
         }
     }
@@ -393,4 +416,64 @@ std::vector<ExtendDef*> Package::GetAllExtendDef() const
     all.insert(all.end(), importedExtends.begin(), importedExtends.end());
 
     return all;
+}
+
+ClassDef* Package::TryGetClassDef(const std::string& identifier)
+{
+    for (auto classDef : classes) {
+        if (classDef->GetIdentifier() == identifier) {
+            return classDef;
+        }
+    }
+    for (auto classDef : importedClasses) {
+        if (classDef->GetIdentifier() == identifier) {
+            return classDef;
+        }
+    }
+    return nullptr;
+}
+
+EnumDef* Package::TryGetEnumDef(const std::string& identifier)
+{
+    for (auto enumDef : enums) {
+        if (enumDef->GetIdentifier() == identifier) {
+            return enumDef;
+        }
+    }
+    for (auto enumDef : importedEnums) {
+        if (enumDef->GetIdentifier() == identifier) {
+            return enumDef;
+        }
+    }
+    return nullptr;
+}
+
+ExtendDef* Package::TryGetExtendDef(const std::string& identifier)
+{
+    for (auto extendDef : extends) {
+        if (extendDef->GetIdentifier() == identifier) {
+            return extendDef;
+        }
+    }
+    for (auto extendDef : importedExtends) {
+        if (extendDef->GetIdentifier() == identifier) {
+            return extendDef;
+        }
+    }
+    return nullptr;
+}
+
+StructDef* Package::TryGetStructDef(const std::string& identifier)
+{
+    for (auto structDef : structs) {
+        if (structDef->GetIdentifier() == identifier) {
+            return structDef;
+        }
+    }
+    for (auto structDef : importedStructs) {
+        if (structDef->GetIdentifier() == identifier) {
+            return structDef;
+        }
+    }
+    return nullptr;
 }

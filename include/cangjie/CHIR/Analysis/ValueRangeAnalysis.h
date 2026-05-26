@@ -12,7 +12,7 @@
 #include "cangjie/CHIR/Analysis/BoolDomain.h"
 #include "cangjie/CHIR/Analysis/SIntDomain.h"
 #include "cangjie/CHIR/Analysis/ValueAnalysis.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 
 namespace Cangjie::CHIR {
@@ -127,7 +127,7 @@ public:
      * @param isDebug flag whether print debug log.
      * @param diag reporter to report warning or error.
      */
-    RangeAnalysis(const Function* func, CHIRBuilder& builder, bool isDebug, const Ptr<DiagAdapter>& diag);
+    RangeAnalysis(const Function* func, CHIRBuilder& builder, bool isDebug, DiagnosticEngine& diag);
 
     ~RangeAnalysis() override;
 
@@ -211,7 +211,7 @@ private:
 
     BoolDomain GenerateBoolRangeFromBinaryOp(RangeDomain& state, const Ptr<const BinaryExpression>& binaryExpr) const;
 
-    DiagAdapter* diag;
+    DiagnosticEngine& diag;
 
     std::unordered_map<const Block*, uint32_t> inqueueTimes;
 };

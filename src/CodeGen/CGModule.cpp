@@ -41,13 +41,15 @@ inline std::string CGModule::GetDataLayoutString(const Triple::Info& target)
                             : "e-m:e-i64:64-f80:128-n8:16:32:64-S128";
 }
 
-inline std::string CGModule::GetTargetTripleString(const Triple::Info& target)
+std::string CGModule::GetTargetTripleString(const Triple::Info& target)
 {
     if (target.IsMacOS()) {
         if (target.arch == Triple::ArchType::AARCH64) {
             return "arm64-apple-macosx12.0.0";
         }
         return target.ArchToString() + "-apple-macosx12.0.0";
+    } else if (target.arch == Triple::ArchType::AARCH64 && target.env == Triple::Environment::OHOS) {
+        return target.ArchToString() + "-unknown-linux-ohos";
     } else if (target.arch == Triple::ArchType::ARM32 && target.os == Triple::OSType::LINUX) {
         return "armv7a-linux-gnu";
     } else {
@@ -174,12 +176,12 @@ void CGModule::GenIncremental()
         // Save .bc for the potential incremental compilation before deeper erasure.
         auto cachePath = option.GenerateCachedPathNameForCodeGen(module->getSourceFileName(), "_cache.bc");
         CodeGen::SaveToBitcodeFile(*module, cachePath);
-        if (auto namedMD = module->getNamedMetadata("CodeGenAddedForIncr"); namedMD) {
-            namedMD->eraseFromParent();
-        }
-        if (auto namedMD = module->getNamedMetadata("StaticGenericTIsForIncr"); namedMD) {
-            namedMD->eraseFromParent();
-        }
+    }
+    if (auto namedMD = module->getNamedMetadata("CodeGenAddedForIncr"); namedMD) {
+        namedMD->eraseFromParent();
+    }
+    if (auto namedMD = module->getNamedMetadata("StaticGenericTIsForIncr"); namedMD) {
+        namedMD->eraseFromParent();
     }
 }
 

@@ -152,7 +152,7 @@ bool HasChildMacroCall(MacroCall& macCall)
 {
     for (auto mc : macCall.children) {
         auto pInvocation = mc->GetInvocation();
-        if (pInvocation && !pInvocation->isCustom) {
+        if (pInvocation && !pInvocation->macroCallDiagInfo.isCustom) {
             return true;
         }
         if (mc->status == MacroEvalStatus::ANNOTATION && HasChildMacroCall(*mc)) {
@@ -297,7 +297,7 @@ void RefreshMacroCallArgs(MacroCall& macCall, DiagnosticEngine& diag)
         } else {
             tokensAfterEval.emplace_back(Token(TokenKind::AT, "@", pInvocation->atPos, pInvocation->atPos + 1));
         }
-        auto tks = GetTokensFromString(pInvocation->fullName, diag, pInvocation->atPos + atTokenSize);
+        auto tks = GetTokensFromString(pInvocation->macroCallDiagInfo.fullName, diag, pInvocation->atPos + atTokenSize);
         (void)tokensAfterEval.insert(tokensAfterEval.end(), tks.begin(), tks.end());
         if (!pInvocation->attrs.empty()) {
             (void)tokensAfterEval.emplace_back(
@@ -769,12 +769,12 @@ bool MacroEvaluation::NeedCreateMacroCallTreeForReEval(MacroCall& macCall, AST::
 {
     // For custom annotations (isCustom=true), we need to check if newTokens contains
     // any macro calls produced by child macro expansion.
-    if (pInvocation->isCustom) {
+    if (pInvocation->macroCallDiagInfo.isCustom) {
         auto node = macCall.GetNode();
         if (node && node->curFile && node->curFile->curPackage) {
             auto names = Utils::SplitQualifiedName(node->curFile->curPackage->fullPackageName);
             auto moduleName = names.size() > 1 ? names.front() : "";
-            if (HasMacroCallInTokens(pInvocation->newTokens, moduleName, pInvocation->identifier)) {
+            if (HasMacroCallInTokens(pInvocation->newTokens, moduleName, pInvocation->macroCallDiagInfo.identifier)) {
                 return true;
             }
         }
@@ -813,7 +813,7 @@ bool MacroEvaluation::NeedCreateMacroCallTreeForFirstEval(MacroCall& macCall, AS
     }
     // For annotation case, should change Macro to Annotation.
     macCall.status = MacroEvalStatus::ANNOTATION;
-    pInvocation->isCustom = true;
+    pInvocation->macroCallDiagInfo.isCustom = true;
     return true;
 }
 
@@ -831,7 +831,7 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
     // (@AnnotationName[args]) to avoid duplicate tokens in RefreshMacroCallArgs.
     // RefreshMacroCallArgs manually rebuilds the annotation header, so nodes should
     // only contain content from child macro expansions (e.g., @Bean, @Pointcut).
-    size_t tokenStartOffset = (reEval && pInvocation->isCustom) ?
+    size_t tokenStartOffset = (reEval && pInvocation->macroCallDiagInfo.isCustom) ?
         SkipAnnotationTokens(inputTokens) : 0;
 
     if (!PreprocessTokens(inputTokens, escapePosVec)) {
@@ -891,7 +891,7 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
     } else {
         // Has no child macrocall.
         if (macCall.status == MacroEvalStatus::ANNOTATION) {
-            pInvocation->isCurFile = true;
+            pInvocation->macroCallDiagInfo.isCurFile = true;
             (void)pMacroCalls.emplace_back(&macCall); // For evaluate.
             return;
         }

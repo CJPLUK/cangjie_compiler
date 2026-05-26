@@ -141,16 +141,12 @@ private:
             auto judgeRes = ChooseAnalysisStrategy(*func);
             if (judgeRes == AnalysisStrategy::ActiveStatePool) {
                 resultsPool.emplace_back(taskQueue.AddTask<ResTyPool>(
-                    [func, isDebug, &args..., this]() {
-                            return RunOnFuncWithPool(func, isDebug, std::forward<Args>(args)...);
-                        },
+                    [func, isDebug, &args..., this]() { return RunOnFuncWithPool(func, isDebug, std::forward<Args>(args)...); },
                     // Roughly use the number of Blocks as the cost of task weight
                     func->GetBody()->GetBlocks().size()));
             } else if (judgeRes == AnalysisStrategy::FullStatePool) {
                 results.emplace_back(taskQueue.AddTask<ResTy>(
-                    [func, isDebug, &args..., this]() {
-                            return RunOnFunc(func, isDebug, std::forward<Args>(args)...);
-                        },
+                    [func, isDebug, &args..., this]() { return RunOnFunc(func, isDebug, std::forward<Args>(args)...); },
                     func->GetBody()->GetBlocks().size()));
             }
         }

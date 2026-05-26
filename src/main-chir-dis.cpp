@@ -147,7 +147,9 @@ bool DeserializeInputCHIR(const std::string& path)
 
 int main(int argc, const char** argv)
 {
+#ifndef CANGJIE_ENABLE_GCOV
     try {
+#endif
         RegisterSignalHandler();
         auto args = Utils::StringifyArgumentVector(argc, argv);
         ActionInfo info;
@@ -168,10 +170,8 @@ int main(int argc, const char** argv)
 #ifndef CANGJIE_ENABLE_GCOV
     } catch (const NullPointerException& nullPointerException) {
         Cangjie::ICE::TriggerPointSetter iceSetter(nullPointerException.GetTriggerPoint());
-#else
-    } catch (const std::exception& nullPointerException) {
-#endif
         InternalError("null pointer");
     }
+#endif
     return EXIT_CODE_SUCCESS;
 }

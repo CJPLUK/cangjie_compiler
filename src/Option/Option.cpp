@@ -272,6 +272,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
     success = success && ReprocessObfuseOption();
+    success = success && CheckCJMPOptions();
     RefactJobs();
     RefactAggressiveParallelCompileOption();
     DisableStaticStdForOhos();
@@ -664,6 +665,36 @@ bool GlobalOptions::CheckPgoOptions() const
     return true;
 }
 
+bool GlobalOptions::VerifyFileExtension(
+    const std::string& file, const std::string& fullPath, const std::string& extension, DiagnosticEngine& diag) const
+{
+    if (GetFileExtension(fullPath) != extension) {
+        RaiseArgumentUnusedMessage(
+            diag, DiagKindRefactor::driver_warning_unexpected_file_extension, extension, file, fullPath);
+        return false;
+    }
+
+    return true;
+}
+
+bool GlobalOptions::CheckCJMPOptions() const
+{
+    DiagnosticEngine diag;
+    bool ok = true;
+    for (const auto& cjoFile : commonPartCjos) {
+        ok &= VerifyFileExtension(cjoFile, cjoFile, CJO_EXTENSION, diag);
+    }
+    for (const auto& chirFile : commonPartChirs) {
+        ok &= VerifyFileExtension(chirFile, chirFile, CHIR_EXTENSION, diag);
+    }
+    if (commonPartCjos.size() != commonPartChirs.size()) {
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_require_common_chir_for_each_common_cjo, DEFAULT_POSITION);
+        ok = false;
+    }
+
+    return ok;
+}
+
 void GlobalOptions::RefactJobs()
 {
     if (jobs.has_value()) {
@@ -722,22 +753,14 @@ bool GlobalOptions::HandleArchiveExtension(DiagnosticEngine& diag, const std::st
     if (!maybePath.has_value()) {
         return false;
     }
+    auto fullPath = maybePath.value();
     auto ext = GetFileExtension(value);
-    if (ext == ARCHIVE_EXTENSION && GetFileExtension(maybePath.value()) != ARCHIVE_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_archive_file, value, maybePath.value());
+    if (!VerifyFileExtension(value, fullPath, ext, diag)) {
         return true;
     }
-    if (ext == OBJECT_EXTENSION && GetFileExtension(maybePath.value()) != OBJECT_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_object_file, value, maybePath.value());
-        return true;
-    }
-    if (ext == COFF_OBJECT_EXTENSION && GetFileExtension(maybePath.value()) != COFF_OBJECT_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_object_file, value, maybePath.value());
-        return true;
-    }
-    inputObjs.emplace_back(maybePath.value());
+    inputObjs.emplace_back(fullPath);
     // The .o and .a file is replaced with the absolute path
-    ReplaceInputFileName(value, maybePath.value());
+    ReplaceInputFileName(value, fullPath);
     return true;
 }
 
@@ -747,8 +770,7 @@ bool GlobalOptions::HandleCJOExtension(DiagnosticEngine& diag, const std::string
     if (!maybePath.has_value()) {
         return false;
     }
-    if (GetFileExtension(maybePath.value()) != CJO_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_cjo_file, value, maybePath.value());
+    if (!VerifyFileExtension(value, maybePath.value(), CJO_EXTENSION, diag)) {
         return true;
     }
     if (!inputCjoFile.empty()) {
@@ -757,20 +779,6 @@ bool GlobalOptions::HandleCJOExtension(DiagnosticEngine& diag, const std::string
         return false;
     }
     inputCjoFile = value;
-    return true;
-}
-
-bool GlobalOptions::HandleCHIRExtension(DiagnosticEngine& diag, const std::string& value)
-{
-    auto maybePath = ValidateInputFilePath(value, DiagKindRefactor::no_such_file_or_directory);
-    if (!maybePath.has_value()) {
-        return false;
-    }
-    if (GetFileExtension(maybePath.value()) != CHIR_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_chir_file, value, maybePath.value());
-        return true;
-    }
-    inputChirFiles.push_back(maybePath.value());
     return true;
 }
 
@@ -785,8 +793,7 @@ bool GlobalOptions::HandleCJExtension(DiagnosticEngine& diag, const std::string&
     if (!maybePath.has_value()) {
         return false;
     }
-    if (GetFileExtension(maybePath.value()) != CJ_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_cj_file, value, maybePath.value());
+    if (!VerifyFileExtension(value, maybePath.value(), CJ_EXTENSION, diag)) {
         return true;
     }
     srcFiles.push_back(value);
@@ -814,13 +821,13 @@ bool GlobalOptions::HandleBCExtension(DiagnosticEngine& diag, const std::string&
     if (!maybePath.has_value()) {
         return false;
     }
-    if (GetFileExtension(maybePath.value()) != BC_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_bc_file, value, maybePath.value());
+    auto fullPath = maybePath.value();
+    if (!VerifyFileExtension(value, fullPath, BC_EXTENSION, diag)) {
         return true;
     }
-    bcInputFiles.push_back(maybePath.value());
+    bcInputFiles.push_back(fullPath);
     // The .bc file is replaced with the absolute path
-    ReplaceInputFileName(value, maybePath.value());
+    ReplaceInputFileName(value, fullPath);
     return true;
 }
 
@@ -855,8 +862,7 @@ bool GlobalOptions::ProcessInputs(const std::vector<std::string>& inputs)
 {
     DiagnosticEngine diag;
     bool ret = true;
-    bool needChir = (commonPartCjo != std::nullopt);
-    std::for_each(inputs.begin(), inputs.end(), [this, &ret, &diag, &needChir](const std::string& value) {
+    std::for_each(inputs.begin(), inputs.end(), [this, &ret, &diag](const std::string& value) {
         if (!ret) {
             return;
         }
@@ -867,9 +873,6 @@ bool GlobalOptions::ProcessInputs(const std::vector<std::string>& inputs)
             ret = HandleCJExtension(diag, value);
         } else if (ext == BC_EXTENSION) {
             ret = HandleBCExtension(diag, value);
-        } else if (ext == CHIR_EXTENSION) {
-            needChir = false;
-            ret = HandleCHIRExtension(diag, value);
         } else if (ext == CJO_EXTENSION) {
             ret = HandleCJOExtension(diag, value);
         } else if (HasCJDExtension(value) && compileCjd) {
@@ -881,10 +884,6 @@ bool GlobalOptions::ProcessInputs(const std::vector<std::string>& inputs)
     // Check inputs.
     if (compilePackage && packagePaths.empty()) {
         (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_package_directory, DEFAULT_POSITION);
-        return false;
-    }
-    if (needChir) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_chir_directory, DEFAULT_POSITION);
         return false;
     }
     if (compilePackage && packagePaths.size() > 1) {
@@ -1158,9 +1157,15 @@ std::optional<std::string> GlobalOptions::CheckInputFilePath(const std::string& 
 #endif
 
 std::optional<std::string> GlobalOptions::ValidateInputFilePath(
-    const std::string& path, const DiagKindRefactor notFoundError) const
+    const std::string& path, const DiagKindRefactor notFoundError)
 {
     DiagnosticEngine diag;
+    return ValidateInputFilePath(path, notFoundError, diag);
+}
+
+std::optional<std::string> GlobalOptions::ValidateInputFilePath(
+    const std::string& path, const DiagKindRefactor notFoundError, DiagnosticEngine& diag)
+{
     if (IsAbsolutePathAboveLengthLimit(path)) {
         (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_path_exceeds_length_limit, DEFAULT_POSITION, path,
             std::to_string(FILE_PATH_MAX_LENGTH));
@@ -1206,6 +1211,7 @@ std::string GlobalOptions::GetSharedLibraryExtension(Triple::OSType osType)
         case Triple::OSType::WINDOWS:
             return ".dll";
         case Triple::OSType::DARWIN:
+        case Triple::OSType::IOS:
             return ".dylib";
         case Triple::OSType::LINUX:
         case Triple::OSType::UNKNOWN:
@@ -1240,7 +1246,11 @@ void GlobalOptions::ReadPathsFromEnvironmentVars(const std::unordered_map<std::s
 
 std::string GlobalOptions::GetCangjieLibHostPathName() const
 {
-    return host.OSToString() + "_" + host.ArchToString() + "_" + BackendToString(backend);
+    std::string name = host.OSToString();
+    if (host.env == Triple::Environment::OHOS) {
+        name += "_" + host.EnvironmentToString();
+    }
+    return name + "_" + host.ArchToString() + "_" + BackendToString(backend);
 }
 
 std::string GlobalOptions::GetCangjieLibTargetPathName() const

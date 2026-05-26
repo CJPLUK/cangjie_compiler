@@ -278,7 +278,8 @@ std::unique_ptr<MacroExpandDecl> MacroEvaluation::CreateMacroExpand(const MacroM
     auto med = std::make_unique<MacroExpandDecl>();
     MacroEvalMsgSerializer::DeSerializeRangeFromCall(med->begin, med->end, callFmt);
     auto pInvocation = med->GetInvocation();
-    MacroEvalMsgSerializer::DeSerializeIdInfoFromCall(pInvocation->identifier, pInvocation->identifierPos, callFmt);
+    MacroEvalMsgSerializer::DeSerializeIdInfoFromCall(
+        pInvocation->macroCallDiagInfo.identifier, pInvocation->macroCallDiagInfo.identifierPos, callFmt);
     MacroEvalMsgSerializer::DeSerializeArgsFromCall(pInvocation->args, callFmt);
     MacroEvalMsgSerializer::DeSerializeAttrsFromCall(pInvocation->attrs, callFmt);
     pInvocation->hasAttr = callFmt.hasAttrs();

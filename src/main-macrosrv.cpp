@@ -16,7 +16,11 @@
 #include <windows.h>
 #else
 #include <csignal>
+#ifdef __ohos__
+#include <signal.h>
+#else
 #include <sys/signal.h>
+#endif
 #include <sys/stat.h>
 #endif
 
@@ -36,9 +40,7 @@ const size_t IDX_OF_READ_HANDLE = 1;
 const size_t IDX_OF_WRITE_HANDLE = 2;
 const size_t IDX_OF_ENABLE_PARA = 3;
 const size_t IDX_OF_CJC_FOLDER = 4;
-#ifndef _WIN32
 const size_t IDX_OF_PPID = 5;
-#endif
 #if defined(__linux__) || defined(__APPLE__)
 const unsigned int CHECK_INTERVAL = 2;
 static void MonitoringParentProcess(pid_t pid)
@@ -79,6 +81,10 @@ bool IsArgsValid(const std::vector<std::string>& args)
     }
     if (!IsNumber(args[IDX_OF_WRITE_HANDLE])) {
         Errorln("Macro srv: Arg of write handle is not number");
+        return false;
+    }
+    if (args.size() > IDX_OF_PPID && !IsNumber(args[IDX_OF_PPID])) {
+        Errorln("Macro srv: Arg of ppid is not number");
         return false;
     }
     if (args[IDX_OF_CJC_FOLDER].empty()) {
@@ -175,5 +181,5 @@ int main(int argc, const char* argv[], [[maybe_unused]] const char** envp)
     [[maybe_unused]] std::lock_guard lg(MacroProcMsger::GetInstance().mutex);
     MacroProcMsger::GetInstance().CloseClientResource();
 #endif
-    return 0;
+    _exit(0);
 }

@@ -10,7 +10,7 @@
 #include "cangjie/CHIR/Analysis/MaybeInitAnalysis.h"
 #include "cangjie/CHIR/Analysis/MaybeUninitAnalysis.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
 
@@ -18,7 +18,7 @@ namespace Cangjie::CHIR {
 
 class VarInitCheck {
 public:
-    explicit VarInitCheck(DiagAdapter* diag);
+    explicit VarInitCheck(DiagnosticEngine& diag);
 
     void RunOnPackage(const Package* package, size_t threadNum);
 
@@ -62,7 +62,7 @@ private:
         const StoreElementRef* store, const std::vector<MemberVarInfo>& members) const;
 
 private:
-    DiagAdapter* diag;
+    DiagnosticEngine& diag;
 };
 
 } // namespace Cangjie::CHIR

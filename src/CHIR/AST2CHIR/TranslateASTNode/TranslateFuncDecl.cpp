@@ -277,7 +277,7 @@ Ptr<Value> Translator::TranslateInstanceMemberFunc(const AST::Decl& parent, cons
     auto thisVar = curFunc->GetParam(0);
     CJC_NULLPTR_CHECK(thisVar);
     if (parent.astKind == AST::ASTKind::EXTEND_DECL) {
-        if (auto typeDecl = AST::Ty::GetDeclOfTy(parent.ty)) {
+        if (auto typeDecl = AST::Ty::GetDeclOfTy(parent.GetTy())) {
             SetSymbolTable(*typeDecl, *thisVar);
         }
     } else {
@@ -466,7 +466,7 @@ Ptr<Value> Translator::TranslateNestedFunc(const AST::FuncDecl& func)
         TranslateFunctionGenericUpperBounds(chirTy, func);
     }
     auto lambdaTrans = SetupContextForLambda(*func.funcBody->body);
-    auto funcTy = RawStaticCast<FuncType*>(TranslateType(*func.ty));
+    auto funcTy = RawStaticCast<FuncType*>(TranslateType(*func.GetTy()));
     // Create nested functions' body and parameters.
     CJC_NULLPTR_CHECK(currentBlock->GetTopLevelFunc());
     BlockGroup* body = builder.CreateBlockGroup(*currentBlock->GetTopLevelFunc());
@@ -475,7 +475,7 @@ Ptr<Value> Translator::TranslateNestedFunc(const AST::FuncDecl& func)
     // Only collect for generic function which has not been instantiated.
     if (auto generic = func.funcBody->generic.get(); generic && func.TestAttr(AST::Attribute::GENERIC)) {
         for (auto& type : generic->typeParameters) {
-            genericTys.emplace_back(RawStaticCast<GenericType*>(TranslateType(*type->ty)));
+            genericTys.emplace_back(RawStaticCast<GenericType*>(TranslateType(*type->GetTy())));
         }
     }
     std::string lambdaMangleName = func.mangledName;

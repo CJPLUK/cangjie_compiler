@@ -528,7 +528,7 @@ void CHIR2BCHIR::TranslateAllocate(Context& ctx, const Expression& expr)
         auto numberOfFields = classTy->GetClassDef()->GetAllInstanceVarNum();
         auto idx = ctx.def.NextIndex();
         auto opCode = withException ? OpCode::ALLOCATE_CLASS_EXC : OpCode::ALLOCATE_CLASS;
-        PushOpCodeWithAnnotations<false, true>(ctx, opCode, expr, 0, static_cast<unsigned>(numberOfFields));
+        PushOpCodeWithAnnotations<false, true>(ctx, opCode, expr, 0u, static_cast<unsigned>(numberOfFields));
         ctx.def.AddMangledNameAnnotation(idx, classTy->GetClassDef()->GetIdentifierWithoutPrefix());
     } else if (ty->IsStruct()) {
         auto structTy = StaticCast<const StructType*>(ty);
@@ -565,7 +565,7 @@ const std::unordered_map<std::string, IntrinsicKind> CHIR2BCHIR::syscall2Intrins
 
 Bchir::CodePosition CHIR2BCHIR::CHIRPos2BCHIRPos(const DebugLocation& loc)
 {
-    auto fileName = sourceManager.GetSource(static_cast<unsigned int>(loc.GetFileID())).path;
+    auto fileName = sourceManager.GetSource(loc.GetFileID()).path;
     auto fileId = fileNameToIndexMemoization.find(fileName);
     size_t fileIdx = 0;
     if (fileId == fileNameToIndexMemoization.end()) {

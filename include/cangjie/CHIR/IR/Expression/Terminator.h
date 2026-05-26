@@ -443,7 +443,7 @@ protected:
     explicit DynamicDispatchWithException(
         ExprKind kind, const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent);
 
-    VirMethodContext virMethodCtx;
+    FuncSigInfo virMethodCtx;
 
 private:
     std::vector<VTableSearchRes> GetVirtualMethodInfo(CHIRBuilder& builder) const;

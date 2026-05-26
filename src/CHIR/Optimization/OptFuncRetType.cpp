@@ -88,8 +88,8 @@ void OptFuncRetType::Unit2Void()
                     .instTypeArgs = apply->GetInstantiatedTypeArgs(),
                     .thisType = apply->GetThisType()
                 };
-                auto newApply = builder.CreateExpression<Apply>(apply->GetDebugLocation(),
-                    func->GetReturnType(), apply->GetCallee(), funcCallContext, apply->GetParentBlock());
+                auto newApply = builder.CreateExpression<Apply>(
+                    apply->GetDebugLocation(), func->GetReturnType(), apply->GetCallee(), funcCallContext, apply->GetParentBlock());
                 if (apply->IsSuperCall()) {
                     newApply->SetSuperCall();
                 }

@@ -182,9 +182,9 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfAvailableExpr(ASTContext& ctx, IfAvai
     state.res = Check(ctx, targetTy, iae.GetLambda1()) && state.res;
     state.res = Check(ctx, targetTy, iae.GetLambda2()) && state.res;
     if (!state.res) {
-        iae.ty = typeManager.GetInvalidTy();
-        return iae.ty;
+        iae.SetTy(typeManager.GetInvalidTy());
+        return iae.GetTy();
     }
-    iae.ty = Synthesize(ctx, iae.desugarExpr);
-    return iae.ty;
+    iae.SetTy(Synthesize({ctx, SynPos::EXPR_ARG}, iae.desugarExpr));
+    return iae.GetTy();
 }

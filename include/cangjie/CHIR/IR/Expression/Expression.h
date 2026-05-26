@@ -743,21 +743,12 @@ struct FuncCallContext {
 };
 
 /**
- * @brief Context for a virtual function
- */
-struct VirMethodContext {
-    std::string srcCodeIdentifier;       // function name
-    FuncType* originalFuncType{nullptr}; // method signature type, from virtual method type in parent CustomTypeDef
-    std::vector<GenericType*> genericTypeParams;
-};
-
-/**
  * @brief Context for a virtual function calling
  */
 struct InvokeCallContext {
     Value* caller{nullptr};  // the object in Invoke, or the rtti in InvokeStatic
     FuncCallContext funcCallCtx;
-    VirMethodContext virMethodCtx;
+    FuncSigInfo virMethodCtx;
 };
 
 /**
@@ -948,7 +939,7 @@ protected:
     std::string OperandsToString() const override;
     explicit DynamicDispatch(ExprKind kind, const InvokeCallContext& callContext, Block* parent);
 
-    VirMethodContext virMethodCtx;
+    FuncSigInfo virMethodCtx;
 
 private:
     std::vector<VTableSearchRes> GetVirtualMethodInfo(CHIRBuilder& builder) const;

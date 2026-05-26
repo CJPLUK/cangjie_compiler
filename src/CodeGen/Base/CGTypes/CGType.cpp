@@ -160,24 +160,13 @@ CGType* CGType::GetOrCreate(CGModule& cgModule, const Cangjie::CHIR::Type* chirT
     if (auto it = cache.find(chirTy); it != cache.end() && !IsLitStructPtrType(it->second->llvmType)) {
         return it->second;
     }
-    /// This is a defense mechanism to report a memory management problem on CHIR.
-    /// Release mode: this problem on CHIR will be covered by codegen, the program won't behave incorrectly.
-    /// Debug mode: the program will abort and an error will be reported.
-    auto& secondCache = cgContext.impl->chirTypeName2CGTypeMap;
-    if (auto it = secondCache.find(chirTy->ToString());
-        it != secondCache.end() && !IsLitStructPtrType(it->second->llvmType)) {
-        auto [iter, success] = cache.emplace(chirTy, it->second);
-        CJC_ASSERT(success);
-        CJC_ASSERT(false && "It must be a bug on CHIR: an AST type corresponds to different memory address");
-        return it->second;
-    }
+
     // This `cgType` will be released in the de-constructor of `CGContextImpl`.
     CGType* cgType = CGTypeMgr::GetConcreteCGTypeFor(cgModule, *chirTy, extraInfo);
     // Add the incomplete `cgType` to prevent infinite recursion into this program point.
     auto [iter, success] = cache.emplace(chirTy, cgType);
     if (!success) {
         cache[chirTy] = cgType;
-        secondCache[chirTy->ToString()] = cgType;
     }
     // Complete the `cgType`.
     cgType->llvmType = cgType->GenLLVMType();

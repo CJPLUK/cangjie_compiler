@@ -106,7 +106,7 @@ export DYLD_FALLBACK_LIBRARY_PATH="${CANGJIE_HOME}/runtime/lib/darwin_${hw_arch}
 unset hw_arch
 
 if [ -z ${SDKROOT+x} ]; then
-    export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+    export SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
 fi
 
 xattr -dr com.apple.quarantine "${script_dir}"/* &> /dev/null || true

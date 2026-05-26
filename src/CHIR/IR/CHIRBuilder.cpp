@@ -22,6 +22,7 @@
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include "cangjie/Mangle/CHIRMangler.h"
+#include "cangjie/Utils/CheckUtils.h"
 
 using namespace Cangjie::CHIR;
 
@@ -153,9 +154,8 @@ StructDef* CHIRBuilder::CreateStruct(const DebugLocation& loc, const std::string
 // ===--------------------------------------------------------------------===//
 // ClassDef API
 // ===--------------------------------------------------------------------===//
-ClassDef* CHIRBuilder::CreateClass(const DebugLocation& loc,
-    const std::string& srcCodeIdentifier, const std::string& mangledName, const std::string& pkgName, bool isClass,
-    bool isImported)
+ClassDef* CHIRBuilder::CreateClass(const DebugLocation& loc, const std::string& srcCodeIdentifier,
+    const std::string& mangledName, const std::string& pkgName, bool isClass, bool isImported)
 {
     ClassDef* ret = new ClassDef(srcCodeIdentifier, "@" + mangledName, pkgName, isClass);
     this->allocatedClasses.push_back(ret);

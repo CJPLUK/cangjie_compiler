@@ -182,7 +182,7 @@ llvm::Value* GenerateOptionLikeNonRef(IRBuilder2& irBuilder, const CHIR::Tuple& 
             auto associatedValOffset = irBuilder.CallIntrinsicGetFieldOffset({enumTi, irBuilder.getInt64(1U)});
             payload = irBuilder.CreateInBoundsGEP(irBuilder.getInt8Ty(),
                 irBuilder.CreateBitCast(payload, irBuilder.getInt8PtrTy(1U)), associatedValOffset);
-            auto associatedType = chirEnumType->GetTypeArgs()[0];
+            auto associatedType = tuple.GetOperand(1)->GetType();
             auto associatedTypeSize = irBuilder.GetLayoutSize_32(*associatedType);
             (void)irBuilder.CallIntrinsicGCWriteGeneric(
                 {enumVal, payload, **(cgMod | tuple.GetOperand(1)), associatedTypeSize});

@@ -79,6 +79,21 @@ void SetGlobalVarLinkageType(Value& var, const AST::VarDecl& decl, bool isLifted
     }
     var.Set<LinkTypeInfo>(decl.linkage);
 }
+
+void TryUpdateExistingValue(GlobalValue& existing, const std::set<std::string>& newFeatures)
+{
+    auto oldFeatures = existing.GetFeatures();
+    bool newIsSuperSet = std::includes(newFeatures.begin(), newFeatures.end(),
+        oldFeatures.begin(), oldFeatures.end()) && newFeatures.size() > oldFeatures.size();
+    if (!newIsSuperSet) {
+        // already existed value more specific, so no need to update
+        existing.EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    } else {
+        // will be updated as it is loaded first time
+        existing.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+        existing.SetFeatures(newFeatures);
+    }
+}
 } // namespace
 
 void AST2CHIR::AddToImplicitFuncs(AST::FuncDecl& funcDecl,
@@ -231,7 +246,7 @@ void AST2CHIR::CollectFuncDecl(AST::FuncDecl& funcDecl)
                 CollectDeclToList(*param->desugarDecl, globalAndMemberFuncs);
             }
         }
-    } else if (funcDecl.outerDecl && funcDecl.outerDecl->ty->HasGeneric()) {
+    } else if (funcDecl.outerDecl && funcDecl.outerDecl->GetTy()->HasGeneric()) {
         // When the func is not generic decl, but if the outerDecl of the funcDecl is generic, we still need to
         // collect this funcDecl.
         CollectDeclToList(funcDecl, globalAndMemberFuncs);
@@ -656,6 +671,7 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
         CreatePseudoImportedFuncSignatureAndSetGlobalCache(funcDecl);
         return;
     }
+    auto features = funcDecl.curFile->GetFeatures();
     // Try get deserialized func.
     Function* fn = TryGetDeserialized<Function>(funcDecl);
     if (fn) {
@@ -669,9 +685,10 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
         if (IsSrcCodeImportedGlobalDecl(funcDecl, opts)) {
             srcCodeImportedFuncs.emplace(fn);
         }
+        fn->SetFeatures(features);
         return;
     }
-    auto fnTy = chirType.TranslateType(*funcDecl.ty);
+    auto fnTy = chirType.TranslateType(*funcDecl.GetTy());
     fnTy = AdjustFuncType(*StaticCast<FuncType*>(fnTy), funcDecl, builder, chirType);
     // Create BlockGroup with argument
 
@@ -691,8 +708,18 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     }
     auto srcCodeName = funcDecl.identifier;
     auto rawMangledName = funcDecl.rawMangleName;
-    fn = builder.CreateFunction(funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy);
-    fn->SetDebugLocation(loc);
+    if (opts.IsCompilingCJMP()) {
+        if (auto exist = package->TryGetGlobalFunc(GLOBAL_VALUE_PREFIX + mangledName)) {
+            fn = exist;
+            // Update features set
+            TryUpdateExistingValue(*fn, features);
+        }
+    }
+    if (fn == nullptr) {
+        fn = builder.CreateFunction(funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy);
+        fn->SetDebugLocation(loc);
+        fn->SetFeatures(features);
+    }
     // This is the logic that applied when compiling common part of package
     // Ideally such logic should be be visually discernible
     if (funcDecl.TestAttr(AST::Attribute::COMMON)) {
@@ -728,7 +755,7 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
 
 void AST2CHIR::CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl)
 {
-    auto fnTy = chirType.TranslateType(*funcDecl.ty);
+    auto fnTy = chirType.TranslateType(*funcDecl.GetTy());
     fnTy = AdjustFuncType(*StaticCast<FuncType*>(fnTy), funcDecl, builder, chirType);
     FuncType* funcTy = StaticCast<FuncType*>(fnTy);
     auto genericParamTy = GetGenericParamType(funcDecl, chirType);
@@ -749,7 +776,7 @@ void AST2CHIR::CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::Fun
         fn->AddParam(*chirParam);
     }
     for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-        auto pType = chirType.TranslateType(*param->ty);
+        auto pType = chirType.TranslateType(*param->GetTy());
         auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), param->begin, param->end);
         auto chirParam = builder.CreateParameter(pType, loc, *fn);
         chirParam->SetSrcCodeIdentifier(param->identifier.GetRawText());
@@ -765,7 +792,7 @@ namespace {
 void ConvertImportedFunctionType(
     Function& fn, const AST::FuncDecl& funcDecl, CHIRType& chirType, CHIRBuilder& builder)
 {
-    auto fnTy = chirType.TranslateType(*funcDecl.ty);
+    auto fnTy = chirType.TranslateType(*funcDecl.GetTy());
     fnTy = AdjustFuncType(*StaticCast<FuncType*>(fnTy), funcDecl, builder, chirType);
     if (fn.GetFuncType() == fnTy) {
         return;
@@ -795,7 +822,7 @@ void AST2CHIR::CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl&
     if (isGeneric) {
         TranslateFunctionGenericUpperBounds(chirType, funcDecl);
     }
-    auto fnTy = StaticCast<FuncType*>(chirType.TranslateType(*funcDecl.ty));
+    auto fnTy = StaticCast<FuncType*>(chirType.TranslateType(*funcDecl.GetTy()));
     fnTy = AdjustFuncType(*fnTy, funcDecl, builder, chirType);
     auto genericParamTy = GetGenericParamType(funcDecl, chirType);
     fn = builder.CreateFunction(fnTy, funcDecl.mangledName, funcDecl.identifier,
@@ -816,7 +843,7 @@ void AST2CHIR::CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl&
         chirParam->SetSrcCodeIdentifier("this");
     }
     for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-        auto pType = chirType.TranslateType(*param->ty);
+        auto pType = chirType.TranslateType(*param->GetTy());
         auto pLoc = TranslateLocationWithoutScope(builder.GetChirContext(), param->begin, param->end);
         auto chirParam = builder.CreateParameter(pType, pLoc, *fn);
         chirParam->SetSrcCodeIdentifier(param->identifier.GetRawText());
@@ -831,7 +858,7 @@ void AST2CHIR::CreateImportedValueSignatureAndSetGlobalCache(const AST::VarDecl&
         globalCache.Set(varDecl, *var);
         return;
     }
-    auto varType = chirType.TranslateType(*varDecl.ty);
+    auto varType = chirType.TranslateType(*varDecl.GetTy());
     auto refTy = builder.GetType<RefType>(varType);
     var = builder.CreateGlobalVar(
         refTy, varDecl.mangledName, varDecl.identifier, varDecl.rawMangleName, varDecl.fullPackageName);
@@ -839,6 +866,9 @@ void AST2CHIR::CreateImportedValueSignatureAndSetGlobalCache(const AST::VarDecl&
     if (varDecl.IsConst()) {
         var->EnableAttr(Attribute::CONST);
     }
+    // in cjdb, using expr will generate a wrong AST decl
+    // an AST decl in imported package but without IMPORTED attr
+    var->EnableAttr(Attribute::IMPORTED);
 
     globalCache.Set(varDecl, *var);
 }
@@ -860,7 +890,7 @@ GlobalVar* AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLo
     auto srcCodeName = decl.identifier;
     auto rawMangledName = decl.rawMangleName;
     auto packageName = decl.fullPackageName;
-    auto ty = builder.GetType<RefType>(chirType.TranslateType(*decl.ty));
+    auto ty = builder.GetType<RefType>(chirType.TranslateType(*decl.GetTy()));
     auto warnPos = GetDeclLoc(builder.GetChirContext(), decl);
     GlobalVar* gv = nullptr;
     if (kind == IncreKind::INCR && !decl.toBeCompiled && !IsSrcCodeImportedGlobalDecl(decl, opts)) {
@@ -991,7 +1021,7 @@ void AST2CHIR::CreateAnnoOnlyDeclSig(const AST::Decl& decl)
         auto fn = tr.CreateAnnoFactoryFuncSig(decl, nullptr);
         if (fn.IsAvailable()) {
             if (auto var = DynamicCast<AST::VarDecl>(&decl)) {
-                globalCache.Get(*var)->SetAnnoInfo(std::move(fn));
+                StaticCast<GlobalVar*>(globalCache.Get(*var))->SetAnnoInfo(std::move(fn));
             }
         }
     }
@@ -1017,7 +1047,7 @@ GlobalVar* AST2CHIR::CreateAnnotationTargetVar(const AST::ClassDecl& decl, const
 {
     auto varMangledName = decl.mangledName + ANNOTATION_VAR_POSTFIX + std::to_string(index);
     auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), expr.begin, expr.end);
-    auto annotationTargetType = chirType.TranslateType(*expr.ty);
+    auto annotationTargetType = chirType.TranslateType(*expr.GetTy());
     auto varType = builder.GetType<RefType>(annotationTargetType);
     auto srcCodeIdentifier = decl.identifier.Val() + ANNOTATION_VAR_POSTFIX + std::to_string(index);
     auto var = builder.CreateGlobalVar(
@@ -1125,20 +1155,20 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
                 customTypeDef = builder.CreateClass(
                     loc, identifier, mangledName, pkgName, decl.astKind == AST::ASTKind::CLASS_DECL, isImported);
             }
-            uniqueDecl = StaticCast<AST::ClassLikeTy*>(decl.ty)->commonDecl;
+            uniqueDecl = StaticCast<AST::ClassLikeTy*>(decl.GetTy())->commonDecl;
             break;
         case AST::ASTKind::STRUCT_DECL:
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateStruct(loc, identifier, mangledName, pkgName, isImported);
             }
-            uniqueDecl = StaticCast<AST::StructTy*>(decl.ty)->decl;
+            uniqueDecl = StaticCast<AST::StructTy*>(decl.GetTy())->decl;
             break;
         case AST::ASTKind::ENUM_DECL:
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateEnum(
                     loc, identifier, mangledName, pkgName, isImported, StaticCast<AST::EnumDecl>(decl).hasEllipsis);
             }
-            uniqueDecl = StaticCast<AST::EnumTy*>(decl.ty)->decl;
+            uniqueDecl = StaticCast<AST::EnumTy*>(decl.GetTy())->decl;
             break;
         case AST::ASTKind::EXTEND_DECL: {
             if (customTypeDef == nullptr) {
@@ -1213,7 +1243,7 @@ void AST2CHIR::TranslateAllCustomTypeTy()
         if (!translateNow(*decl)) {
             continue;
         }
-        auto type = chirType.TranslateType(*(decl->ty));
+        auto type = chirType.TranslateType(*(decl->GetTy()));
         if (decl->TestAttr(AST::Attribute::GENERIC)) {
             translatedGenericDecls.insert(decl);
         }
@@ -1228,7 +1258,7 @@ void AST2CHIR::TranslateAllCustomTypeTy()
     }
     for (auto decl : genericNominalDecls) {
         if (translateNow(*decl)) {
-            chirType.TranslateType(*(decl->ty));
+            chirType.TranslateType(*(decl->GetTy()));
             translatedGenericDecls.emplace(decl);
         }
     }
@@ -1236,7 +1266,7 @@ void AST2CHIR::TranslateAllCustomTypeTy()
         if (!translateNow(*decl)) {
             continue;
         }
-        auto type = chirType.TranslateType(*(decl->ty));
+        auto type = chirType.TranslateType(*(decl->GetTy()));
         if (decl->identifier == OBJECT_NAME && decl->fullPackageName == CORE_PACKAGE_NAME) {
             auto clsTy = StaticCast<ClassType*>(StaticCast<RefType*>(type)->GetBaseType());
             builder.SetObjectTy(clsTy);
@@ -1248,13 +1278,13 @@ void AST2CHIR::TranslateAllCustomTypeTy()
     }
     // Translate upper bounds after normal decls have been translated.
     for (auto decl : translatedGenericDecls) {
-        for (auto ty : decl->ty->typeArgs) {
+        for (auto ty : decl->GetTy()->typeArgs) {
             chirType.FillGenericArgType(*RawStaticCast<AST::GenericsTy*>(ty));
         }
     }
     for (auto decl : importedGenericInstantiatedNominalDecls) {
         if (translateNow(*decl)) {
-            chirType.TranslateType(*(decl->ty));
+            chirType.TranslateType(*(decl->GetTy()));
         }
     }
 }
@@ -1399,7 +1429,6 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     TranslateVecDecl(genericNominalDecls, trans);
     // Update some info for nominal decls.
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "TranslateDecls");
-
     // Update some info for common specific
     Utils::ProfileRecorder::Start("TranslateNominalDecls", "ProcessCommonAndSpecific");
     ProcessCommonAndSpecificExtends();
@@ -1508,8 +1537,8 @@ std::unordered_map<const GenericType*, Type*> BuildGenericTypeMapping(
             auto& specificTypeParameters = specificGeneric->typeParameters;
             CJC_ASSERT(commonTypeParameters.size() == specificTypeParameters.size() && !commonTypeParameters.empty());
             for (size_t i = 0; i < commonTypeParameters.size(); i++) {
-                auto cTypeArg = commonTypeParameters[i]->ty;
-                auto pTypeArg = specificTypeParameters[i]->ty;
+                auto cTypeArg = commonTypeParameters[i]->GetTy();
+                auto pTypeArg = specificTypeParameters[i]->GetTy();
                 if (cTypeArg->IsGeneric() && pTypeArg->IsGeneric()) {
                     auto commonGenericTy = StaticCast<GenericType*>(chirType.TranslateType(*cTypeArg));
                     auto specificGenericTy = chirType.TranslateType(*pTypeArg);
@@ -1531,7 +1560,7 @@ void ConvertSpecificMemberMethods(
     };
 
     for (auto decl : package->GetExtends()) {
-        // Skip non-platform extends
+        // Skip non-specific extends
         if (!decl->TestAttr(CHIR::Attribute::SPECIFIC)) {
             continue;
         }
@@ -1643,6 +1672,7 @@ void RemoveUnusedCJMPExtends(CHIR::Package& chirPkg, const std::vector<Ptr<const
 
 void AST2CHIR::BuildDeserializedTable()
 {
+    Utils::ProfileRecorder recorder("AST to CHIR Translation", "BuildDeserializedTable");
     CJC_NULLPTR_CHECK(package);
     // build for CustomTypeDef
     BuildDeserializedVec(deserializedDefs, package->GetAllCustomTypeDef());
@@ -1696,8 +1726,8 @@ void AST2CHIR::ResetSpecificFunc(const AST::FuncDecl& funcDecl, Function& func)
 
 void AST2CHIR::ProcessCommonAndSpecificExtends()
 {
-    bool compileSpecific = opts.IsCompilingCJMPSpecific();
-    if (!compileSpecific) {
+    bool compilePlatform = opts.IsCompilingCJMPSpecific();
+    if (!compilePlatform) {
         return;
     }
 

@@ -12,6 +12,8 @@
 
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 
+#include <sstream>
+
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Type/CustomTypeDef.h"
@@ -20,7 +22,6 @@
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Mangle/CHIRTypeManglingUtils.h"
-#include <sstream>
 
 using namespace Cangjie::CHIR;
 using namespace Cangjie::MangleUtils;

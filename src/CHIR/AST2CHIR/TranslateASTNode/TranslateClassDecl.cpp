@@ -23,7 +23,7 @@ Ptr<Value> Translator::Visit(const AST::ClassDecl& decl)
 
 void Translator::SetClassSuperClass(ClassDef& classDef, const AST::ClassLikeDecl& decl)
 {
-    if (auto astTy = DynamicCast<AST::ClassTy*>(decl.ty); astTy && astTy->GetSuperClassTy() != nullptr) {
+    if (auto astTy = DynamicCast<AST::ClassTy*>(decl.GetTy()); astTy && astTy->GetSuperClassTy() != nullptr) {
         auto type = TranslateType(*astTy->GetSuperClassTy());
         // The super class must be of the reference.
         CJC_ASSERT(type->IsRef());
@@ -51,7 +51,7 @@ void Translator::TranslateClassLikeDecl(ClassDef& classDef, const AST::ClassLike
     CreateAnnotationInfo<ClassDef>(decl, classDef, &classDef);
 
     // set type
-    auto classTy = TranslateType(*decl.ty);
+    auto classTy = TranslateType(*decl.GetTy());
     auto baseTy = StaticCast<ClassType*>(RawStaticCast<RefType*>(classTy)->GetBaseType());
     classDef.SetType(*baseTy);
     bool isImportedInstantiated =
@@ -60,8 +60,9 @@ void Translator::TranslateClassLikeDecl(ClassDef& classDef, const AST::ClassLike
 
     // common and specific upper bounds are same, do not set again
     // specific instantiations require inheritance setup because common side uses templates without instantiation
-    if (!mergingSpecific || !decl.TestAttr(AST::Attribute::SPECIFIC) || decl.TestAttr(AST::Attribute::IMPORTED) ||
-        decl.TestAttr(AST::Attribute::GENERIC_INSTANTIATED)) {
+    bool needInitialSuperClassSetup = !decl.TestAttr(AST::Attribute::SPECIFIC) ||
+        decl.TestAttr(AST::Attribute::IMPORTED) || decl.TestAttr(AST::Attribute::GENERIC_INSTANTIATED);
+    if (needInitialSuperClassSetup) {
         // set super class
         SetClassSuperClass(classDef, decl);
         // set implemented interface
@@ -103,7 +104,7 @@ void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)
             CreateAnnotationInfo<GlobalVar>(decl, *staticVar, &def);
         }
     } else {
-        Ptr<Type> ty = TranslateType(*decl.ty);
+        Ptr<Type> ty = TranslateType(*decl.GetTy());
         auto loc = TranslateLocation(decl);
         MemberVarInfo varInfo{
             .name = decl.identifier,
@@ -154,10 +155,10 @@ Function* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
         auto pkgName = outerDecl.fullPackageName;
         const std::vector<Type*> params = {};
 
-        auto returnTy = decl.ty;
+        auto returnTy = decl.GetTy();
         if (auto varDecl = DynamicCast<AST::VarDecl>(&decl)) {
             if (varDecl->initializer) {
-                returnTy = varDecl->initializer->ty;
+                returnTy = varDecl->initializer->GetTy();
             }
         }
         CJC_ASSERT(returnTy);
@@ -255,6 +256,11 @@ Function* Translator::TranslateVarsInit(const AST::Decl& decl)
     return funcDef;
 }
 
+inline bool DeclaredInDifferentFiles(const AST::Decl& d1, const AST::Decl& d2)
+{
+    return d1.curFile && d2.curFile && d1.curFile != d2.curFile;
+}
+
 bool Translator::ShouldTranslateMember(const AST::Decl& decl, const AST::Decl& member) const
 {
     if (!mergingSpecific) {
@@ -274,8 +280,9 @@ bool Translator::ShouldTranslateMember(const AST::Decl& decl, const AST::Decl& m
         return true;
     }
 
-    if (member.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
-        // Skip decls from common part when compiling specific
+    bool justIntroducedSpecific = !decl.TestAttr(AST::Attribute::IMPORTED) && decl.TestAttr(AST::Attribute::SPECIFIC);
+    if (mergingSpecific && justIntroducedSpecific && DeclaredInDifferentFiles(decl, member)) {
+        // Skip decls from common part when compiling platform
         return false;
     }
 

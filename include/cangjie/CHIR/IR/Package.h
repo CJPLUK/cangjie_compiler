@@ -42,6 +42,7 @@ public:
     // Global Var API
     // ===--------------------------------------------------------------------===//
     void AddGlobalVar(GlobalVar* item);
+    GlobalVar* TryGetGlobalVar(const std::string& identifier);
 
     // including:
     // 1. imported global var, exclude src code imported global var
@@ -57,6 +58,7 @@ public:
     // Global Function API
     // ===--------------------------------------------------------------------===//
     void AddGlobalFunc(Function* item);
+    Function* TryGetGlobalFunc(const std::string& identifier);
     
     // including:
     // 1. imported function, excluding src code imported function
@@ -88,6 +90,7 @@ public:
     void SetImportedStructs(std::vector<StructDef*>&& s);
 
     std::vector<StructDef*> GetAllStructDef() const;
+    StructDef* TryGetStructDef(const std::string& identifier);
 
     // ===--------------------------------------------------------------------===//
     // ClassDef API
@@ -101,6 +104,7 @@ public:
     void SetImportedClasses(std::vector<ClassDef*>&& s);
 
     std::vector<ClassDef*> GetAllClassDef() const;
+    ClassDef* TryGetClassDef(const std::string& identifier);
 
     // ===--------------------------------------------------------------------===//
     // EnumDef API
@@ -114,6 +118,7 @@ public:
     void SetImportedEnums(std::vector<EnumDef*>&& s);
 
     std::vector<EnumDef*> GetAllEnumDef() const;
+    EnumDef* TryGetEnumDef(const std::string& identifier);
 
     // ===--------------------------------------------------------------------===//
     // ExtendDef API
@@ -127,6 +132,7 @@ public:
     void SetImportedExtends(std::vector<ExtendDef*>&& items);
 
     std::vector<ExtendDef*> GetAllExtendDef() const;
+    ExtendDef* TryGetExtendDef(const std::string& identifier);
 
     // ===--------------------------------------------------------------------===//
     // Others API

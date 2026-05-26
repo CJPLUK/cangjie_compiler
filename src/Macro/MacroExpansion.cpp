@@ -59,8 +59,8 @@ bool HasMacroCallInNode(const OwnedPtr<Node>& node, DiagnosticEngine& diag)
     auto checkMacroCall = [&hasMacroCall, &node, &diag](Ptr<const Node> curNode) -> VisitAction {
         if (curNode->IsMacroCallNode()) {
             hasMacroCall = true;
-            (void)diag.Diagnose(*node, curNode->GetConstInvocation()->identifierPos,
-                DiagKind::macro_undeclared_identifier, curNode->GetConstInvocation()->identifier);
+            (void)diag.Diagnose(*node, curNode->GetConstInvocation()->macroCallDiagInfo.identifierPos,
+                DiagKind::macro_undeclared_identifier, curNode->GetConstInvocation()->macroCallDiagInfo.identifier);
             return VisitAction::SKIP_CHILDREN;
         }
         return VisitAction::WALK_CHILDREN;
@@ -104,8 +104,8 @@ void CheckUnhandledMacroCall(Package& package, DiagnosticEngine& diag)
                 return VisitAction::WALK_CHILDREN;
             }
             if (curNode->IsMacroCallNode()) {
-                (void)diag.Diagnose(*curNode, curNode->GetConstInvocation()->identifierPos,
-                    DiagKind::macro_undeclared_identifier, curNode->GetConstInvocation()->identifier);
+                (void)diag.Diagnose(*curNode, curNode->GetConstInvocation()->macroCallDiagInfo.identifierPos,
+                    DiagKind::macro_undeclared_identifier, curNode->GetConstInvocation()->macroCallDiagInfo.identifier);
                 return VisitAction::SKIP_CHILDREN;
             }
             return VisitAction::WALK_CHILDREN;
@@ -135,13 +135,14 @@ void CheckWhenAfterMacroExpand(Ptr<const Node> curNode, DiagnosticEngine& diag)
 
 void MacroExpansion::ReplaceEachFileNode(const File& file)
 {
-    auto debugFileID = ci->GetSourceManager().GetFileID(file.macroCallFilePath);
-    if (debugFileID == -1) {
+    auto debugFileID = ci->GetSourceManager().TryGetFileID(file.macroCallFilePath);
+    if (!debugFileID) {
         return;
     }
-    auto newBuffer = ci->GetSourceManager().GetSource(static_cast<unsigned int>(debugFileID)).buffer;
-    Parser newParser(static_cast<unsigned int>(debugFileID), newBuffer, ci->diag, ci->diag.GetSourceManager(),
+    auto& newBuffer = ci->GetSourceManager().GetSource(*debugFileID).buffer;
+    Parser newParser(*debugFileID, newBuffer, ci->diag, ci->diag.GetSourceManager(),
         ci->invocation.globalOptions.enableAddCommentToAst);
+    newParser.SetCompileOptions(ci->invocation.globalOptions);
     auto names = Utils::SplitQualifiedName(file.curPackage->fullPackageName);
     std::string moduleName = names.size() > 1 ? names[0] : ""; // Only used for 'std' package case.
     (void)newParser.SetModuleName(moduleName).EnableCustomAnno();
@@ -438,7 +439,8 @@ void MacroExpansion::Execute(std::vector<OwnedPtr<AST::Package>>& packages)
     if (ci->invocation.globalOptions.enableCompileTest && ci->invocation.globalOptions.CompileExecutable()) {
         TestEntryConstructor::ConstructTestSuite(ci->invocation.globalOptions.moduleName, packages,
             ci->importManager->GetAllImportedPackages(),
-            ci->invocation.globalOptions.compileTestsOnly);
+            ci->invocation.globalOptions.compileTestsOnly,
+            ci->invocation.globalOptions.mock == MockMode::ON);
     }
     for (auto& package : packages) {
         AddCurFile(*package);

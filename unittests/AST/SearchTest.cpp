@@ -778,7 +778,7 @@ func testlsp():Int32 {
     res = searcher.Search(ctx, "_ = (1, 27, 11)");
 
     Ptr<ClassTy> type =
-        dynamic_cast<ClassTy*>(As<ASTKind::MEMBER_ACCESS>(res[0]->node)->baseExpr.get()->symbol->node->ty.get());
+        dynamic_cast<ClassTy*>(As<ASTKind::MEMBER_ACCESS>(res[0]->node)->baseExpr.get()->symbol->node->GetTy().get());
     EXPECT_EQ(type->decl->body->decls.size(), 3);
     EXPECT_EQ(type->decl->body->decls[0]->identifier, "res");
     EXPECT_EQ(type->decl->body->decls[1]->identifier, "init");
@@ -825,7 +825,7 @@ external class Data <: Base {
     res = searcher.Search(ctx, "_ = (1, 17, 15)");
 
     Ptr<ClassTy> type =
-        dynamic_cast<ClassTy*>(As<ASTKind::MEMBER_ACCESS>(res[0]->node)->baseExpr.get()->symbol->node->ty.get());
+        dynamic_cast<ClassTy*>(As<ASTKind::MEMBER_ACCESS>(res[0]->node)->baseExpr.get()->symbol->node->GetTy().get());
     EXPECT_EQ(type->decl->body->decls.size(), 5);
     EXPECT_EQ(type->decl->body->decls[0]->identifier, "one");
     EXPECT_EQ(type->decl->body->decls[1]->identifier, "a");
@@ -875,7 +875,7 @@ external class Data <: Base {
     res = searcher.Search(ctx, "_ = (1, 19, 14)");
 
     Ptr<ClassTy> type =
-        dynamic_cast<ClassTy*>(As<ASTKind::MEMBER_ACCESS>(res[0]->node)->baseExpr.get()->symbol->node->ty.get());
+        dynamic_cast<ClassTy*>(As<ASTKind::MEMBER_ACCESS>(res[0]->node)->baseExpr.get()->symbol->node->GetTy().get());
     EXPECT_EQ(type->decl->body->decls.size(), 5);
     EXPECT_EQ(type->decl->body->decls[0]->identifier, "res1");
     EXPECT_EQ(type->decl->body->decls[1]->identifier, "res2");
@@ -928,8 +928,8 @@ class Base <: I {
 
     res = searcher.Search(ctx, "_ = (1, 18, 20)");
 
-    Ptr<InterfaceTy> type =
-        dynamic_cast<InterfaceTy*>(As<ASTKind::MEMBER_ACCESS>(res[0]->node)->baseExpr.get()->symbol->node->ty.get());
+    Ptr<InterfaceTy> type = dynamic_cast<InterfaceTy*>(
+        As<ASTKind::MEMBER_ACCESS>(res[0]->node)->baseExpr.get()->symbol->node->GetTy().get());
     EXPECT_EQ(type->decl->body->decls.size(), 4);
     EXPECT_EQ(type->decl->body->decls[0]->identifier, "aclass");
     EXPECT_EQ(type->decl->body->decls[1]->identifier, "add");
@@ -1468,7 +1468,7 @@ main() {
     ASSERT_TRUE(results.hasDecl);
     auto decls = results.decls;
     ASSERT_EQ(decls.size(), 1);
-    EXPECT_EQ(decls[0]->ty->String(), "Class-Base");
+    EXPECT_EQ(decls[0]->GetTy()->String(), "Class-Base");
     // 'x.ins'
     auto ma = CreateMemberAccess(std::move(re), "ins");
     ma->curFile = pkgs[0]->files[0].get();
@@ -1476,7 +1476,7 @@ main() {
     ASSERT_TRUE(results.hasDecl);
     decls = results.decls;
     ASSERT_EQ(decls.size(), 1);
-    EXPECT_EQ(decls[0]->ty->String(), "Class-A");
+    EXPECT_EQ(decls[0]->GetTy()->String(), "Class-A");
     // 'x.ins.aclass'
     ma = CreateMemberAccess(std::move(ma), "aclass");
     ma->curFile = pkgs[0]->files[0].get();
@@ -1484,7 +1484,7 @@ main() {
     ASSERT_TRUE(results.hasDecl);
     decls = results.decls;
     ASSERT_EQ(decls.size(), 1);
-    EXPECT_EQ(decls[0]->ty->String(), "Int32");
+    EXPECT_EQ(decls[0]->GetTy()->String(), "Int32");
     // Find variables not in current scope.
     re = CreateRefExpr("x");
     re->curFile = pkgs[0]->files[0].get();
@@ -1492,7 +1492,7 @@ main() {
     ASSERT_TRUE(results.hasDecl);
     decls = results.decls;
     ASSERT_EQ(decls.size(), 1);
-    EXPECT_EQ(decls[0]->ty->String(), "Class-A");
+    EXPECT_EQ(decls[0]->GetTy()->String(), "Class-A");
 }
 
 TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_NameReference_Extend)

@@ -24,18 +24,16 @@
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/Unicode.h"
 
-#include "cangjie/AST/PrintNode.h"
-
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
 namespace Cangjie {
-// Define the errorData array (declaration is in DiagnosticEngine.h)
-const std::vector<ErrorData> errorData = {
 #if defined(ERROR)
 #undef ERROR
 #endif
+// Define the errorData array (declaration is in DiagnosticEngine.h)
+const std::vector<ErrorData> errorData = {
 #define ERROR(Kind, ...) {__VA_ARGS__},
 #define WARNING(Kind, Group, ...) {__VA_ARGS__},
 #include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
@@ -123,7 +121,6 @@ const std::vector<std::string_view> RE_DIAG_KIND_STR = {
 #undef ERROR
 };
 const size_t RE_DIAG_KIND_STR_SIZE = RE_DIAG_KIND_STR.size();
-
 
 size_t HashForPosition(const Position& pos)
 {
@@ -303,6 +300,15 @@ void Diagnostic::HandleBadOtherHints()
 DiagnosticBuilder::DiagnosticBuilder(DiagnosticEngine& diag, Diagnostic diagnostic)
     : diagnostic(std::move(diagnostic)), diag(diag)
 {
+}
+
+DiagnosticBuilder::DiagnosticBuilder(
+    DiagnosticEngine& diag, Diagnostic diagObj, const MacroCallDiagInfo* info)
+    : diagnostic(std::move(diagObj)), diag(diag)
+{
+    if (info && !info->IsCustomAnnotation()) {
+        diagnostic.macroDiagInfo = info;
+    }
 }
 
 DiagnosticBuilder::~DiagnosticBuilder()
@@ -799,18 +805,26 @@ void DiagnosticEngineImpl::AddMacroCallNote(Diagnostic& diagnostic, const AST::N
     if (!node.curMacroCall) {
         return;
     }
-    diagnostic.curMacroCall = node.curMacroCall;
-    // Check pure annotation
     auto pInvocation = node.curMacroCall->GetInvocation();
-    if (!pInvocation || IsPureAnnotation(*pInvocation)) {
+    if (!pInvocation) {
         return;
     }
+    diagnostic.macroDiagInfo = &pInvocation->macroCallDiagInfo;
+    AddMacroCallNote(diagnostic, pInvocation->macroCallDiagInfo, pos);
+}
 
-    auto mcBegin = node.curMacroCall->begin;
+void DiagnosticEngineImpl::AddMacroCallNote(Diagnostic& diagnostic, const MacroCallDiagInfo& info, const Position& pos)
+{
+    // Check custom annotation
+    if (info.IsCustomAnnotation()) {
+        return;
+    }
+    diagnostic.macroDiagInfo = &info;
+    auto mcBegin = info.macroCallBegin;
     std::string sevInfo = (diagnostic.diagSeverity == DiagSeverity::DS_ERROR) ? "the error" : "the warning";
     // For lsp, the error range includes only identifier.
-    if (pInvocation->isForLSP) {
-        auto idPosEnd = pInvocation->identifierPos + pInvocation->identifier.size();
+    if (info.isForLSP) {
+        auto idPosEnd = info.identifierPos + info.identifier.size();
         auto message = sevInfo + " occurs after the macro is expanded";
         (void)diagnostic.subDiags.emplace_back(MakeRange(mcBegin, idPosEnd), message);
         return;
@@ -818,11 +832,11 @@ void DiagnosticEngineImpl::AddMacroCallNote(Diagnostic& diagnostic, const AST::N
 
     // For cjc, display a hint message on the source code if the corresponding source code exists.
     Position originPos;
-    auto key = pInvocation->isCurFile ? pos.Hash32() : static_cast<const uint32_t>(pos.column);
-    if (pInvocation->isCurFile && pInvocation->originPosMap.find(key) != pInvocation->originPosMap.end()) {
-        originPos = pInvocation->originPosMap.at(key);
-    } else if (pInvocation->new2originPosMap.find(pos.Hash32()) != pInvocation->new2originPosMap.end()) {
-        originPos = pInvocation->new2originPosMap.at(pos.Hash32());
+    auto key = info.isCurFile ? pos.Hash32() : static_cast<const uint32_t>(pos.column);
+    if (info.isCurFile && info.originPosMap.find(key) != info.originPosMap.end()) {
+        originPos = info.originPosMap.at(key);
+    } else if (info.new2originPosMap.find(pos.Hash32()) != info.new2originPosMap.end()) {
+        originPos = info.new2originPosMap.at(pos.Hash32());
         if (!originPos.isCurFile) {
             originPos = INVALID_POSITION;
         }
@@ -836,10 +850,33 @@ void DiagnosticEngineImpl::AddMacroCallNote(Diagnostic& diagnostic, const AST::N
         diagnostic.mainHint.range = MakeRange(originPos, originPos + 1);
     }
     // Add macro note.
-    auto message = sevInfo + " originates in the macro `" + pInvocation->fullName +
+    auto message = sevInfo + " originates in the macro `" + info.fullName +
         "` (consider using `--debug-macro` for more info)";
-    auto range = MakeRange(mcBegin, node.curMacroCall->end);
+    auto range = MakeRange(mcBegin, info.macroCallEnd);
     (void)diagnostic.subDiags.insert(diagnostic.subDiags.begin(), SubDiagnostic(range, message));
+}
+
+MacroCallDiagInfo* DiagnosticEngineImpl::FindMacroCallInfo(Position pos) const
+{
+    auto key = static_cast<uint64_t>(pos.Hash64());
+    auto it = pos2MacroCallDiagInfoMap.lower_bound(key);
+    if (it == pos2MacroCallDiagInfoMap.end() || !it->second) {
+        return nullptr;
+    }
+    return it->second.get();
+}
+
+void DiagnosticEngineImpl::RegisterMacroCallDiagInfo(std::unique_ptr<MacroCallDiagInfo> info)
+{
+    if (!info) {
+        return;
+    }
+    const auto beginKey = info->macroCallBegin.Hash64();
+    const auto endKey = info->macroCallEnd.Hash64();
+    pos2MacroCallDiagInfoMap[beginKey] = std::move(info);
+    if (endKey != beginKey) {
+        pos2MacroCallDiagInfoMap[endKey] = nullptr;
+    }
 }
 
 void DiagnosticHandler::SetPrevDiag(Position pos, std::string str)
@@ -979,6 +1016,28 @@ void CompilerDiagnosticHandler::EmitDiagnose(Diagnostic d)
     }
 }
 
+DiagnosticInfo CompilerDiagnosticHandler::GetDiagnosticInfo(Diagnostic d)
+{
+    DiagnosticInfo info{d.diagSeverity, d.mainHint.range, d.errorMessage};
+    bool noRangeCheckError = true;
+    std::ostringstream ss;
+    if (diag.HasSourceManager()) {
+        DiagnosticEmitter tmp = DiagnosticEmitter(d, true, !diag.IsCheckRangeErrorCodeRatherICE(),
+            ss, diag.GetSourceManager());
+        noRangeCheckError = tmp.Emit(true);
+    } else {
+        SourceManager sm;
+        DiagnosticEmitter tmp = DiagnosticEmitter(
+            d, true, !diag.IsCheckRangeErrorCodeRatherICE(), ss, sm);
+        noRangeCheckError = tmp.Emit();
+    }
+    if (!noRangeCheckError) {
+        diag.SetDiagEngineErrorCode(DiagEngineErrorCode::DIAG_RANGE_ERROR);
+    }
+    info.hint = ss.str();
+    return info;
+}
+
 void CompilerDiagnosticHandler::CacheTheCountInJsonFormat()
 {
     DiagnosticJsonFormatter formatter(diag);
@@ -1030,6 +1089,22 @@ void CompilerDiagnosticHandler::EmitCategoryDiagnostics(DiagCategory cate)
     auto targets = GetCategoryDiagnosticsSortedByRange(cate);
     for (auto& d : targets) {
         EmitDiagnose(d);
+    }
+    diagnostics.erase(cate);
+}
+
+void CompilerDiagnosticHandler::EmitCategoryDiagnosticInfos(DiagCategory cate, std::vector<DiagnosticInfo>& diagOut)
+{
+    diagOut.clear();
+    if (diagnostics.count(cate) == 0) {
+        return;
+    }
+    if (!CanBeEmitted(cate)) {
+        return;
+    }
+    auto targets = GetCategoryDiagnosticsSortedByRange(cate);
+    for (auto& d : targets) {
+        diagOut.emplace_back(GetDiagnosticInfo(d));
     }
     diagnostics.erase(cate);
 }

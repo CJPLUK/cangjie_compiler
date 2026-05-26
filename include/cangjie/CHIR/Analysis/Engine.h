@@ -47,7 +47,6 @@ template <typename Domain> struct LambdaState {
     LambdaState(LambdaState&& rhs)
     {
         this->lambda = rhs.lambda;
-        rhs.lambda = nullptr;
         this->entrySets = std::move(rhs.entrySets);
     }
 
@@ -59,7 +58,6 @@ template <typename Domain> struct LambdaState {
     LambdaState& operator=(LambdaState&& rhs)
     {
         this->lambda = rhs.lambda;
-        rhs.lambda = nullptr;
         this->entrySets = std::move(rhs.entrySets);
         return *this;
     }

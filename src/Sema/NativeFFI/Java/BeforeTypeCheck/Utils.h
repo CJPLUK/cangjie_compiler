@@ -19,10 +19,10 @@
 using namespace Cangjie::AST;
 
 namespace Cangjie::Interop::Java {
-void InsertJavaHasDefaultMethodStubs(
-    const InterfaceDecl& id, const ImportManager& importManager, TypeManager& typeManager);
+void InsertJavaHasDefaultMethodStubs(const InterfaceDecl& id,
+    const ImportManager& importManager,
+    TypeManager& typeManager);
 void RemoveAbstractAttributeForJavaHasDefaultMethods(const InterfaceDecl& decl);
-ClassDecl& GetExceptionDecl(const ImportManager& importManager);
 }
 
 #endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_BEFORE_TYPE_CHECK_UTILS

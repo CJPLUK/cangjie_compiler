@@ -204,7 +204,7 @@ static bool IsSimpleLiteralValue(const AST::Expr& node)
     if (realNode->astKind != AST::ASTKind::LIT_CONST_EXPR) {
         return false;
     }
-    switch (realNode->ty->kind) {
+    switch (realNode->TyKind()) {
         case AST::TypeKind::TYPE_FLOAT16:
         case AST::TypeKind::TYPE_FLOAT64:
         case AST::TypeKind::TYPE_IDEAL_FLOAT:
@@ -224,7 +224,7 @@ static bool IsSimpleLiteralValue(const AST::Expr& node)
         case AST::TypeKind::TYPE_BOOLEAN:
             return true;
         case AST::TypeKind::TYPE_STRUCT:
-            return node.ty->IsString();
+            return node.GetTy()->IsString();
         default:
             return false;
     }
@@ -254,7 +254,7 @@ bool NeedInitGlobalVarByInitFunc(const AST::VarDecl& decl)
     if (decl.IsCommonOrSpecific()) {
         return true;
     }
-    return !(IsSimpleLiteralValue(*decl.initializer) && decl.ty == decl.initializer->ty);
+    return !(IsSimpleLiteralValue(*decl.initializer) && decl.GetTy() == decl.initializer->GetTy());
 }
 
 inline bool CanInitBeGenerated(const AST::VarDeclAbstract& varDecl)
@@ -313,11 +313,7 @@ Function* GlobalVarInitializer::TranslateInitializerToFunction(const AST::VarDec
     }
     auto loc = decl.IsConst() ? INVALID_LOCATION : trans.TranslateLocation(decl);
     CJC_ASSERT(variable->GetType()->IsRef());
-    auto expectedTy = StaticCast<RefType*>(variable->GetType())->GetBaseType();
-    if (initNode->GetType() != expectedTy) {
-        initNode = TypeCastOrBoxIfNeeded(*initNode, *expectedTy, builder, *trans.GetCurrentBlock(), loc, true);
-    }
-    trans.CreateAndAppendExpression<Store>(loc, builder.GetUnitTy(), initNode, variable, trans.GetCurrentBlock());
+    trans.CreateAndAppendWrappedStore(*initNode, *variable, loc);
     auto curBlock = trans.GetCurrentBlock();
     if (curBlock->GetTerminator() == nullptr) {
         trans.CreateAndAppendTerminator<Exit>(curBlock);
@@ -384,8 +380,7 @@ void GlobalVarInitializer::FillGVInitFuncWithApplyAndExit(const std::vector<Ptr<
 {
     auto curBlock = trans.GetCurrentBlock();
     for (auto& func : varInitFuncs) {
-        trans.GenerateFuncCall(*func, StaticCast<FuncType*>(func->GetType()), std::vector<Type*>{}, nullptr,
-            std::vector<Value*>{}, INVALID_LOCATION);
+        trans.CreateAndAppendGVInitFuncCall(*func);
     }
     trans.CreateAndAppendTerminator<Exit>(curBlock);
 }
@@ -514,6 +509,8 @@ Ptr<Function> GlobalVarInitializer::TranslateFileInitializer(
     std::vector<Ptr<Value>> varInitFuncs;
     for (auto decl : decls) {
         if (auto initFunc = TranslateVarInit(*decl)) {
+            auto features = decl->curFile->GetFeatures();
+            initFunc->SetFeatures(features);
             if (decl->IsConst()) {
                 initFuncsForConstVar.emplace_back(initFunc);
                 // In incremental compilation scenarios, only changes need to be re-evaluated.
@@ -553,7 +550,7 @@ bool GlobalVarInitializer::NeedVarLiteralInitFunc(const AST::Decl& decl)
     CJC_ASSERT(vd->initializer->astKind == AST::ASTKind::LIT_CONST_EXPR);
     auto litExpr = StaticCast<AST::LitConstExpr*>(vd->initializer.get());
     auto globalVar = StaticCast<GlobalVar*>(GetGlobalVariable(*vd));
-    globalVar->SetInitializer(*trans.TranslateLitConstant(*litExpr, *litExpr->ty));
+    globalVar->SetInitializer(*trans.TranslateLitConstant(*litExpr, *litExpr->GetTy()));
 
     // mutable var decl need to be initialized in `file_literal`, codegen will call `file_literal` in
     // macro expand situation, immutable var decl doesn't need to
@@ -584,20 +581,15 @@ Ptr<Function> GlobalVarInitializer::TranslateFileLiteralInitializer(
     func->DisableAttr(Attribute::NO_INLINE);
     func->EnableAttr(Attribute::INITIALIZER);
     func->SetDebugLocation(INVALID_LOCATION);
-    auto currentBlock = trans.GetCurrentBlock();
     for (auto vd : varsToGenInit) {
         auto globalVar = StaticCast<GlobalVar*>(GetGlobalVariable(*vd));
         auto initNode = trans.TranslateExprArg(*vd->initializer);
         // this is in gv init for literal, we can't set breakpoint with cjdb, so we can't set DebugLocationInfo
         // for any expression
         initNode->SetDebugLocation(INVALID_LOCATION);
-        auto expectTy = StaticCast<RefType*>(globalVar->GetType())->GetBaseType();
-        if (expectTy != initNode->GetType()) {
-            initNode =
-                TypeCastOrBoxIfNeeded(*initNode, *expectTy, builder, *trans.GetCurrentBlock(), INVALID_LOCATION, true);
-        }
-        trans.CreateAndAppendExpression<Store>(builder.GetUnitTy(), initNode, globalVar, currentBlock);
+        trans.CreateAndAppendWrappedStore(*initNode, *globalVar);
     }
+    auto currentBlock = trans.GetCurrentBlock();
     trans.CreateAndAppendTerminator<Exit>(currentBlock);
 
     return func;
@@ -627,8 +619,7 @@ void GlobalVarInitializer::AddImportedPackageInit(const AST::Package& curPackage
         initFunc->EnableAttr(Attribute::IMPORTED);
         initFunc->AppendAttributeInfo(attrs);
         initFunc->EnableAttr(Attribute::PUBLIC);
-        trans.GenerateFuncCall(*initFunc, StaticCast<FuncType*>(initFunc->GetType()),
-            std::vector<Type*>{}, nullptr, std::vector<Value*>{}, INVALID_LOCATION);
+        trans.CreateAndAppendGVInitFuncCall(*initFunc);
     }
 }
 
@@ -752,9 +743,8 @@ Ptr<Function> GlobalVarInitializer::GeneratePackageInitBase(const AST::Package& 
 
     // 3. set `initFlag` true
     trans.SetCurrentBlock(*applyInitFuncBlock);
-    auto unitTy = builder.GetUnitTy();
     auto trueLit = trans.CreateAndAppendConstantExpression<BoolLiteral>(boolTy, *applyInitFuncBlock, true)->GetResult();
-    trans.CreateAndAppendExpression<Store>(unitTy, trueLit, initFlag, applyInitFuncBlock);
+    trans.CreateAndAppendWrappedStore(*trueLit, *initFlag);
     return func;
 }
 
@@ -769,7 +759,6 @@ static Ptr<Apply> FindApplyIn(const Block& block, Function& applyCallee)
         }
     }
 
-    CJC_ABORT();
     return nullptr;
 }
 
@@ -782,18 +771,22 @@ void GlobalVarInitializer::InsertInitializerIntoPackageInitializer(Function& ini
         // It was inserted at previous compilation phase ==>
 
         auto initCallExpr = FindApplyIn(*blockWithInitializers, init);
-        auto lastExpr = blockWithInitializers->GetExpressions().back();
-        if (initCallExpr != lastExpr) {
-            // ==> need to push to the end
-            initCallExpr->MoveAfter(lastExpr);
+        if (initCallExpr) {
+            auto lastExpr = blockWithInitializers->GetExpressions().back();
+            if (initCallExpr != lastExpr) {
+                // ==> need to push to the end
+                initCallExpr->MoveAfter(lastExpr);
+            }
+        } else {
+            // But it can be inserted in different initializer, in this case `APPLY` need to be created.
+            trans.SetCurrentBlock(*blockWithInitializers);
+            trans.CreateAndAppendGVInitFuncCall(init);
         }
         return;
     }
 
     trans.SetCurrentBlock(*blockWithInitializers);
-
-    trans.GenerateFuncCall(init, StaticCast<FuncType*>(init.GetType()), std::vector<Type*>{}, nullptr,
-        std::vector<Value*>{}, INVALID_LOCATION);
+    trans.CreateAndAppendGVInitFuncCall(init);
 }
 
 inline std::pair<Function*, Block*> GlobalVarInitializer::PreparePackageInit(const AST::Package& curPackage)
@@ -896,7 +889,7 @@ void GlobalVarInitializer::CreatePackageLiteralInit(const AST::Package& curPacka
                         auto globalVar = StaticCast<GlobalVar>(GetGlobalVariable(*vd));
                         auto initNode = Translator::TranslateASTNode(*vd->initializer, trans);
                         initNode->SetDebugLocation(INVALID_LOCATION);
-                        trans.CreateAndAppendExpression<Store>(builder.GetUnitTy(), initNode, globalVar, curBlock);
+                        trans.CreateAndAppendWrappedStore(*initNode, *globalVar, *curBlock);
                     }
                 }
                 continue;

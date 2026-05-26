@@ -32,9 +32,9 @@ struct MemberJNISignature {
     MemberJNISignature(Utils& utils, FuncDecl& member)
         : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
     {
-            auto& retTy = *member.funcBody->retType->ty;
-            std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
-            signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
+        auto& retTy = *member.funcBody->retType->GetTy();
+        std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
+        signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
     }
 
     // Constructor added for using generic types in Java
@@ -42,7 +42,7 @@ struct MemberJNISignature {
     {
         auto jobject = StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl);
         CJC_ASSERT(jobject);
-        Ptr<Ty> ty = jobject->ty;
+        Ptr<Ty> ty = jobject->GetTy();
         classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
         // turn "cj/A" to "cj/A${type}"
         classTypeSignature = ReplaceClassName(classTypeSignature, genericConfig->declInstName);
@@ -50,7 +50,7 @@ struct MemberJNISignature {
 
         CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL);
 
-        auto& retTy = *member.funcBody->retType->ty;
+        auto& retTy = *member.funcBody->retType->GetTy();
         std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
         signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
     }
@@ -58,26 +58,26 @@ struct MemberJNISignature {
     MemberJNISignature(Utils& utils, PropDecl& member)
         : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
     {
-            signature = utils.GetJavaTypeSignature(*member.ty, member.fullPackageName);
+        signature = utils.GetJavaTypeSignature(*member.GetTy(), member.fullPackageName);
     }
 
     MemberJNISignature(Utils& utils, Decl& member, Ptr<ClassLikeDecl> jobject)
     {
         CJC_ASSERT(jobject);
-        Ptr<Ty> ty = jobject->ty;
+        Ptr<Ty> ty = jobject->GetTy();
 
         if (IsSynthetic(*jobject)) {
             if (jobject->inheritedTypes.size() > 1) {
-                ty = jobject->inheritedTypes[1]->ty; // take interface ty
+                ty = jobject->inheritedTypes[1]->GetTy(); // take interface ty
             } else {
                 CJC_ASSERT_WITH_MSG(!jobject->inheritedTypes.empty(), "JObject must inherit Cangjie Object");
-                ty = jobject->inheritedTypes[0]->ty; // take superclass ty
+                ty = jobject->inheritedTypes[0]->GetTy(); // take superclass ty
             }
         }
         classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
         name = GetJavaMemberName(member);
         CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL || member.astKind == ASTKind::PROP_DECL);
-        signature = utils.GetJavaTypeSignature(*member.ty, member.fullPackageName);
+        signature = utils.GetJavaTypeSignature(*member.GetTy(), member.fullPackageName);
     }
 };
 
@@ -362,6 +362,25 @@ public:
     OwnedPtr<Type> CreateJlongType();
 
     /**
+     * Lower ?String CJ expression into nullable JNI jobject.
+     *
+     * Some(str) -> jstring jobject
+     * None -> null jobject
+     */
+    OwnedPtr<Expr> OptionStringToJObject(OwnedPtr<Expr> optionExpr, FuncParam& jniEnv, const Decl& outerDecl);
+
+    /**
+     * Convert CJ String expression into JNI jobject (jstring).
+     */
+    OwnedPtr<Expr> StringToJObject(OwnedPtr<Expr> cjStringExpr, Ptr<File> curFile,
+                                   FuncParam& jniEnvParam, const Decl& outerDecl);
+
+    /**
+     * Convert JNI jobject (jstring) into CJ String expression.
+     */
+    OwnedPtr<Expr> JObjectToString(OwnedPtr<Expr> jobjectExpr, Ptr<File> curFile);
+
+    /**
      * Returns cjExpr wrapped into java entity:
      *
      * Java_CFFI_JavaEntity(cjExpr)
@@ -369,7 +388,7 @@ public:
     OwnedPtr<Expr> WrapJavaEntity(OwnedPtr<Expr> cjExpr);
 
     /**
-     * interoplib.interop.Java_CFFI_JavaEntityJobject(jobject: CPointer<Unit>)
+     * Java_CFFI_JavaEntityJobject(jobject: CPointer<Unit>)
      */
     OwnedPtr<Expr> CreateJavaEntityJobjectCall(OwnedPtr<Expr> arg);
 
@@ -419,21 +438,23 @@ public:
     /**
      * JavaObjectController<T>(javaEntity, className)
      */
-    OwnedPtr<CallExpr> CreateJavaObjectControllerCall(OwnedPtr<Expr> javaEntity, OwnedPtr<Expr> className,
+    OwnedPtr<CallExpr> CreateJavaObjectControllerCall(OwnedPtr<Expr> javaEntity,
+        OwnedPtr<Expr> className,
         ClassDecl& classDecl);
 
     /**
      * Java_CFFI_newJavaArray(env, signature, [args])
      */
-    OwnedPtr<CallExpr> CreateCFFINewJavaArrayCall(
-        OwnedPtr<Expr> jniEnv, FuncParamList& params, const Ptr<GenericParamDecl> genericParam);
+    OwnedPtr<CallExpr> CreateCFFINewJavaArrayCall(OwnedPtr<Expr> jniEnv, FuncParamList& params);
 
     /**
      * Java_CFFI_newJavaProxyObjectForCJMapping(env, entity, name, withMarkerParam)
      * For StrcutTy, withMarkerParam is true; for EnumTy, withMarkerParam is false.
      */
-    OwnedPtr<CallExpr> CreateCFFINewJavaCFFINewJavaProxyObjectForCJMappingCall(
-        OwnedPtr<Expr> jniEnv, OwnedPtr<Expr> entity, std::string name, bool withMarkerParam);
+    OwnedPtr<CallExpr> CreateCFFINewJavaCFFINewJavaProxyObjectForCJMappingCall(OwnedPtr<Expr> jniEnv,
+        OwnedPtr<Expr> entity,
+        std::string name,
+        bool withMarkerParam);
 
     /**
      * Java_CFFI_newGlobalReference(env, obj, isWeak)
@@ -519,6 +540,11 @@ public:
      * Java_CFFI_JavaStringToCangjie(env, jstring)
      */
     OwnedPtr<CallExpr> CreateJavaStringToCangjieCall(OwnedPtr<Expr> env, OwnedPtr<Expr> jstring);
+
+    /**
+     * Java_CFFI_CangjieStringToJava(env, string)
+     */
+    OwnedPtr<CallExpr> CreateCangjieStringToJavaCall(OwnedPtr<Expr> env, OwnedPtr<Expr> string);
 
     /**
      * Java_CFFI_getFromRegistry<ty>(env, self)
@@ -637,11 +663,15 @@ public:
         std::function<OwnedPtr<Expr>(TypeKind, Ptr<Ty>)> selector
     );
 
-    OwnedPtr<CallExpr> CreateGetJavaLambdaObjectCall(OwnedPtr<RefExpr> refExpr, std::string classSign,
+    OwnedPtr<CallExpr> CreateGetJavaLambdaObjectCall(OwnedPtr<RefExpr> refExpr,
+        std::string classSign,
         Ptr<File> curFile);
-    OwnedPtr<CallExpr> CreateGetJavaLambdaEntityCall(OwnedPtr<RefExpr> refExpr, std::string classSign,
+    OwnedPtr<CallExpr> CreateGetJavaLambdaEntityCall(OwnedPtr<RefExpr> refExpr,
+        std::string classSign,
         Ptr<File> curFile);
-    OwnedPtr<CallExpr> CreateGetJavaLambdaCall(Ptr<FuncDecl> fd, OwnedPtr<RefExpr> refExpr, std::string classSign,
+    OwnedPtr<CallExpr> CreateGetJavaLambdaCall(Ptr<FuncDecl> fd,
+        OwnedPtr<RefExpr> refExpr,
+        std::string classSign,
         Ptr<File> curFile);
 
     bool IsInteropLibAccessible() const;
@@ -650,7 +680,7 @@ public:
 
 private:
     static constexpr auto INTEROPLIB_VERSION = 9;
-    static constexpr auto INTEROPLIB_PACKAGE_NAME = "interoplib.interop";
+    static constexpr auto INTEROPLIB_PACKAGE_NAME = "java.internal";
 
     const std::vector<TypeKind> supportedArrayPrimitiveElementType = {
         TypeKind::TYPE_BOOLEAN,

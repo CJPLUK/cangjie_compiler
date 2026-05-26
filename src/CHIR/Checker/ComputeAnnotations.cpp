@@ -328,7 +328,7 @@ private:
     /// a const decl.
     bool IsConst(InheritableDecl& type)
     {
-        if (type.ty->IsString()) {
+        if (type.GetTy()->IsString()) {
             return true;
         }
         if (auto em = DynamicCast<EnumDecl>(&type)) {
@@ -357,7 +357,7 @@ private:
         }
         auto& fun = StaticCast<FuncDecl>(cons);
         for (auto& p : fun.funcBody->paramLists[0]->params) {
-            if (!IsConst(p->ty)) {
+            if (!IsConst(p->GetTy())) {
                 return false;
             }
         }
@@ -561,8 +561,8 @@ private:
         if (Is<PropDecl>(decl)) {
             return false;
         }
-        if (auto var = DynamicCast<VarDecl>(&decl); var && !var->isVar && !var->TestAttr(AST::Attribute::STATIC) &&
-            IsConstType(var->ty)) {
+        if (auto var = DynamicCast<VarDecl>(&decl);
+            var && !var->isVar && !var->TestAttr(AST::Attribute::STATIC) && IsConstType(var->GetTy())) {
             if (var->outerDecl) {
                 return true;
             }
@@ -638,10 +638,10 @@ private:
     bool MustSave(InheritableDecl& type)
     {
         if (auto extend = DynamicCast<ExtendDecl>(&type)) {
-            if (auto decl = DynamicCast<InheritableDecl>(Ty::GetDeclOfTy(extend->ty))) {
+            if (auto decl = DynamicCast<InheritableDecl>(Ty::GetDeclOfTy(extend->GetTy()))) {
                 return TakeSubPkg(*decl);
             }
-            auto ty = extend->ty;
+            auto ty = extend->GetTy();
             return ty->kind != TypeKind::TYPE_VARRAY;
         }
         return (Is<ClassDecl>(type) && type.TestAnyAttr(AST::Attribute::OPEN, AST::Attribute::ABSTRACT)) ||
@@ -654,7 +654,7 @@ private:
             return it->second;
         }
         bool ret{false};
-        if (type.ty->IsString()) {
+        if (type.GetTy()->IsString()) {
             ret = true;
         }
         // save extend because it may contain a member decl with @!Annotations.
@@ -709,7 +709,7 @@ OwnedPtr<ConstEvalResult> ComputeAnnotations(AST::Package& pkg, CompilerInstance
         doCompute = false;
     }
     // CJMP does not fully support Annotation
-    if (ci.invocation.globalOptions.commonPartCjo != std::nullopt ||
+    if (ci.invocation.globalOptions.commonPartCjos.size() > 0 ||
         ci.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
         doCompute = false;
     }

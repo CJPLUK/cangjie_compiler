@@ -15,8 +15,9 @@
 #include "Base/OverflowDispatcher.h"
 #include "Utils/CGUtils.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
-#include "cangjie/CHIR/Utils/ToStringUtils.h"
+#include "cangjie/CHIR/IR/IntrinsicKind.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/CHIR/Utils/ToStringUtils.h"
 
 namespace Cangjie {
 namespace CodeGen {

@@ -13,7 +13,6 @@
 #include "cangjie/AST/PrintNode.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Match.h"
-#include "cangjie/Driver/Driver.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -66,10 +65,10 @@ main() {
     Walker walker(instance->GetSourcePackages()[0]->files[0].get(), [](Ptr<Node> node) -> VisitAction {
         Meta::match (*node)(
             [](const FuncDecl& decl) {
-                auto ty = dynamic_cast<FuncTy*>(decl.ty.get());
+                auto ty = dynamic_cast<FuncTy*>(decl.GetTy().get());
                 EXPECT_EQ(ty->retTy->kind, TypeKind::TYPE_INT64);
             },
-            [](const VarDecl& decl) { EXPECT_EQ(decl.ty->kind, TypeKind::TYPE_INT32); });
+            [](const VarDecl& decl) { EXPECT_EQ(decl.TyKind(), TypeKind::TYPE_INT32); });
         return VisitAction::WALK_CHILDREN;
     });
     walker.Walk();
@@ -205,15 +204,9 @@ TEST_F(TypeCheckerTest, DISABLED_NoDiagInLSPMacroCallTest)
 TEST_F(TypeCheckerTest, DISABLED_NoDiagInLSPMacroCallForTest)
 {
     srcPath = projectPath + "/unittests/Sema/SemaCangjieFiles/";
-    std::vector<std::string> argStrs = {"cjc", "--compile-macro", "-Woff", "all", srcPath + "ModifyClassBuildFunc.cj"};
-    DiagnosticEngine driverDiag;
-    std::unique_ptr<Driver> driver = std::make_unique<Driver>(argStrs, driverDiag, projectPath + "/output/bin/cjc");
-    driver->driverOptions->customizedSysroot = true;
-    bool succ = driver->ParseArgs();
-    EXPECT_TRUE(succ);
-
-    succ = driver->ExecuteCompilation();
-    EXPECT_TRUE(succ);
+    std::string command = "cjc " + srcPath + "ModifyClassBuildFunc.cj --compile-macro -Woff all";
+    int err = system(command.c_str());
+    ASSERT_EQ(0, err);
 
     instance->invocation.globalOptions.enableMacroInLSP = true;
     invocation.globalOptions.executablePath = projectPath + "/output/bin/";
@@ -257,7 +250,7 @@ TEST_F(TypeCheckerTest, DISABLED_MacroCallOfTopLevelInLSPTest)
             checkCount++;
             EXPECT_TRUE(fp->type != nullptr);
             if (fp->type != nullptr) {
-                EXPECT_EQ(fp->type->ty->String(), "Struct-String");
+                EXPECT_EQ(fp->type->GetTy()->String(), "Struct-String");
             }
         }
         return VisitAction::WALK_CHILDREN;
@@ -353,8 +346,8 @@ TEST_F(TypeCheckerTest, DISABLED_SpawnTest)
     auto var2 = As<ASTKind::VAR_DECL>(targetFutureObj2);
     EXPECT_TRUE(var1);
     EXPECT_TRUE(var2);
-    auto ty1 = dynamic_cast<ClassTy*>(var1->ty.get());
-    auto ty2 = dynamic_cast<ClassTy*>(var2->ty.get());
+    auto ty1 = dynamic_cast<ClassTy*>(var1->GetTy().get());
+    auto ty2 = dynamic_cast<ClassTy*>(var2->GetTy().get());
     EXPECT_TRUE(ty1 && ty2 && ty1 == ty2);
     EXPECT_TRUE(ty1->decl->identifier == "Future");
     EXPECT_TRUE(ty1->typeArgs.size() == 1);

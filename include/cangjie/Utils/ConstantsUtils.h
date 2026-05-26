@@ -13,8 +13,8 @@
 #ifndef CANGJIE_CONSTANTSUTILS_H
 #define CANGJIE_CONSTANTSUTILS_H
 
-#include <cstdint>
 #include <map>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <cstdint>

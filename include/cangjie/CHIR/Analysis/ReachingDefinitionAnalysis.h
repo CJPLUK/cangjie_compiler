@@ -60,9 +60,9 @@ public:
 
 private:
     /// reaching status of store expressions.
-    std::vector<FlatSet<const Store>> reachingDefs;
+    std::vector<FlatSet<const Store*>> reachingDefs;
     /// reaching status of load expressions.
-    std::vector<FlatSet<const Load>> reachingLoadDefs;
+    std::vector<FlatSet<const Load*>> reachingLoadDefs;
     /// allocate index map of one function.
     std::unordered_map<const Value*, size_t>* allocateIdxMap;
 };

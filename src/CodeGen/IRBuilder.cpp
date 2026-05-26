@@ -106,7 +106,7 @@ llvm::AllocaInst* IRBuilder2::CreateEntryAlloca(llvm::Type* type, llvm::Value* a
 
 llvm::Instruction* IRBuilder2::CreateEntryAlloca(const CGType& cgType, const llvm::Twine& name)
 {
-    if (!GetCGContext().GetCompileOptions().disableInstantiation || cgType.GetSize()) {
+    if (cgType.GetSize()) {
         auto allocatedType = cgType.IsCGFunction()
             ? dynamic_cast<const CGFunctionType&>(cgType).GetLLVMFunctionType()->getPointerTo()
             : cgType.GetLLVMType();

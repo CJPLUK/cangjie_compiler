@@ -13,6 +13,7 @@
 #define CANGJIE_SEMA_NATIVE_FFI_JAVA_DESUGAR_MANAGER
 
 #include "InteropLibBridge.h"
+#include "NativeFFI/Java/AfterTypeCheck/JArrayDesugarer.h"
 #include "Utils.h"
 
 #include "cangjie/Mangle/BaseMangler.h"
@@ -62,7 +63,8 @@ public:
           lib(importManager, typeManager, diag, utils),
           javaCodeGenPath(javaCodeGenPath),
           outputLibPath(outputLibPath),
-          memberMap(memberMap)
+          memberMap(memberMap),
+          jarrayDesugarer(typeManager, importManager, lib)
     {
         lib.CheckInteropLibVersion();
     }
@@ -402,8 +404,11 @@ private:
      *     )
      * }
      */
-    OwnedPtr<Decl> GenerateNativeInitCjObjectFunc(FuncDecl& ctor, bool isClassLikeDecl, bool isOpenClass = false,
-        Ptr<FuncDecl> fwdCtor = nullptr, const GenericConfigInfo* genericConfig = nullptr);
+    OwnedPtr<Decl> GenerateNativeInitCjObjectFunc(FuncDecl& ctor,
+        bool isClassLikeDecl,
+        bool isOpenClass = false,
+        Ptr<FuncDecl> fwdCtor = nullptr,
+        const GenericConfigInfo* genericConfig = nullptr);
 
     OwnedPtr<Decl> GenerateNativeInitCjObjectFunc(const Ptr<TupleTy>& tuple, Package& pkg);
 
@@ -430,7 +435,9 @@ private:
      * used in DesugarJavaMirrorMethod for method's body generation
      *
      */
-    void AddJavaMirrorMethodBody(ClassLikeDecl& mirror, FuncDecl& fun, OwnedPtr<Expr> javaRefCall,
+    void AddJavaMirrorMethodBody(ClassLikeDecl& mirror,
+        FuncDecl& fun,
+        OwnedPtr<Expr> javaRefCall,
         GenericConfigInfo *config = nullptr);
 
     /**
@@ -547,11 +554,13 @@ private:
 
     /**
      * for a cj-mapping interface:
+     *
      * public interface CJMappingInterface {
      *   public func foo() : Unit {...}
      * }
      *
      * the following forward class and native method will be generated:
+     *
      * class CJMappingInterface_fwd <: CJMappingInterface { // Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD
      *     public let javaref: Java_CFFI_JavaEntity
      *
@@ -562,7 +571,7 @@ private:
      *     }
      *
      *     public func foo_default_impl(): Unit {...} // Attribute::JAVA_CJ_MAPPING_INTERFACE_DEFAULT
-     * }
+     * } 
      *
      * @C
      * public func Java_CJMappingInterface_1fwd_foo_1default_1impl(env, _: jclass, javaref: jobject) {
@@ -571,22 +580,29 @@ private:
      */
     void GenerateForCJInterfaceMapping(File& file, AST::InterfaceDecl& interfaceDecl);
     void GenerateNativeForCJInterfaceMapping(AST::ClassDecl& classDecl);
-    void GenerateInterfaceFwdclassBody(AST::ClassDecl& fwdclassDecl, AST::InterfaceDecl& interfaceDecl,
+    void GenerateInterfaceFwdclassBody(AST::ClassDecl& fwdclassDecl,
+        AST::InterfaceDecl& interfaceDecl,
+        GenericConfigInfo* config = nullptr);
+    OwnedPtr<FuncDecl> GenerateInterfaceFwdclassMethod(AST::ClassDecl& fwdclassDecl,
+        FuncDecl& interfaceFuncDecl,
         GenericConfigInfo *config = nullptr);
-    OwnedPtr<FuncDecl> GenerateInterfaceFwdclassMethod(AST::ClassDecl& fwdclassDecl, FuncDecl& interfaceFuncDecl,
+    OwnedPtr<FuncDecl> GenerateInterfaceFwdclassDefaultMethod(AST::ClassDecl& fwdclassDecl,
+        FuncDecl& interfaceFuncDecl,
         GenericConfigInfo *config = nullptr);
-    OwnedPtr<FuncDecl> GenerateInterfaceFwdclassDefaultMethod(
-        AST::ClassDecl& fwdclassDecl, FuncDecl& interfaceFuncDecl, GenericConfigInfo *config = nullptr);
 
     OwnedPtr<PrimitiveType> CreateUnitType();
     void GenerateForCJOpenClassMapping(AST::ClassDecl& classDecl);
-    void GenerateClassFwdclassBody(AST::ClassDecl& fwdclassDecl, AST::ClassDecl& classDecl,
-        std::vector<std::pair<Ptr<FuncDecl>, Ptr<FuncDecl>>>& pairCtors);
+    void GenerateClassFwdclassBody(AST::ClassDecl& fwdclassDecl,
+        AST::ClassDecl& classDecl,
+        std::vector<std::pair<Ptr<FuncDecl>,
+        Ptr<FuncDecl>>>& pairCtors);
     void InsertJavaObjectControllerVarDecl(ClassDecl& fwdClassDecl, ClassDecl& classDecl);
     void InsertOverrideMaskVar(AST::ClassDecl& fwdclassDecl);
     OwnedPtr<FuncDecl> GenerateFwdClassCtor(ClassDecl& fwdDecl, ClassDecl& classDecl, FuncDecl& oriCtorDecl);
     void InsertAttachCJObject(ClassDecl& fwdDecl, ClassDecl& classDecl);
-    OwnedPtr<FuncDecl> GenerateFwdClassMethod(ClassDecl& fwdDecl, ClassDecl& classDecl, FuncDecl& oriMethodDecl,
+    OwnedPtr<FuncDecl> GenerateFwdClassMethod(ClassDecl& fwdDecl,
+        ClassDecl& classDecl,
+        FuncDecl& oriMethodDecl,
         int index);
     OwnedPtr<ClassDecl> InitInterfaceFwdClassDecl(AST::InterfaceDecl& interfaceDecl);
     OwnedPtr<StructDecl> CreateHelperStructDecl(const Ptr<TupleTy>& tupleTy, Package& pkg);
@@ -606,7 +622,8 @@ private:
      * func test2(){}
      * }
      */
-    OwnedPtr<AST::MemberAccess> GenThisMemAcessForSelfMethod(Ptr<FuncDecl> fd, Ptr<InterfaceDecl> interfaceDecl,
+    OwnedPtr<AST::MemberAccess> GenThisMemAcessForSelfMethod(Ptr<FuncDecl> fd,
+        Ptr<InterfaceDecl> interfaceDecl,
         GenericConfigInfo* genericConfig);
     void PreGenerateInCJMapping(File& file);
 
@@ -666,6 +683,7 @@ private:
      */
     OwnedPtr<CallExpr> CreateGetCJLambdaCallExpr(OwnedPtr<RefExpr> callResRef, Ptr<Ty> ty, const Decl& outerDecl);
 
+
     /**
      * generate java interface functional call() method's native function decl.
      */
@@ -693,6 +711,7 @@ private:
     const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& memberMap;
     std::map<std::string, Ptr<FuncDecl>> lambdaConfUtilFuncs;
     bool isInitLambdaUtilFunc = false;
+    JArrayDesugarer jarrayDesugarer;
 };
 
 } // namespace Cangjie::Interop::Java

@@ -13,7 +13,7 @@ target_link_libraries(
     GTest::gtest_main)
 add_test(NAME ParseJsonTest COMMAND ParseJsonTest)
 
-add_executable(TypeCheckerTest TypeCheckerTest.cpp ${CANGJIE_SRC_OBJECTS})
+add_executable(TypeCheckerTest TypeCheckerTest.cpp)
 target_link_libraries(
     TypeCheckerTest
     cangjie-lsp

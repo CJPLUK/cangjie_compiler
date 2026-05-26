@@ -272,19 +272,27 @@ void CHIRContext::FreeWholePackage()
         DivideArray(allocatedEnums.size(), threadsNum - 1, indexs);
         for (size_t i = 0; i < threadsNum - 1; i++) {
             threads.emplace_back([i, &indexs, this]() {
+#ifndef CANGJIE_ENABLE_GCOV
                 try {
+#endif
                     DeleteAllocatedInstance(indexs[i]);
+#ifndef CANGJIE_ENABLE_GCOV
                 } catch (...) {
                     // Avoid std::terminate if an unexpected exception escapes the worker.
                 }
+#endif
             });
         }
         threads.emplace_back([this]() {
+#ifndef CANGJIE_ENABLE_GCOV
             try {
+#endif
                 DeleteAllocatedTys();
+#ifndef CANGJIE_ENABLE_GCOV
             } catch (...) {
                 // Avoid std::terminate if an unexpected exception escapes the worker.
             }
+#endif
         });
         for (auto& thread : threads) {
             if (thread.joinable()) {

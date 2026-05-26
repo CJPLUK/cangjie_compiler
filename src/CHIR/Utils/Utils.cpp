@@ -342,7 +342,7 @@ std::vector<Ptr<AST::VarDecl>> GetNonStaticSuperMemberVars(const AST::ClassLikeD
     return std::vector<Ptr<AST::VarDecl>>{};
 }
 
-bool IsCrossPackage(const Cangjie::Position& pos, const std::string& currentPackage, DiagAdapter& diag)
+bool IsCrossPackage(const Cangjie::Position& pos, const std::string& currentPackage, DiagnosticEngine& diag)
 {
     if (diag.GetSourceManager().GetSource(pos.fileID).packageName.has_value()) {
         if (currentPackage != diag.GetSourceManager().GetSource(pos.fileID).packageName.value()) {
@@ -1248,6 +1248,10 @@ bool ParamTypeIsEquivalent(const Type& paramType, const Type& argType)
     if (&paramType == &argType) {
         return true;
     }
+    // `NothingType` is any type's sub type, so it's equivalent to any type
+    if (argType.IsNothing()) {
+        return true;
+    }
     if (argType.IsBoxRefTypeOf(paramType) || paramType.IsBoxRefTypeOf(argType)) {
         return true;
     }
@@ -1533,7 +1537,6 @@ Type* CreateBoxRefTypeIfNeed(Type& baseType, CHIRBuilder& builder)
     }
     return builder.GetType<RefType>(builder.GetType<BoxType>(&baseType));
 }
-
 
 Type* GetInstParentType(Type& instSubType, Type& genericParentType, CHIRBuilder& builder)
 {

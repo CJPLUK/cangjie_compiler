@@ -73,7 +73,7 @@ private:
     template<typename T>
     T* TryGetDeserialized(const std::string& mangledName)
     {
-        // merging specific
+        // merging platform
         if (opts.IsCompilingCJMPSpecific()) {
             return TryGetFromCache<Value, T>(GLOBAL_VALUE_PREFIX + mangledName, trans.deserializedVals);
         }

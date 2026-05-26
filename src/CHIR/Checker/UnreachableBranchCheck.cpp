@@ -9,7 +9,7 @@
 using namespace Cangjie::CHIR;
 
 UnreachableBranchCheck::UnreachableBranchCheck(
-    ConstAnalysisWrapper* constAnalysisWrapper, DiagAdapter& diag, const std::string& packageName)
+    ConstAnalysisWrapper* constAnalysisWrapper, DiagnosticEngine& diag, const std::string& packageName)
     : diag(diag), analysisWrapper(constAnalysisWrapper), currentPackageName(packageName)
 {
 }
@@ -112,7 +112,7 @@ void UnreachableBranchCheck::PrintWarning(
 }
 
 template <typename TConstDomain>
-void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
+void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result) 
 {
     const auto actionBeforeVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
     const auto actionAfterVisitExpr = [](const TConstDomain&, Expression*, size_t) {};

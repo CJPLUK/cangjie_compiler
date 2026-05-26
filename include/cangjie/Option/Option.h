@@ -104,8 +104,8 @@ enum class BackendType : uint8_t {
 enum class ArchType : uint8_t {
     X86_64 = 0,
     AARCH64,
-    ARM32,
     ARM64,
+    ARM32,
     UNKNOWN,
 };
 
@@ -341,6 +341,8 @@ public:
 #endif
 #ifdef __APPLE__
         Triple::Environment::NOT_AVAILABLE,
+#elif defined(__ohos__)
+        Triple::Environment::OHOS,
 #else
         Triple::Environment::GNU,
 #endif
@@ -471,11 +473,15 @@ public:
 
     std::optional<std::string> outputJavaGenDir = std::nullopt;
 
+    std::string outputObjCGenDir = "";
+
     std::vector<std::string> importPaths; /**< .cjo search paths */
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     std::vector<std::string> pluginPaths; /**< meta-transform plugins */
 #endif
-    std::optional<std::string> commonPartCjo = std::nullopt; /**< .cjo path for common part of package */
+    std::vector<std::string> commonPartCjos; /**< .cjo path for parent source sets (common to currently compiled) */
+
+    std::vector<std::string> commonPartChirs; /**< .chir files for parent source sets */
 
     // enable incremental compilation
     bool enIncrementalCompilation = false;
@@ -509,8 +515,6 @@ public:
     std::vector<std::string> inputObjs; /**< .o files to link. */
 
     std::string inputCjoFile; /**< .cjo files to scan */
-
-    std::vector<std::string> inputChirFiles; /**< .chir files to complete compilation */
 
     std::vector<std::string> inputPdbaFiles; /**< cbc import libraries, which used to import cbclib */
 
@@ -676,7 +680,7 @@ public:
      *
      * @return bool Returns true if LTO is enabled, otherwise returns false.
      */
-    bool IsCompileAsExeEnabled() const
+    bool IsCompileAsExeEnabled() const 
     {
         return enableCompileAsExe;
     }
@@ -847,9 +851,6 @@ public:
     bool chirDeserialize = false;
     std::string chirDeserializePath;
 
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    bool disableInstantiation = true;
-#endif
     bool disableSemaVic = false;
     bool enableChirRGetOrThrowE = false;
     bool disableChirUselessImportElimination = false;
@@ -874,7 +875,7 @@ public:
     bool cjdbMode = false; /** whether the option used in cjdb */
 
     std::string interopCJPackageConfigPath = "./"; /**< cjinterop .toml package config file paths */
-    
+
     enum class SanitizerType : uint8_t {
         NONE,
         ADDRESS,
@@ -900,7 +901,7 @@ public:
      */
     bool CompileExecutable() const
     {
-        return (outputMode == GlobalOptions::OutputMode::EXECUTABLE) ||
+        return outputMode == GlobalOptions::OutputMode::EXECUTABLE ||
             (outputMode == GlobalOptions::OutputMode::OBJ && compileTarget == CompileTarget::EXECUTABLE);
     }
 
@@ -1135,8 +1136,16 @@ public:
      * @param notFoundError A reference to the diagnostic kind used to generate the error message.
      * @return std::optional<std::string> The optional valid file path.
      */
-    std::optional<std::string> ValidateInputFilePath(
-        const std::string& path, const DiagKindRefactor notFoundError) const;
+    static std::optional<std::string> ValidateInputFilePath(
+        const std::string& path, const DiagKindRefactor notFoundError);
+    /**
+     * @brief Validates the input file path.
+     *
+     * Functionally equivalent to the other ValidateInputFilePath, but with a diagnostic engine.
+     * Used by checkcjd.
+     */
+    static std::optional<std::string> ValidateInputFilePath(
+        const std::string& path, const DiagKindRefactor notFoundError, DiagnosticEngine& diag);
 
     /**
      * @brief Sets the frontend mode.
@@ -1188,7 +1197,7 @@ public:
 
     bool IsCompilingCJMPSpecific() const
     {
-        return inputChirFiles.size() > 0;
+        return commonPartChirs.size() > 0;
     }
 
     bool IsCompilingCJMP() const
@@ -1222,15 +1231,17 @@ private:
     bool CheckLTOPkgVisibilityOptions() const;
     bool CheckPgoOptions() const;
     bool CheckCompileMacro() const;
+    bool CheckCJMPOptions() const;
     void RefactJobs();
     void RefactAggressiveParallelCompileOption();
     void DisableStaticStdForOhos();
+    bool VerifyFileExtension(const std::string& file, const std::string& fullPath, const std::string& extension,
+        DiagnosticEngine& diag) const;
 
     bool ProcessInputs(const std::vector<std::string>& inputs);
     bool HandleArchiveExtension(DiagnosticEngine& diag, const std::string& value);
     bool HandleCJOExtension(DiagnosticEngine& diag, const std::string& value);
     bool HandleCJExtension(DiagnosticEngine& diag, const std::string& value);
-    bool HandleCHIRExtension(DiagnosticEngine& diag, const std::string& value);
     bool HandleCJDExtension(DiagnosticEngine& diag, const std::string& value);
     bool HandleBCExtension(DiagnosticEngine& diag, const std::string& value);
     bool HandleNoExtension(DiagnosticEngine& diag, const std::string& value);

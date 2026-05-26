@@ -8,7 +8,6 @@
 #include "IRBuilder.h"
 
 #include "Base/CGTypes/CGArrayType.h"
-#include "Base/CGTypes/CGClassType.h"
 #include "Base/CGTypes/CGType.h"
 #include "Base/CHIRExprWrapper.h"
 #include "CGModule.h"
@@ -142,6 +141,13 @@ llvm::Value* IRBuilder2::CallStackTraceIntrinsic(const CHIRIntrinsicWrapper& sys
     return nullptr;
 }
 
+// In stdlib, there are two intrinsic functions used to get thread info:
+// 1) func dumpAllThreadsInfo(): RawArray<ThreadSnapshotInfo>
+// 2) func dumpCurrentThreadInfo(): ThreadSnapshotInfo
+// We need to translate them to runtime functions in cjnative:
+// 1) CJ_MCC_GetAllThreadSnapshot(TypeInfo* Array<ThreadSnapInfo>, TypeInfo* Array<StackTraceData>, TypeInfo*
+// RawArray<UInt8>) : RawArray<ThreadSnapshotInfo> 2) CJ_MCC_GetCurrentThreadSnapshot(TypeInfo* Array<StackTraceData>,
+// TypeInfo* RawArray<UInt8>) : ThreadSnapshotInfo
 llvm::Value* IRBuilder2::CallThreadInfoIntrinsic(const CHIRIntrinsicWrapper& syscall, std::vector<CGValue*>& parameters)
 {
     auto intrinsicKind = syscall.GetIntrinsicKind();

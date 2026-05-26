@@ -34,7 +34,7 @@ public:
      * @param enIncre flag whether is incremental compile.
      */
     explicit RangePropagation(
-        CHIRBuilder& builder, RangeAnalysisWrapper* rangeAnalysisWrapper, DiagAdapter* diag, bool enIncre);
+        CHIRBuilder& builder, RangeAnalysisWrapper* rangeAnalysisWrapper, DiagnosticEngine& diag, bool enIncre);
 
     /**
      * @brief Main process to do range propagation.
@@ -101,7 +101,7 @@ private:
 
     CHIRBuilder& builder;
     RangeAnalysisWrapper* analysisWrapper;
-    DiagAdapter* diag;
+    DiagnosticEngine& diag;
     bool enIncre;
     static OptEffectCHIRMap effectMap;
     std::vector<const Function*> funcsNeedRemoveBlocks;

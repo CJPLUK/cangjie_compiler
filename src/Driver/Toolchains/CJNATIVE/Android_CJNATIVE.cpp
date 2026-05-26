@@ -81,7 +81,7 @@ void Android_CJNATIVE::AddCRuntimeLibraryPaths()
     const std::string& arch = target.ArchToString();
 
     using namespace std::literals;
-    std::string_view suffix = (arch == "arm") ? "-linux-androideabi/"sv : "-linux-android/"sv;
+    std::string_view suffix = (target.arch == Triple::ArchType::ARM32) ? "-linux-androideabi/"sv : "-linux-android/"sv;
     std::string_view prefix = "usr/lib/"sv;
 
     std::string tripleDirectory;

@@ -458,7 +458,7 @@ TEST_F(PackageTest, LSPCompileWithConstraint)
             count++;
             for (auto& constraint : extend->generic->genericConstraints) {
                 ASSERT_TRUE(constraint != nullptr && constraint->type != nullptr);
-                auto gTy = RawStaticCast<GenericsTy*>(constraint->type->ty);
+                auto gTy = RawStaticCast<GenericsTy*>(constraint->type->GetTy());
                 EXPECT_TRUE(gTy && !gTy->upperBounds.empty());
                 EXPECT_FALSE(constraint->upperBounds.empty());
             }
@@ -796,6 +796,31 @@ TEST_F(PackageTest, CheckCjoPathLegality)
     bool ret = instance->importManager->CheckCjoPathLegality(import, "", "not found package name", false, false);
     ASSERT_EQ(ret, false);
     EXPECT_TRUE(diag.GetErrorCount() == 1);
+}
+
+TEST_F(PackageTest, CollectStdDependency_PackageSearchError)
+{
+    diag.ClearError();
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.scanDepPkg = true;
+    instance->code = R"(
+        import std.reflect.*
+        main() { 0 }
+    )";
+    bool ret = instance->Compile(CompileStage::IMPORT_PACKAGE);
+    EXPECT_TRUE(ret);
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+    auto diags = diag.GetCategoryDiagnostic(DiagCategory::IMPORT_PACKAGE);
+    EXPECT_EQ(diags.size(), 1);
+    bool foundPackageSearchError = false;
+    for (const auto& d : diags) {
+        if (static_cast<int>(d.rKind) == static_cast<int>(DiagKindRefactor::package_search_error) &&
+            d.errorMessage == "can not find package 'std.reflect'") {
+            foundPackageSearchError = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(foundPackageSearchError);
 }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
@@ -1207,7 +1232,7 @@ TEST_F(PackageTest, LoadPackageFromCjo)
         for (auto& file : std::as_const(pkg->files)) {
             if (file->decls.size() > 0) {
                 for (auto& decl : std::as_const(file->decls)) {
-                    EXPECT_TRUE(Ty::IsTyCorrect(decl->ty));
+                    EXPECT_TRUE(Ty::IsTyCorrect(decl->GetTy()));
                 }
             }
         }
@@ -1370,7 +1395,7 @@ TEST_F(PackageTest, TypeAliasRefExport)
     }
     Walker(depPkg, [](Ptr<Node> node) {
         if (node->astKind != ASTKind::TYPE_ALIAS_DECL) {
-            EXPECT_NE(node->ty->kind, TypeKind::TYPE);
+            EXPECT_NE(node->TyKind(), TypeKind::TYPE);
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();

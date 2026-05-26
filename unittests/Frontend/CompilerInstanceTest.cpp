@@ -85,7 +85,7 @@ TEST_F(CompilerInstanceTest, DISABLED_GetAllVisibleExtendMembers01)
     auto extendSyms = searcher.Search(*ctx, "ast_kind:extend_decl", Sort::posAsc);
     // Int64 -> #{Eqq}
     auto memberSet1 = instance->GetAllVisibleExtendMembers(
-        StaticAs<ASTKind::EXTEND_DECL>(extendSyms[0]->node)->extendedType->ty, *extendSyms[0]->node->curFile);
+        StaticAs<ASTKind::EXTEND_DECL>(extendSyms[0]->node)->extendedType->GetTy(), *extendSyms[0]->node->curFile);
     bool containExtendMember = false;
     for (auto member : memberSet1) {
         EXPECT_TRUE(member->astKind == ASTKind::FUNC_DECL || member->astKind == ASTKind::PROP_DECL);

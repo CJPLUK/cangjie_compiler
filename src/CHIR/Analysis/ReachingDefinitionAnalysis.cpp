@@ -15,8 +15,8 @@ using namespace Cangjie::CHIR;
 
 ReachingDefinitionDomain::ReachingDefinitionDomain(std::unordered_map<const Value*, size_t>* allocateIdxMap)
     : AbstractDomain(),
-      reachingDefs(std::vector<FlatSet<const Store>>(allocateIdxMap->size(), FlatSet<const Store>(false))),
-      reachingLoadDefs(std::vector<FlatSet<const Load>>(allocateIdxMap->size(), FlatSet<const Load>(false))),
+      reachingDefs(std::vector<FlatSet<const Store*>>(allocateIdxMap->size(), FlatSet<const Store*>(false))),
+      reachingLoadDefs(std::vector<FlatSet<const Load*>>(allocateIdxMap->size(), FlatSet<const Load*>(false))),
       allocateIdxMap(allocateIdxMap)
 {
 }

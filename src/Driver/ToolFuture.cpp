@@ -48,8 +48,10 @@ ToolFuture::State LinuxProcessFuture::GetState()
 {
     int status = 0;
     int result = waitpid(pid, &status, WNOHANG);
-    if (WIFEXITED(status)) {
-        exitCode = WEXITSTATUS(status);
+    unsigned int uStatus = static_cast<unsigned int>(status);
+
+    if (WIFEXITED(uStatus)) {
+        exitCode = WEXITSTATUS(uStatus);
     }
     if (result < 0 || status != 0) {
         // If an error occurs because the file is deleted, the error information is not printed.

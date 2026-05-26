@@ -26,6 +26,7 @@ using TokenKind = Cangjie::TokenKind;
 
 constexpr auto JAVA_PACKAGE = "package";
 constexpr auto JAVA_PUBLIC = "public";
+constexpr auto JAVA_PROTECTED = "protected";
 constexpr auto JAVA_PRIVATE = "private";
 constexpr auto JAVA_DEFAULT = "default";
 constexpr auto JAVA_NATIVE = "native";
@@ -79,18 +80,18 @@ bool NeedExtraFinalModifier(const Decl& declArg)
 std::string FuncParamToString(const OwnedPtr<FuncParam>& p, Cangjie::Native::FFI::GenericConfigInfo* genericConfig,
     Cangjie::TypeManager& typeManager)
 {
-    CJC_ASSERT(p && p->type && p->type->ty);
+    CJC_ASSERT(p && p->type && p->type->GetTy());
     std::string res = p->identifier.Val();
-    if (auto ty = Ty::GetDeclOfTy(p->type->ty)) {
-        bool castToId = IsCJMapping(*ty) && !IsCJMappingInterface(*(p->type->ty));
+    if (auto ty = Ty::GetDeclOfTy(p->type->GetTy())) {
+        bool castToId = IsCJMapping(*ty) && !IsCJMappingInterface(*(p->type->GetTy()));
         res += castToId ? ".self" : "";
-    } else if (p->type->ty->IsFunc()) {
-        auto actualTy = p->type->ty->HasGeneric()
-            ? GetGenericInstTy(genericConfig, p->type->ty, typeManager)
-            : p->type->ty;
+    } else if (p->type->GetTy()->IsFunc()) {
+        auto actualTy = p->type->GetTy()->HasGeneric()
+            ? GetGenericInstTy(genericConfig, p->type->GetTy(), typeManager)
+            : p->type->GetTy();
         res = GetLambdaJavaClassName(actualTy) + ".box(" + res + ")";
     }
-    if (p->type->ty->IsTuple()) {
+    if (p->type->GetTy()->IsTuple()) {
         res += ".self";
     }
     return res;
@@ -447,26 +448,26 @@ std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(
 std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(const OwnedPtr<Type>& type, std::set<std::string>* javaImports,
     const std::string* curPackageName, bool isNativeMethod)
 {
-    CJC_ASSERT(type && type->ty);
-    if (IsGenericParam(type->ty, *decl, genericConfig)) {
+    CJC_ASSERT(type && type->GetTy());
+    if (IsGenericParam(type->GetTy(), *decl, genericConfig)) {
         // Current generic only support primitive type.
-        auto genericActualTy = GetGenericInstTy(genericConfig, type->ty, typeManager);
+        auto genericActualTy = GetGenericInstTy(genericConfig, type->GetTy(), typeManager);
         return MapCJTypeToJavaType(genericActualTy, javaImports, curPackageName, isNativeMethod);
     }
-    return MapCJTypeToJavaType(type->ty, javaImports, curPackageName, isNativeMethod);
+    return MapCJTypeToJavaType(type->GetTy(), javaImports, curPackageName, isNativeMethod);
 }
 
 std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(const OwnedPtr<FuncParam>& param,
     std::set<std::string>* javaImports, const std::string* curPackageName, bool isNativeMethod)
 {
-    CJC_ASSERT(param && param->type && param->type->ty);
-    auto paraTy = param->type->ty;
+    CJC_ASSERT(param && param->type && param->type->GetTy());
+    auto paraTy = param->type->GetTy();
     if (IsGenericParam(paraTy, *decl, genericConfig)) {
         // Current generic only support primitive type.
         auto genericActualTy = GetGenericInstTy(genericConfig, paraTy, typeManager);
         return MapCJTypeToJavaType(genericActualTy, javaImports, curPackageName, isNativeMethod);
     }
-    return MapCJTypeToJavaType(param->type->ty, javaImports, curPackageName, isNativeMethod);
+    return MapCJTypeToJavaType(param->type->GetTy(), javaImports, curPackageName, isNativeMethod);
 }
 
 void JavaSourceCodeGenerator::AddInterfaceDeclaration()
@@ -497,7 +498,7 @@ void JavaSourceCodeGenerator::AddClassDeclaration()
 
         if (isClassInheritedFromClass) {
             res += " extends ";
-            res += MapCJTypeToJavaType(superClassPtr->ty, &imports, &classDecl->fullPackageName);
+            res += MapCJTypeToJavaType(superClassPtr->GetTy(), &imports, &classDecl->fullPackageName);
         }
 
         if (implementedInterfacesCnt > 0) {
@@ -623,10 +624,10 @@ std::string JavaSourceCodeGenerator::GenerateFuncParamLists(
     const std::string* curPackage = &decl->fullPackageName;
     std::function<std::string(const OwnedPtr<FuncParam>& ptr)> mapper = [this, imp, curPackage, isNativeMethod](
                                                                             const OwnedPtr<FuncParam>& cur) {
-        CJC_ASSERT(cur && cur->type && cur->type->ty);
+        CJC_ASSERT(cur && cur->type && cur->type->GetTy());
         std::string res = MapCJTypeToJavaType(cur, imp, curPackage, isNativeMethod) + " " + cur->identifier.Val();
-        if (auto ty = Ty::GetDeclOfTy(cur->type->ty)) {
-            bool castToId = isNativeMethod && IsCJMapping(*ty) && !IsCJMappingInterface(*(cur->type->ty));
+        if (auto ty = Ty::GetDeclOfTy(cur->type->GetTy())) {
+            bool castToId = isNativeMethod && IsCJMapping(*ty) && !IsCJMappingInterface(*(cur->type->GetTy()));
             res += castToId ? "Id" : "";
         }
         return res;
@@ -640,7 +641,7 @@ std::string JavaSourceCodeGenerator::GenerateFuncParamClasses(const std::vector<
     const std::string* curPackage = &decl->fullPackageName;
     std::function<std::string(const OwnedPtr<FuncParam>& ptr)> mapper = [this, imp, curPackage](
                                                                             const OwnedPtr<FuncParam>& cur) {
-        CJC_ASSERT(cur && cur->type && cur->type->ty);
+        CJC_ASSERT(cur && cur->type && cur->type->GetTy());
         std::string res = MapCJTypeToJavaType(cur, imp, curPackage, false) + ".class";
         return res;
     };
@@ -680,6 +681,9 @@ std::string JavaSourceCodeGenerator::GenerateConstructorDecl(const FuncDecl& fun
     std::string declaration;
     if (!isForCangjie && func.TestAttr(Attribute::PUBLIC)) {
         declaration += JAVA_PUBLIC;
+        declaration += JAVA_WHITESPACE;
+    } else if (!isForCangjie && func.TestAttr(Attribute::PROTECTED)) {
+        declaration += JAVA_PROTECTED;
         declaration += JAVA_WHITESPACE;
     } else if (isForCangjie) {
         declaration += JAVA_PRIVATE;
@@ -754,10 +758,10 @@ std::pair<std::string, std::string> JavaSourceCodeGenerator::GenNativeSuperArgCa
         auto index = pid.value();
         auto& pname = params[static_cast<size_t>(index)]->identifier.Val();
         args.push_back(pname);
-        nativeParams.push_back(mpTy(params[static_cast<size_t>(index)]->ty) + " " + pname);
+        nativeParams.push_back(mpTy(params[static_cast<size_t>(index)]->GetTy()) + " " + pname);
     }
     std::string superCall = id + "(" + Cangjie::Utils::JoinStrings(args, ", ") + ")";
-    std::string nativeFnDecl = "public static native " + mpTy(arg.ty) + " " + id + "(" +
+    std::string nativeFnDecl = "public static native " + mpTy(arg.GetTy()) + " " + id + "(" +
         Cangjie::Utils::JoinStrings(nativeParams, ", ") + ");";
     return std::make_pair(superCall, nativeFnDecl);
 }
@@ -903,7 +907,7 @@ void JavaSourceCodeGenerator::AddConstructors()
         if (!fd || fd->TestAttr(Attribute::PRIVATE) || !fd->TestAttr(Attribute::CONSTRUCTOR)) {
             continue;
         }
-        if (IsCJMapping(*decl) && !fd->TestAttr(Attribute::PUBLIC)) {
+        if (IsCJMapping(*decl) && !fd->TestAttr(Attribute::PUBLIC) && !fd->TestAttr(Attribute::PROTECTED)) {
             continue;
         }
         const auto& funcDecl = *fd;
@@ -929,7 +933,7 @@ void JavaSourceCodeGenerator::AddInstanceMethod(const FuncDecl& funcDecl)
     auto& params = funcDecl.funcBody->paramLists[0]->params;
     auto funcIdentifier = GetJavaMemberName(funcDecl);
     auto mangledNativeName = GetMangledMethodName(mangler, params, funcIdentifier, typeManager);
-    auto modifier = IsCJMapping(funcDecl) ? GetMethodModifier(&funcDecl) : "public ";
+    auto modifier = GetMethodModifier(&funcDecl);
     if (funcDecl.TestAttr(Attribute::OVERRIDE)) {
         AddWithIndent(TAB, "@Override");
     }
@@ -1234,12 +1238,13 @@ void JavaSourceCodeGenerator::AddNativeInitCJObject(
 {
     auto name = GetMangledJniInitCjObjectFuncName(mangler, params, false);
     auto strParams = GenerateFuncParams(params, true);
+    auto modifier = GetMethodModifier(&fd);
 
     if (IsCJMappingOpenClass(fd)) {
         strParams = strParams.empty() ? "long overrideMask" : "long overrideMask, " + strParams;
     }
 
-    std::string signature = "public native long " + name + "(" + strParams + ");\n";
+    std::string signature = modifier + "native long " + name + "(" + strParams + ");\n";
     AddWithIndent(TAB, signature);
 }
 

@@ -350,8 +350,8 @@ bool Demangler<T>::IsQualifiedType() const
     if (IsPrimitive<T>(mangledName[currentIndex])) {
         return true;
     }
-    // The {'C', 'R', 'N', 'T', 'P', 'A', 'k', 'V'} belong to the legal qualified type prefix.
-    for (auto prefix : { 'C', 'R', 'N', 'T', 'P', 'A', 'k', 'V' }) {
+    // The {'C', 'R', 'F', 'N', 'T', 'P', 'A', 'k', 'V', 'G'} belong to the legal qualified type prefix.
+    for (auto prefix : { 'C', 'R', 'F', 'N', 'T', 'P', 'A', 'k', 'V', 'G' }) {
         if (mangledName[currentIndex] == prefix) {
             return true;
         }
@@ -727,7 +727,7 @@ DemangleInfo<T> Demangler<T>::DemanglePackageName()
     if (pkg.IsEmpty()) {
         pkg = DemangleStringName();
         auto pos = pkg.Find(':');
-        if (pos > -1 && pkg.Length() - static_cast<size_t>(pos) > 0) {
+        if (pos > -1 && pkg.Length() - static_cast<size_t>(pos) > 1) {
             pkg = pkg.SubStr(0, pos) + T{':'} + pkg.SubStr(pos, pkg.Length() - static_cast<size_t>(pos));
         }
     }

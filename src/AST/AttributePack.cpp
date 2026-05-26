@@ -58,8 +58,10 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::IS_CAPTURE, "IS_CAPTURE"},
     {AST::Attribute::IN_CORE, "IN_CORE"},
     {AST::Attribute::NEED_AUTO_BOX, "NEED_AUTO_BOX"},
+
     // deprecated: Redundant with Node->curMacroCall; will be removed in the future.
     {AST::Attribute::MACRO_EXPANDED_NODE, "MACRO_EXPANDED_NODE(deprecated)"},
+
     {AST::Attribute::MACRO_FUNC, "MACRO_FUNC"},
     {AST::Attribute::MACRO_INVOKE_FUNC, "MACRO_INVOKE_FUNC"},
     {AST::Attribute::MACRO_INVOKE_BODY, "MACRO_INVOKE_BODY"},
@@ -113,6 +115,7 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER, "OBJ_C_MIRROR_SYNTHETIC_WRAPPER"},
     {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_DEFAULT, "CJ_MIRROR_JAVA_INTERFACE_DEFAULT"},
     {AST::Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD, "CJ_MIRROR_OBJC_INTERFACE_FWD"},
+    {AST::Attribute::ALREADY_LOADED, "ALREADY_LOADED"},
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
 };
 UNSUPPRESS_WARNING()

@@ -23,7 +23,7 @@
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/CHIRContext.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include "cangjie/Utils/CastingTemplate.h"
@@ -293,7 +293,7 @@ template <typename T> std::pair<bool, Cangjie::Range> GetDebugPos(const T& expr)
  * @param diag The diagnostic adapter.
  * @return True if the position is in a different package, false otherwise.
  */
-bool IsCrossPackage(const Cangjie::Position& pos, const std::string& currentPackage, DiagAdapter& diag);
+bool IsCrossPackage(const Cangjie::Position& pos, const std::string& currentPackage, DiagnosticEngine& diag);
 
 /**
  * @brief Sets a value to skip print warnings.

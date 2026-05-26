@@ -348,50 +348,6 @@ void EmitCJSDKVersion(const CGModule& cgMod)
     cgMod.GetCGContext().AddLLVMUsedVars(cjSdkVersion->getName().str());
 }
 
-void GenerateReflectionMetadata(CGModule& module, const SubCHIRPackage& subCHIRPkg)
-{
-    auto& globalOptions = module.GetCGContext().GetCGPkgContext().GetGlobalOptions();
-    uint8_t reflectionMode = globalOptions.disableReflection
-        ? GenReflectMode::NO_REFLECT
-        : GenReflectMode::FULL_REFLECT;
-
-    const std::array<MetadataKind, 6> allKinds = {
-        CodeGen::MetadataKind::PKG_METADATA,
-        CodeGen::MetadataKind::CLASS_METADATA,
-        CodeGen::MetadataKind::STRUCT_METADATA,
-        CodeGen::MetadataKind::ENUM_METADATA,
-        CodeGen::MetadataKind::GF_METADATA,
-        CodeGen::MetadataKind::GV_METADATA
-    };
-
-    auto runTask = [&](CodeGen::MetadataKind kind) {
-        std::unique_ptr<MetadataInfo> info = nullptr;
-        switch (kind) {
-            case CodeGen::MetadataKind::PKG_METADATA:
-                info = std::make_unique<PkgMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
-            case CodeGen::MetadataKind::CLASS_METADATA:
-                info = std::make_unique<ClassMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
-            case CodeGen::MetadataKind::STRUCT_METADATA:
-                info = std::make_unique<StructMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
-            case CodeGen::MetadataKind::ENUM_METADATA:
-                info = std::make_unique<EnumMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
-            case CodeGen::MetadataKind::GF_METADATA:
-                info = std::make_unique<GFMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
-            case CodeGen::MetadataKind::GV_METADATA:
-                info = std::make_unique<GVMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
-            default: break;
-        }
-
-        if (info) {
-            info->Gen();
-        }
-    };
-
-    for (auto kind : allKinds) {
-        runTask(kind);
-    }
-}
-
 void GenSubCHIRPackage(CGModule& cgMod)
 {
     auto& subCHIRPkg = cgMod.GetCGContext().GetSubCHIRPackage();
@@ -552,10 +508,10 @@ llvm::Value* SaturatingIntegerValue(IRBuilder2& irBuilder, const std::vector<llv
     auto [minBb, maxBb, checkOverBb] =
         Vec2Tuple<3>(irBuilder.CreateAndInsertBasicBlocks({"min.bb", "max.bb", "check.over"}));
 
-    const int srcIndex = 0;
-    const int minIndex = 1;
-    const int maxIndex = 2;
-    const int branchNum = 3;
+    constexpr int srcIndex = 0;
+    constexpr int minIndex = 1;
+    constexpr int maxIndex = 2;
+    constexpr int branchNum = 3;
     auto previousBB = irBuilder.GetInsertBlock();
     auto downOverflow = irBuilder.CreateICmpSLT(values[srcIndex], values[minIndex]);
     auto upOverflow = irBuilder.CreateICmpSGT(values[srcIndex], values[maxIndex]);
@@ -674,5 +630,7 @@ void ClearPackageModules(std::vector<std::unique_ptr<llvm::Module>>& packageModu
         CJC_NULLPTR_CHECK(llvmCtx);
         delete llvmCtx;
     });
+
+    Utils::FreeIdleMemoryToOS();
 }
 } // namespace Cangjie::CodeGen
