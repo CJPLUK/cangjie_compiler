@@ -1,0 +1,12 @@
+#!/bin/bash
+HOOKDIR=$(dirname "$0")
+
+echo $SHELL
+echo wordir: $(pwd)
+echo git dir: $(git rev-parse --git-dir)
+echo git common dir: $(git rev-parse --git-common-dir)
+
+git submodule status \
+| sed -n -e 's/^\+/WARNING A SUBMODULE WAS ALREADY INITIALISED: /w/dev/stderr' \
+         -e 's/^-\S*\s*//p' \
+| xargs -P 8 -n 1 bash $HOOKDIR/init-submod.sh
