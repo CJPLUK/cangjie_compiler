@@ -22,7 +22,7 @@
 #include "Diags.h"
 #include "ExtraScopes.h"
 #include "JoinAndMeet.h"
-#include "NativeFFI/Java/BeforeTypeCheck/GenerateJavaMirror.h"
+#include "NativeFFI/Java/BeforeTypeCheck/PreTypeCheck.h"
 #include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
 #include "NativeFFI/ObjC/BeforeTypeCheck/Desugar.h"
 #include "NativeFFI/ObjC/Utils/InteropLibBridge.h"
@@ -2085,7 +2085,7 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     Utils::ProfileRecorder::Start("PrepareTypeCheck", "InteropPrepare");
-    Interop::Java::PrepareTypeCheck(pkg, importManager, typeManager);
+    Cangjie::Native::FFI::Java::PrepareTypeCheck(pkg, importManager, typeManager);
     Interop::ObjC::PrepareTypeCheck(pkg);
     Utils::ProfileRecorder::Stop("PrepareTypeCheck", "InteropPrepare");
 #endif

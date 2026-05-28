@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -7,10 +7,12 @@
 #include "InteropLibBridge.h"
 #include "Desugar/AfterTypeCheck.h"
 #include "JavaDesugarManager.h"
+#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "NativeFFI/Utils.h"
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include <utility>
 
@@ -49,8 +51,7 @@ constexpr auto INTEROPLIB_CFFI_JAVA_ENTITY_JOBJECT_ID = "Java_CFFI_JavaEntityJob
 constexpr auto INTEROPLIB_CFFI_JAVA_ENTITY_NULL_ID = "Java_CFFI_JavaEntityJobjectNull";
 constexpr auto INTEROPLIB_CFFI_JAVA_ENTITY_IS_NULL_ID = "isNull";
 constexpr auto INTEROPLIB_JNI_PUT_TO_REGISTRY_DECL_ID = "Java_CFFI_put_to_registry_1";
-constexpr auto INTEROPLIB_JNI_PUT_TO_REGISTRY_SELF_INIT_DECL_ID = "Java_CFFI_putToRegistry";
-constexpr auto INTEROPLIB_JNI_DELETE_CJ_OBJECT_DECL_ID = "Java_CFFI_deleteCJObject";
+constexpr auto INTEROPLIB_JNI_PUT_SET_TO_REGISTRY_DECL_ID = "Java_CFFI_putToRegistry";
 constexpr auto INTEROPLIB_JNI_REMOVE_FROM_REGISTRY_DECL_ID = "Java_CFFI_removeFromRegistry";
 constexpr auto INTEROPLIB_CFFI_CALL_METHOD_DECL_ID = "Java_CFFI_callVirtualMethod";
 constexpr auto INTEROPLIB_CFFI_NON_VIRT_CALL_METHOD_DECL_ID = "Java_CFFI_callMethod";
@@ -67,6 +68,8 @@ constexpr auto INTEROPLIB_CFFI_GET_JAVA_ENTITY_OR_NULL_METHOD_DECL_ID = "Java_CF
 constexpr auto INTEROPLIB_CFFI_IS_INSTANCE_OF_DECL_ID = "Java_CFFI_isInstanceOf";
 constexpr auto INTEROPLIB_CFFI_GET_FROM_REGISTRY_BY_ENTITY_OPTION_DECL_ID = "Java_CFFI_getFromRegistryByObjOption";
 constexpr auto INTEROPLIB_CFFI_GET_FROM_REGISTRY_BY_ENTITY_DECL_ID = "Java_CFFI_getFromRegistryByObj";
+constexpr auto INTEROPLIB_CFFI_GET_REGISTRY_ID = "Java_CFFI_getRegistryId";
+constexpr auto INTEROPLIB_CFFI_GET_REGISTRY_ID_OR_NONE = "Java_CFFI_getRegistryIdOrNone";
 constexpr auto INTEROPLIB_CFFI_JAVA_STRING_TO_CANGJIE = "Java_CFFI_JavaStringToCangjie";
 constexpr auto INTEROPLIB_CFFI_CANGJIE_STRING_TO_JAVA = "Java_CFFI_CangjieStringToJava";
 constexpr auto INTEROPLIB_CFFI_WITH_EXCEPTION_HANDLING_ID = "withExceptionHandling";
@@ -199,11 +202,6 @@ Ptr<FuncDecl> InteropLibBridge::GetCallStaticMethodDecl()
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_CALL_STATIC_METHOD_DECL_ID);
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetDeleteCJObjectDecl()
-{
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_JNI_DELETE_CJ_OBJECT_DECL_ID);
-}
-
 Ptr<FuncDecl> InteropLibBridge::GetRemoveFromRegistryDecl()
 {
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_JNI_REMOVE_FROM_REGISTRY_DECL_ID);
@@ -214,14 +212,24 @@ Ptr<FuncDecl> InteropLibBridge::GetPutToRegistryDecl()
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_JNI_PUT_TO_REGISTRY_DECL_ID);
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetPutToRegistrySelfInitDecl()
+Ptr<FuncDecl> InteropLibBridge::GetPutSetToRegistryDecl()
 {
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_JNI_PUT_TO_REGISTRY_SELF_INIT_DECL_ID);
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_JNI_PUT_SET_TO_REGISTRY_DECL_ID);
 }
 
 Ptr<FuncDecl> InteropLibBridge::GetUnwrapJavaEntityDecl()
 {
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_UNWRAP_JAVA_ENTITY_METHOD_DECL_ID);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetGetRegistryIdDecl()
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_GET_REGISTRY_ID);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetGetRegistryIdOrNoneDecl()
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_GET_REGISTRY_ID_OR_NONE);
 }
 
 Ptr<FuncDecl> InteropLibBridge::GetGetFromRegistryByEntityOptionDecl()
@@ -676,7 +684,7 @@ OwnedPtr<Expr> InteropLibBridge::StringToJObject(OwnedPtr<Expr> cjStringExpr, Pt
                 auto ref = WithinFile(CreateRefExpr(v), curFile);
                 return WrapJavaEntity(std::move(ref));
             },
-            [&]() -> OwnedPtr<Expr> { return CreateJobjectNull(); },
+            [&]() -> OwnedPtr<Expr> { return CreateJavaEntityNullCall(curFile); },
             GetJavaEntityTy()
         );
         return WithinFile(std::move(match), curFile);
@@ -1137,31 +1145,10 @@ OwnedPtr<Expr> InteropLibBridge::CreateParamExpr(FuncParam& param, Ptr<File> cur
     return WrapJavaEntity(std::move(refExpr));
 }
 
-OwnedPtr<CallExpr> InteropLibBridge::CreateDeleteCJObjectCall(
-    OwnedPtr<Expr> env, OwnedPtr<Expr> self, OwnedPtr<Expr> getWeakRef, Ptr<Ty> cjTy)
+OwnedPtr<CallExpr> InteropLibBridge::CreateRemoveFromRegistryCall(OwnedPtr<Expr> registryId)
 {
-    auto curFile = self->curFile;
-    auto funcDecl = GetDeleteCJObjectDecl();
-    if (!funcDecl) {
-        return nullptr;
-    }
-
-    std::vector<OwnedPtr<FuncArg>> callArgs;
-    callArgs.push_back(CreateFuncArg(std::move(env)));
-    callArgs.push_back(CreateFuncArg(std::move(self)));
-    callArgs.push_back(CreateFuncArg(std::move(getWeakRef)));
-
-    auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-    auto fdRef = WithinFile(CreateRefExpr(*funcDecl), curFile);
-    fdRef->instTys.push_back(cjTy);
-    fdRef->SetTy(typeManager.GetInstantiatedTy(funcDecl->GetTy(), GenerateTypeMapping(*funcDecl, fdRef->instTys)));
-    return CreateCallExpr(std::move(fdRef), std::move(callArgs), funcDecl, unitTy, CallKind::CALL_DECLARED_FUNCTION);
-}
-
-OwnedPtr<CallExpr> InteropLibBridge::CreateRemoveFromRegistryCall(OwnedPtr<Expr> self)
-{
-    auto curFile = self->curFile;
-    return CreateCall(GetRemoveFromRegistryDecl(), curFile, std::move(self));
+    auto curFile = registryId->curFile;
+    return CreateCall(GetRemoveFromRegistryDecl(), curFile, std::move(registryId));
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreatePutToRegistryCall(OwnedPtr<Expr> obj)
@@ -1170,11 +1157,18 @@ OwnedPtr<CallExpr> InteropLibBridge::CreatePutToRegistryCall(OwnedPtr<Expr> obj)
     return CreateCall(GetPutToRegistryDecl(), curFile, std::move(obj));
 }
 
-OwnedPtr<CallExpr> InteropLibBridge::CreatePutToRegistrySelfInitCall(
+OwnedPtr<CallExpr> InteropLibBridge::CreatePutSetToRegistryCall(
     OwnedPtr<Expr> env, OwnedPtr<Expr> entity, OwnedPtr<Expr> obj)
 {
     auto curFile = entity->curFile;
-    return CreateCall(GetPutToRegistrySelfInitDecl(), curFile, std::move(env), std::move(entity), std::move(obj));
+    return CreateCall(GetPutSetToRegistryDecl(), curFile, std::move(env), std::move(entity), std::move(obj));
+}
+
+OwnedPtr<CallExpr> InteropLibBridge::CreateGetRegistryIdCall(OwnedPtr<Expr> env, OwnedPtr<Expr> entity, bool nullable)
+{
+    auto curFile = entity->curFile;
+    auto decl = nullable ? GetGetRegistryIdOrNoneDecl() : GetGetRegistryIdDecl();
+    return CreateCall(decl, curFile, std::move(env), std::move(entity));
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateGetFromRegistryByEntityCall(
@@ -1427,6 +1421,19 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateJavaObjectControllerCall(
     return CreateCallExpr(std::move(fdRef), std::move(callArgs), funcDecl, callTy, CallKind::CALL_OBJECT_CREATION);
 }
 
+bool InteropLibBridge::IsJavaEntityTy(Ty& ty)
+{
+    auto javaEntityTy = DynamicCast<StructTy>(&ty);
+    if (!javaEntityTy) {
+        return false;
+    }
+    auto javaEntity = javaEntityTy->decl;
+    if (!javaEntity || javaEntity->fullPackageName != INTEROPLIB_PACKAGE_NAME) {
+        return false;
+    }
+    return javaEntity->identifier == INTEROPLIB_CFFI_JAVA_ENTITY;
+}
+
 namespace {
 
 Ptr<PropDecl> GetJavaEntityIsNullCall(StructDecl& entityDecl)
@@ -1455,6 +1462,57 @@ Ptr<PropDecl> GetJavaEntityIsNullCall(StructDecl& entityDecl)
         std::move(access), {}, isNullProp->getters[0], isNullProp->GetTy(), CallKind::CALL_DECLARED_FUNCTION);
     CopyBasicInfo(call->baseFunc.get(), call.get());
     return call;
+}
+
+bool IsWrappingConstructorOfJavaImpl(Decl& refWrapperMember)
+{
+    if (!refWrapperMember.TestAttr(Attribute::CONSTRUCTOR, Attribute::COMPILER_ADD)) {
+        return false;
+    }
+
+    auto method = As<ASTKind::FUNC_DECL>(&refWrapperMember);
+    if (!method) {
+        return false;
+    }
+    auto& ctor = *method;
+
+    if (!ctor.funcBody || ctor.funcBody->paramLists.empty()) {
+        return false;
+    }
+
+    auto& params = ctor.funcBody->paramLists[0]->params;
+    if (params.size() != 2) {
+        return false;
+    }
+
+    auto& javaRefParam = *params[0];
+    if (!InteropLibBridge::IsJavaEntityTy(*javaRefParam.GetTy())) {
+        return false;
+    }
+
+    auto& regIdParam = *params[1];
+    if (regIdParam.GetTy()->kind != TypeKind::TYPE_INT64) {
+        return false;
+    }
+
+    return true;
+}
+
+FuncDecl& GetJavaImplWrappingConstructor(ClassDecl& refWrapper)
+{
+    CJC_ASSERT(IsImplReferenceWrapper(refWrapper));
+
+    Ptr<FuncDecl> ctor;
+    for (auto member : refWrapper.GetMemberDeclPtrs()) {
+        if (!IsWrappingConstructorOfJavaImpl(*member)) {
+            continue;
+        }
+        ctor = StaticAs<ASTKind::FUNC_DECL>(member);
+        break;
+    }
+
+    CJC_NULLPTR_CHECK(ctor);
+    return *ctor;
 }
 
 } // namespace
@@ -1487,12 +1545,43 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaImplOption(
 {
     CJC_ASSERT_WITH_MSG(!ty->typeArgs.empty(), "Option type must be generic");
     auto actualTy = ty->typeArgs[0];
-    auto regCall = CreateGetFromRegistryByEntityCall(std::move(env), std::move(entityOption), actualTy, true);
-    if (!toRaw) {
-        return regCall;
-    }
+    CJC_ASSERT(actualTy->IsClass());
+    auto curFile = entityOption->curFile;
 
-    return UnwrapJavaMirrorOption(WrapJavaEntity(std::move(regCall)), ty, mirror, toRaw);
+    return utils.CreateOptionMatch(
+        CreateGetJavaEntityOrNullCall(std::move(entityOption)),
+        [this, curFile, actualTy, &env, &mirror, toRaw](VarDecl& e) {
+            if (toRaw) {
+                // To @C CPointer appropriate for JNI
+                return UnwrapJavaEntity(WithinFile(CreateRefExpr(e), curFile), actualTy, mirror, toRaw);
+            }
+
+            // as impl reference wrapper
+            return UnwrapJavaImpl(std::move(env), WithinFile(CreateRefExpr(e), curFile), actualTy);
+        },
+        [this, ty, toRaw]() { return toRaw ? CreateJobjectNull() : utils.CreateOptionNoneRef(ty->typeArgs[0]); },
+        actualTy);
+}
+
+OwnedPtr<Expr> InteropLibBridge::UnwrapJavaImpl(OwnedPtr<Expr> env, OwnedPtr<Expr> entity, Ptr<Ty> ty)
+{
+    auto curFile = entity->curFile;
+    auto classTy = DynamicCast<ClassTy*>(ty.get());
+    CJC_ASSERT(classTy && classTy->decl && IsImplReferenceWrapper(*classTy->decl));
+
+    auto& ctor = GetJavaImplWrappingConstructor(*classTy->decl);
+
+    std::vector<OwnedPtr<FuncArg>> refWrapperCtorArgs;
+    refWrapperCtorArgs.push_back(CreateFuncArg(ASTCloner::Clone(entity.get())));
+    refWrapperCtorArgs.push_back(CreateFuncArg(
+        CreateGetRegistryIdCall(std::move(env), std::move(entity))));
+
+    auto refWrapperCtorCall = CreateCallExpr(
+        WithinFile(CreateRefExpr(ctor), curFile),
+        std::move(refWrapperCtorArgs),
+        &ctor, ty, CallKind::CALL_OBJECT_CREATION);
+
+    return refWrapperCtorCall;
 }
 
 OwnedPtr<Expr> InteropLibBridge::CreateEnsureNotNullCall(OwnedPtr<Expr> entity)
@@ -1610,11 +1699,29 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
         return nullptr;
     }
 
-    if (decl->TestAttr(Attribute::JAVA_MIRROR)) {
+    if (IsMirror(*decl)) {
         return CreateMirrorConstructorCall(importManager, std::move(entity), ty);
     } else {
-        return CreateGetFromRegistryByEntityCall(CreateGetJniEnvCall(curFile), std::move(entity), ty, false);
+        CJC_ASSERT(IsImpl(*decl));
+        return UnwrapJavaImpl(CreateGetJniEnvCall(curFile), std::move(entity), ty);
     }
+}
+
+OwnedPtr<FuncDecl> InteropLibBridge::CreateDeletingGlobalRefFinalizer(ClassDecl& decl)
+{
+    static auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    auto curFile = decl.curFile;
+    auto fbody = CreateFuncBody({}, nullptr, CreateBlock({}, unitTy), unitTy);
+    fbody->paramLists.emplace_back(MakeOwned<FuncParamList>());
+    auto delCall = CreateDeleteGlobalRefCall(CreateGetJniEnvCall(curFile), CreateJavaRefCall(decl, curFile));
+    fbody->body->body.emplace_back(std::move(delCall));
+    auto fd = CreateFuncDecl("~init", std::move(fbody), typeManager.GetFunctionTy({}, unitTy));
+    fd->EnableAttr(Attribute::PRIVATE, Attribute::FINALIZER, Attribute::IN_CLASSLIKE);
+    fd->linkage = Linkage::EXTERNAL;
+    fd->funcBody->funcDecl = fd.get();
+    fd->fullPackageName = decl.fullPackageName;
+    fd->outerDecl = Ptr(&decl);
+    return fd;
 }
 
 bool InteropLibBridge::IsInteropLibAccessible(ImportManager& importManager)

@@ -1414,10 +1414,6 @@ OwnedPtr<ClassDecl> ParserImpl::ParseClassDecl(
     ret->end = lastToken.End();
     ret->annotations = std::move(annos);
 
-    if (Interop::Java::IsDeclAppropriateForSyntheticClassGeneration(*ret)) {
-        Interop::Java::InsertSyntheticClassDecl(*ret, *currentFile);
-    }
-
     CheckCJMappingAttr(*ret);
 
     return ret;
@@ -1443,10 +1439,6 @@ OwnedPtr<InterfaceDecl> ParserImpl::ParseInterfaceDecl(
     ret->body = ParseInterfaceBody(*ret);
     ret->end = lastToken.End();
     ret->annotations = std::move(annos);
-
-    if (Interop::Java::IsDeclAppropriateForSyntheticClassGeneration(*ret)) {
-        Interop::Java::InsertSyntheticClassDecl(*ret, *currentFile);
-    }
 
     CheckCJMappingAttr(*ret);
     if (Interop::ObjC::IsDeclAppropriateForSyntheticClassGeneration(*ret)) {
@@ -2171,7 +2163,7 @@ void ParserImpl::CheckClassLikeFuncBodyAbstractness(FuncDecl& decl)
     }
 
     bool hasAbstractModifier = HasModifier(decl.modifiers, TokenKind::ABSTRACT);
-    
+
     if (isJavaMirrorOrJavaMirrorSubtype) {
         if (ffiParser->Java().IsAbstractFunction(decl, *decl.outerDecl)) {
             decl.EnableAttr(Attribute::ABSTRACT);

@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -10,7 +10,6 @@
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Create.h"
-#include "cangjie/AST/Walker.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Utils/CheckUtils.h"
@@ -195,21 +194,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
 
 void JavaDesugarManager::InsertJavaMirrorFinalizer(ClassDecl& mirror)
 {
-    static auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-    auto curFile = mirror.curFile;
-    auto fbody = CreateFuncBody({}, nullptr, CreateBlock({}, unitTy), unitTy);
-    fbody->paramLists.emplace_back(MakeOwned<FuncParamList>());
-    auto delCall = lib.CreateDeleteGlobalRefCall(lib.CreateGetJniEnvCall(curFile), CreateJavaRefCall(mirror, curFile));
-    fbody->body->body.emplace_back(std::move(delCall));
-    auto fd = CreateFuncDecl("~init", std::move(fbody), typeManager.GetFunctionTy({}, unitTy));
-    fd->EnableAttr(Attribute::PRIVATE, Attribute::FINALIZER, Attribute::IN_CLASSLIKE);
-    fd->linkage = Linkage::EXTERNAL;
-    fd->funcBody->funcDecl = fd.get();
-    fd->fullPackageName = mirror.fullPackageName;
-    fd->outerDecl = Ptr(&mirror);
-    fd->curFile = curFile;
-
-    mirror.body->decls.emplace_back(std::move(fd));
+    mirror.body->decls.emplace_back(lib.CreateDeletingGlobalRefFinalizer(mirror));
 }
 
 void JavaDesugarManager::InsertJavaMirrorHasInited(ClassDecl& mirror)
@@ -299,7 +284,6 @@ void JavaDesugarManager::InsertJavaRefGetterWithBody(ClassDecl& decl)
 void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& generatedCtor)
 {
     if (IsJArray(*ctor.outerDecl)) {
-        jarrayDesugarer.InsertOriginalSizeConstructorBody(ctor);
         return;
     }
     auto curFile = ctor.curFile;
@@ -518,9 +502,6 @@ void JavaDesugarManager::DesugarJavaMirrorProp(PropDecl& prop)
 
 void JavaDesugarManager::DesugarJavaMirror(ClassDecl& mirror)
 {
-    if (IsSynthetic(mirror)) {
-        mirror.DisableAttr(Attribute::ABSTRACT);
-    }
     Ptr<FuncDecl> generatedCtor = GetGeneratedJavaMirrorConstructor(mirror);
     for (auto& decl : mirror.GetMemberDecls()) {
         if (auto fd = As<ASTKind::FUNC_DECL>(decl.get())) {
@@ -571,10 +552,6 @@ void JavaDesugarManager::GenerateInMirror(ClassDecl& classDecl, bool doStub)
         InsertJavaRefVarDecl(classDecl);
     }
 
-    if (IsJArray(classDecl) && !doStub) {
-        jarrayDesugarer.GenerateJniTypeConstructor(classDecl);
-    }
-
     InsertJavaMirrorCtor(classDecl, doStub);
 
     if (!doStub) {
@@ -607,99 +584,6 @@ void JavaDesugarManager::GenerateInSynthetic(ClassDecl& cd)
     }
 }
 
-void JavaDesugarManager::ReplaceCallsWithArrayJavaEntityGet(File& file)
-{
-    Walker(&file, Walker::GetNextWalkerID(), [this, &file](auto node) {
-        if (!node->IsSamePackage(*file.curPackage)) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        Ptr<CallExpr> callExpr = As<ASTKind::CALL_EXPR>(node);
-        if (!callExpr) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        auto funcDecl = callExpr->resolvedFunction;
-        if (!funcDecl || !funcDecl->outerDecl || !IsJArray(*funcDecl->outerDecl) ||
-            funcDecl->identifier != "[]" || callExpr->args.size() != 1
-        ) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
-        CJC_ASSERT_WITH_MSG(!ma->baseExpr->GetTy()->typeArgs.empty(), "JArray type must be generic");
-        auto arrayElementType = ma->baseExpr->GetTy()->typeArgs[0];
-        if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        static auto arrayJavaEntityGetDecl = lib.FindArrayJavaEntityGetDecl(
-            *As<ASTKind::CLASS_DECL>(funcDecl->outerDecl));
-        CJC_ASSERT(arrayJavaEntityGetDecl);
-        auto newCallExpr = ASTCloner::Clone(callExpr);
-        newCallExpr->resolvedFunction = arrayJavaEntityGetDecl;
-        auto base = As<ASTKind::MEMBER_ACCESS>(newCallExpr->baseFunc);
-        base->target = arrayJavaEntityGetDecl;
-        base->SetTy(arrayJavaEntityGetDecl->GetTy());
-        callExpr->desugarExpr = lib.UnwrapJavaEntity(
-            std::move(newCallExpr), arrayElementType, *As<ASTKind::CLASS_LIKE_DECL>(funcDecl->outerDecl));
-        callExpr->desugarArgs = std::nullopt;
-
-        return VisitAction::WALK_CHILDREN;
-    }).Walk();
-}
-
-void JavaDesugarManager::ReplaceCallsWithArrayJavaEntitySet(File& file)
-{
-    Walker(&file, Walker::GetNextWalkerID(), [this, &file](auto node) {
-        if (!node->IsSamePackage(*file.curPackage)) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        Ptr<CallExpr> callExpr = As<ASTKind::CALL_EXPR>(node);
-        if (!callExpr) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        auto funcDecl = callExpr->resolvedFunction;
-        if (!funcDecl || !funcDecl->outerDecl || !IsJArray(*funcDecl->outerDecl) ||
-            funcDecl->identifier != "[]" || callExpr->args.size() != 2 // index and value
-        ) {
-            // Only calls to correct array "set" should be desugared.
-            // For example, do not desugar if arguments count is wrong (in case difference from index and value)
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
-        CJC_ASSERT_WITH_MSG(!ma->baseExpr->GetTy()->typeArgs.empty(), "JArray type must be generic");
-        auto arrayElementType = ma->baseExpr->GetTy()->typeArgs[0];
-        if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
-            return VisitAction::WALK_CHILDREN;
-        }
-
-        static auto arrayJavaEntitySetDecl = lib.FindArrayJavaEntitySetDecl(
-            *As<ASTKind::CLASS_DECL>(funcDecl->outerDecl));
-        CJC_ASSERT(arrayJavaEntitySetDecl);
-        auto newCallExpr = ASTCloner::Clone(callExpr);
-        newCallExpr->resolvedFunction = arrayJavaEntitySetDecl;
-
-        newCallExpr->args[1] = ASTCloner::Clone(newCallExpr->args[1].get());
-        newCallExpr->args[1]->expr = lib.WrapJavaEntity(std::move(newCallExpr->args[1]->expr));
-        newCallExpr->desugarArgs = std::nullopt;
-        callExpr->desugarArgs = std::nullopt;
-        auto base = As<ASTKind::MEMBER_ACCESS>(newCallExpr->baseFunc);
-        base->target = arrayJavaEntitySetDecl;
-        base->SetTy(arrayJavaEntitySetDecl->GetTy());
-        callExpr->args[1] = ASTCloner::Clone(newCallExpr->args[1].get());
-
-        callExpr->baseFunc = ASTCloner::Clone(newCallExpr->baseFunc.get());
-        callExpr->resolvedFunction = newCallExpr->resolvedFunction;
-        callExpr->desugarExpr = std::move(newCallExpr);
-
-        return VisitAction::WALK_CHILDREN;
-    }).Walk();
-}
-
 void JavaDesugarManager::GenerateInMirrors(File& file, bool doStub)
 {
     auto pkg = file.curPackage;
@@ -730,12 +614,6 @@ void JavaDesugarManager::GenerateInMirrors(File& file, bool doStub)
             }
         }
     }
-
-    if (!doStub) {
-        ReplaceCallsWithArrayJavaEntityGet(file);
-        ReplaceCallsWithArrayJavaEntitySet(file);
-        jarrayDesugarer.TransformConstructorCallsToPassJNIParam(file);
-    }
 }
 
 void JavaDesugarManager::DesugarMirrors(File& file)
@@ -758,7 +636,7 @@ void JavaDesugarManager::DesugarMirrors(File& file)
 
 void JavaDesugarManager::InsertJStringOfStringCtor(ClassDecl& decl, bool doStub)
 {
-    static const std::string STRING_PARAM_NAME = "s";
+    static const std::string stringParamName = "s";
     static Ptr<FuncDecl> generatedCtor;
 
     CJC_ASSERT(&decl == utils.GetJStringDecl());
@@ -781,7 +659,7 @@ void JavaDesugarManager::InsertJStringOfStringCtor(ClassDecl& decl, bool doStub)
 
     // Initially, on doStub = true, it inserts constructor stub
     auto& stringDecl = utils.GetStringDecl();
-    auto param = CreateFuncParam(STRING_PARAM_NAME, CreateRefType(stringDecl), nullptr, stringDecl.GetTy());
+    auto param = CreateFuncParam(stringParamName, CreateRefType(stringDecl), nullptr, stringDecl.GetTy());
 
     auto ctorFuncTy = typeManager.GetFunctionTy({param->GetTy()}, decl.GetTy());
 

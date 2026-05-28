@@ -53,6 +53,12 @@ public:
      * @param importedPackage the package which imports 'fullPackageName'. Empty for source package.
      */
     void AddPackageDeclMap(const std::string& fullPackageName, const std::string& importedPackage = "");
+    /**
+     * Add generated declaration 'decl' to the declMap making 'decl' visible in the package where 'decl' is declared.
+     * 'decl' visibility within other packages should work with default mechanisms after loading from cjo.
+     * Should be called only after building index.
+     */
+    void AddGeneratedDeclToDeclMap(AST::Decl& decl) const;
     /** For loading cached types during incremental compilation. */
     std::unordered_set<std::string> LoadCachedPackage(const AST::Package& pkg,
         const std::string& cjoPath, const std::map<std::string, Ptr<AST::Decl>>& mangledName2DeclMap) const;

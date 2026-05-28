@@ -584,8 +584,8 @@ enum class Attribute {
     JAVA_HAS_DEFAULT,
 
     /**
-     * Mark whether a class is a wrapper synthetic class generated for every mirror interface and abstract class.
-     * W: Parser, Sema.
+     * Mark whether a class is a synthetic wrapper class generated for every mirror interface and abstract class.
+     * W: Sema.
      * R: Sema.
      */
     JAVA_MIRROR_SYNTHETIC_WRAPPER,
@@ -682,6 +682,13 @@ enum class Attribute {
      * R: ASTLoader
      */
     ALREADY_LOADED,
+
+    /**
+     * Mark whether a class is a registry companion class generated for every impl class.
+     * W: Sema.
+     * R: Sema.
+     */
+    JAVA_IMPL_REGISTRY_COMPANION,
 
     AST_ATTR_END,
 };

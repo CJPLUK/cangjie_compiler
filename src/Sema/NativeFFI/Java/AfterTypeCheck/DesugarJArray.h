@@ -7,23 +7,36 @@
 /**
  * @file
  *
- * This file declares java mirror JArray desugar methods
+ * This file declares after-typecheck Java interop stage:
+ * - desugaring JArray constructor, get,set and call-site call trasformations.
  */
-#ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_AFTER_TYPE_CHECK_JARRAY_DESUGAR_MANAGER
-#define CANGJIE_SEMA_NATIVE_FFI_JAVA_AFTER_TYPE_CHECK_JARRAY_DESUGAR_MANAGER
+#ifndef CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_DESUGAR_JARRAY
+#define CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_DESUGAR_JARRAY
 
-#include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
-#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
+#include "Context.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
+#include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
 
 namespace Cangjie::Interop::Java {
-using namespace Cangjie::AST;
+class JavaDesugarManager;
+}
 
-class JArrayDesugarer {
+namespace Cangjie::Native::FFI::Java {
+using namespace Interop::Java;
+
+/**
+ * Rewrites JArray get/set operations at callsites.
+ */
+class DesugarJArray : public AfterTypeCheckStage {
 public:
-    JArrayDesugarer(TypeManager& typeManager, ImportManager& importManager, InteropLibBridge& lib);
+    explicit DesugarJArray(JavaDesugarManager& man);
+protected:
+    void Process(AfterTypeCheckContext& ctx) override;
+private:
+    void ReplaceCallsWithArrayJavaEntityGet(AST::File& file) const;
+    void ReplaceCallsWithArrayJavaEntitySet(AST::File& file) const;
 
     /**
      * Inserts a new constructor with a jniType parameter.
@@ -40,7 +53,7 @@ public:
      * }
      * -------------------------------------------------------------------------
      */
-    void GenerateJniTypeConstructor(ClassDecl& jarray);
+    void GenerateJniTypeConstructor(AST::ClassDecl& jarray) const;
 
     /**
      * Inserts throw Exception("unexpected call") into body of given size constructor.
@@ -52,7 +65,7 @@ public:
      * }
      * ------------------------------------------------------------
      */
-    void InsertOriginalSizeConstructorBody(FuncDecl& constr);
+    void InsertOriginalSizeConstructorBody(AST::FuncDecl& constr) const;
 
     /**
     * Transforms all java.lang.JArray's constructor calls:
@@ -63,19 +76,18 @@ public:
     *
     * Note: original constructor init(lenght: Int32) must throw Exception
     */
-    void TransformConstructorCallsToPassJNIParam(File& file);
+    void TransformConstructorCallsToPassJNIParam(AST::File& file) const;
 
-private:
+    void InsertJniTypeParamIntoConstructor(AST::FuncDecl& constr) const;
+    void InsertConstructorBody(AST::FuncDecl& constr) const;
+    Ptr<AST::FuncDecl> FindSizeJNITypeConstructor(AST::ClassDecl& jarray) const;
+    Ptr<AST::FuncDecl> FindSizeJNITypeConstructorFromInnerDecl(const AST::Decl& decl) const;
+
     TypeManager& typeManager;
-    ImportManager& importManager;
-    InteropLibBridge lib;
-
-    void InsertJniTypeParamIntoConstructor(FuncDecl& constr);
-    void InsertConstructorBody(FuncDecl& constr);
-    Ptr<FuncDecl> FindSizeJNITypeConstructor(ClassDecl& jarray);
-    Ptr<FuncDecl> FindSizeJNITypeConstructorFromInnerDecl(const Decl& decl);
+    const ImportManager& importManager;
+    InteropLibBridge& ilib;
 };
 
-}; // namespace Cangjie::Interop::Java
+} // namespace Cangjie::Native::FFI::Java
 
-#endif
+#endif // CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_DESUGAR_JARRAY_CALL_SITE

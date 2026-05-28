@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -36,8 +36,8 @@ Ptr<FuncDecl> GetFwdClassMethod(ClassDecl& fwdDecl, std::string identifier)
     return nullptr;
 }
 
-// Support Struct decl and Enum decl for now.
-OwnedPtr<Decl> JavaDesugarManager::GenerateCJMappingNativeDeleteCjObjectFunc(Decl& decl)
+// Support Struct decl, Class and Enum decl for now.
+OwnedPtr<Decl> JavaDesugarManager::GenerateNativeDeleteCjObjectFunc(Decl& decl)
 {
     std::vector<OwnedPtr<FuncParam>> params;
     FuncParam* jniEnvPtrParam = nullptr;
@@ -133,7 +133,7 @@ void JavaDesugarManager::GenerateForCJStructOrClassTypeMapping(const File& file,
         }
     }
     if (!generatedCtors.empty()) {
-        generatedDecls.push_back(GenerateCJMappingNativeDeleteCjObjectFunc(*decl));
+        generatedDecls.push_back(GenerateNativeDeleteCjObjectFunc(*decl));
         for (auto generatedCtor : generatedCtors) {
             if (isGenericGlueCode) {
                 for (auto genericConfig : genericConfigsVector) {
@@ -176,7 +176,7 @@ void JavaDesugarManager::GenerateTuplesGlueCode(Package& pkg)
         generatedDecls.push_back(GenerateNativeInitCjObjectFunc(tupleTy, pkg));
         GenerateNativeItemFunc(tupleTy, pkg);
         auto helperDecl = CreateHelperStructDecl(tupleTy, pkg);
-        generatedDecls.push_back(GenerateCJMappingNativeDeleteCjObjectFunc(*helperDecl));
+        generatedDecls.push_back(GenerateNativeDeleteCjObjectFunc(*helperDecl));
         const std::string fileJ = GetCjMappingTupleName(*tupleTy) + ".java";
         auto codegen = JavaSourceCodeGenerator(helperDecl.get(), mangler, typeManager, javaCodeGenPath, fileJ,
             GetCangjieLibName(outputLibPath, helperDecl.get()->GetFullPackageName()), tupleTy, true,
@@ -375,7 +375,7 @@ void JavaDesugarManager::GenerateForCJEnumMapping(AST::EnumDecl& enumDecl)
         }
     }
 
-    generatedDecls.push_back(GenerateCJMappingNativeDeleteCjObjectFunc(enumDecl));
+    generatedDecls.push_back(GenerateNativeDeleteCjObjectFunc(enumDecl));
 }
 
 void JavaDesugarManager::GenerateForCJExtendMapping(AST::ExtendDecl& extendDecl)
@@ -1109,7 +1109,7 @@ void JavaDesugarManager::GenerateLambdaGlueCode(File& file)
 
         // generate delete cj object
         Ptr<Decl> decl = GetLambdaTmpDecl(file, className, fullPackageName);
-        generatedDecls.push_back(GenerateCJMappingNativeDeleteCjObjectFunc(*decl));
+        generatedDecls.push_back(GenerateNativeDeleteCjObjectFunc(*decl));
 
         // generate callImp native method
         generatedDecls.push_back(GenerateCallImplNativeMethod(file, lambdaPattern));

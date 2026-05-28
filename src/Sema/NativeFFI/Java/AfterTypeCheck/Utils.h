@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -12,12 +12,12 @@
 #ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_AFTER_TYPE_CHECK_UTILS
 #define CANGJIE_SEMA_NATIVE_FFI_JAVA_AFTER_TYPE_CHECK_UTILS
 
+#include "cangjie/AST/Node.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Utils.h"
 #include "InheritanceChecker/MemberSignature.h"
 #include "InheritanceChecker/MemberSignature.h"
 #include "NativeFFI/Utils.h"
@@ -70,6 +70,20 @@ public:
         std::function<OwnedPtr<Expr>(VarDecl&)> someBranch,
         std::function<OwnedPtr<Expr>()> noneBranch,
         Ptr<Ty> ty);
+
+    /**
+     * Creates native @C func
+     * ```cangjie
+     * public @C func ${name} (${params}): retTy {
+     *     ${nodes}
+     * }
+     * ```
+     */
+    OwnedPtr<FuncDecl> CreateNativeFunc(std::string& name,
+        std::vector<OwnedPtr<FuncParam>>&& params, Ptr<Ty> retTy, std::vector<OwnedPtr<Node>>&& nodes,
+        File& curFile, std::string& moduleName, std::string& fullPackageName) const;
+
+    OwnedPtr<AST::CallExpr> CreateZeroValue(Ptr<AST::Ty> ty, AST::File& curFile) const;
 
 private:
     Ptr<Decl> GetOptionSomeDecl();
@@ -212,8 +226,6 @@ std::string GetMangledJniInitCjObjectFuncName(const BaseMangler& mangler, const 
 std::string GetMangledJniInitCjObjectFuncNameForEnum(
     const BaseMangler& mangler, const std::vector<OwnedPtr<FuncParam>>& params, const std::string funcName);
 
-const Ptr<ClassDecl> GetSyntheticClass(const ImportManager& importManager, const ClassLikeDecl& cld);
-
 /**
  * Creates call of generated constructor (accepting java entity)
  * mirrorTy(entity)
@@ -307,6 +319,11 @@ Ptr<MemberDecl> FindFirstMemberDecl(
     return nullptr;
 }
 
+/**
+ * Returns generated constructor of registry companion class.
+ * This constructor
+ */
+Ptr<AST::FuncDecl> GetJavaImplRegistryCompanionConstructor(AST::ClassDecl& companion);
 
 /**
  * Returns FQ name of marker class for Cangjie side constructor of Java class

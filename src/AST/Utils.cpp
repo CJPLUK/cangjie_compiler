@@ -718,7 +718,7 @@ void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute att
     propDecl->type = std::move(varDecl.type);
     propDecl->SetTy(varDecl.GetTy());
     propDecl->CloneAttrs(varDecl);
-    propDecl->EnableAttr(Attribute::DESUGARED_MIRROR_FIELD);
+    propDecl->EnableAttr(Attribute::DESUGARED_MIRROR_FIELD, Attribute::COMPILER_ADD);
     propDecl->modifiers.insert(varDecl.modifiers.begin(), varDecl.modifiers.end());
     propDecl->isVar = varDecl.isVar;
     for (auto& anno : varDecl.annotations) {
@@ -784,6 +784,16 @@ bool IsImpl(const Node& node)
     return !node.TestAttr(Attribute::JAVA_MIRROR) && node.TestAttr(Attribute::JAVA_MIRROR_SUBTYPE);
 }
 
+bool IsImplRegistryCompanion(const Node& node)
+{
+    return node.TestAttr(Attribute::JAVA_IMPL_REGISTRY_COMPANION);
+}
+
+bool IsImplReferenceWrapper(const Node& node)
+{
+    return IsImpl(node);
+}
+
 bool IsJObject(const Decl& decl)
 {
     return IsJObject(decl, decl.fullPackageName);
@@ -816,51 +826,6 @@ bool IsFwdClass(const Node& node)
     return node.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD);
 }
 
-bool IsDeclAppropriateForSyntheticClassGeneration(const Node& node)
-{
-    return IsMirror(node) && (node.IsInterfaceDecl() || node.IsAbstractClass());
-}
-
-std::string GetSyntheticNameFromClassLike(const ClassLikeDecl& cld)
-{
-    return cld.identifier.Val() + "$impl";
-}
-
-// abstract on parser stage, on sema stage abstractness will be removed
-void InsertSyntheticClassDecl(ClassLikeDecl& decl, File& file)
-{
-    auto synthetic = MakeOwned<ClassDecl>();
-    if (decl.TestAttr(Attribute::PUBLIC)) {
-        synthetic->EnableAttr(Attribute::PUBLIC);
-    } else if (decl.TestAttr(Attribute::INTERNAL)) {
-        synthetic->EnableAttr(Attribute::INTERNAL);
-    } else if (decl.TestAttr(Attribute::PROTECTED)) {
-        synthetic->EnableAttr(Attribute::PROTECTED);
-    } else if (decl.TestAttr(Attribute::PRIVATE)) {
-        synthetic->EnableAttr(Attribute::PRIVATE);
-    }
-    synthetic->EnableAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE,
-        Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER, Attribute::COMPILER_ADD, Attribute::ABSTRACT);
-    synthetic->identifier = GetSyntheticNameFromClassLike(decl);
-    synthetic->identifier.SetPos(decl.identifier.Begin(), decl.identifier.End());
-
-    if (decl.astKind == ASTKind::INTERFACE_DECL) { // add JObject as supertype
-        auto jobject = CreateRefType(INTEROP_JOBJECT_NAME);
-        SetPositionAndCurFileByProvidedNode(*jobject, decl);
-        synthetic->inheritedTypes.emplace_back(std::move(jobject));
-    }
-    synthetic->inheritedTypes.emplace_back(CreateRefType(decl));
-
-    synthetic->fullPackageName = decl.fullPackageName;
-    SetPositionAndCurFileByProvidedNode(*synthetic, decl);
-
-    synthetic->body = MakeOwned<ClassBody>();
-    SetPositionAndCurFileByProvidedNode(*synthetic->body, *synthetic);
-
-    synthetic->moduleName = ::Cangjie::Utils::GetRootPackageName(decl.fullPackageName);
-
-    file.decls.emplace_back(std::move(synthetic));
-}
 } // namespace Cangjie::Interop::Java
 
 namespace Cangjie::Interop::ObjC {
