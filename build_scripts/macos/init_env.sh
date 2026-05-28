@@ -13,7 +13,14 @@ if test "0$cjbuildenv" -ne "01"; then
       --skip-hyperlang) SKIP_HYPERLANG=1; shift ;;
       --skip-lsp) SKIP_LSP=1; shift ;;
       --skip-bundle) SKIP_BUNDLE=1; shift ;;
-      --debug) TARGET=debug; shift ;;
+      --compiler-target=*) COMPILER_TARGET=${1#*=}; shift ;;
+      --runtime-target=*) RUNTIME_TARGET=${1#*=}; shift ;;
+      --stdlib-target=*) STDLIB_TARGET=${1#*=}; shift ;;
+      --stdx-target=*) STDX_TARGET=${1#*=}; shift ;;
+      --cjpm-target=*) CJPM_TARGET=${1#*=}; shift ;;
+      --cjfmt-target=*) CJFMT_TARGET=${1#*=}; shift ;;
+      --hyperlang-target=*) HYPERLANG_TARGET=${1#*=}; shift ;;
+      --lsp-target=*) LSP_TARGET=${1#*=}; shift ;;
       *) shift ;;
     esac
   done
@@ -28,7 +35,15 @@ if test "0$cjbuildenv" -ne "01"; then
   : "${SKIP_HYPERLANG:=0}"
   : "${SKIP_LSP:=0}"
   : "${SKIP_BUNDLE:=0}"
-  : "${TARGET:=release}"
+  # Per-component build targets default independently to release.
+  : "${COMPILER_TARGET:=release}"
+  : "${RUNTIME_TARGET:=release}"
+  : "${STDLIB_TARGET:=release}"
+  : "${STDX_TARGET:=release}"
+  : "${CJPM_TARGET:=release}"
+  : "${CJFMT_TARGET:=release}"
+  : "${HYPERLANG_TARGET:=release}"
+  : "${LSP_TARGET:=release}"
 
   export SKIP_CLEAN
   export SKIP_COMPILER
@@ -40,7 +55,14 @@ if test "0$cjbuildenv" -ne "01"; then
   export SKIP_HYPERLANG
   export SKIP_LSP
   export SKIP_BUNDLE
-  export TARGET
+  export COMPILER_TARGET
+  export RUNTIME_TARGET
+  export STDLIB_TARGET
+  export STDX_TARGET
+  export CJPM_TARGET
+  export CJFMT_TARGET
+  export HYPERLANG_TARGET
+  export LSP_TARGET
   
   : "${CANGJIE_VERSION:=unofficial}"
   : "${SDK_NAME:=stdx}"

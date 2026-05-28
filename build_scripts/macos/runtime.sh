@@ -8,7 +8,6 @@ set -o xtrace
 #
 cd $WORKSPACE/cangjie_runtime/runtime;
 [ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
-python3 build.py build -t release -v ${CANGJIE_VERSION};
+python3 build.py build -t "$RUNTIME_TARGET" -v ${CANGJIE_VERSION};
 python3 build.py install;
-cp -R $WORKSPACE/cangjie_runtime/runtime/output/common/darwin_release_${ARCH}/{lib,runtime} $WORKSPACE/cangjie_compiler/output;
-
+cp -R $WORKSPACE/cangjie_runtime/runtime/output/common/darwin_${RUNTIME_TARGET}_${ARCH}/{lib,runtime} $WORKSPACE/cangjie_compiler/output;
