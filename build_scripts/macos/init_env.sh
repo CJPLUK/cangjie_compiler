@@ -72,4 +72,7 @@ if test "0$cjbuildenv" -ne "01"; then
   echo $WORKSPACE
 
   export cjbuildenv=1
+  CPU_COUNT=$(sysctl -n hw.logicalcpu)
+  export CMAKE_BUILD_PARALLEL_LEVEL=$((CPU_COUNT > 16 ? 16 : CPU_COUNT))
+  unset CPU_COUNT
 fi
