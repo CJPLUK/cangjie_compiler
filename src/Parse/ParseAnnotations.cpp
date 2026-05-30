@@ -143,7 +143,19 @@ void ParserImpl::ParseAnnotationArguments(Annotation& anno)
             if (backArgsIsInvalid) {
                 break;
             }
-            DiagExpectedRightDelimiter("[", pos);
+            // Position the error at the entire lastToken if encountering a newline,
+            // otherwise at the end of lastToken for more precise error location.
+            auto builder = lookahead.kind == TokenKind::NL
+                ? ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_right_delimiter, lastToken, "[")
+                : ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_right_delimiter, lastToken.End(), "[");
+            builder.AddMainHintArguments("]");
+            builder.AddHint(pos, "[");
+            if (anno.kind == AnnotationKind::CUSTOM) {
+                builder.AddNote(
+                    "Argument syntax error. May be caused by missing macro definitions. "
+                    "If not, verify the annotation arguments are valid."
+                );
+            }
         }
     }
     anno.end = lastToken.End();
