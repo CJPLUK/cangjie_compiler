@@ -15,7 +15,7 @@
 
 ### 环境依赖
 
-编译器独立构建环境除额外依赖 googletest 执行 UT 外，其他内容与集成构建环境基本一致，详细信息请参阅 [Cangjie 构建指导书 (Ubuntu 22.04)-环境准备](https://gitcode.com/Cangjie/cangjie_build/blob/dev/docs/linux_zh.md#2-%E7%8E%AF%E5%A2%83%E5%87%86%E5%A4%87)。
+编译器独立构建环境除额外依赖 googletest 执行 UT 外，其他内容与集成构建环境基本一致，详细信息请参阅 [Cangjie 构建指导书 (Ubuntu 22.04)-环境准备](https://gitcode.com/Cangjie/cangjie_build/blob/main/docs/linux.md#2-%E7%8E%AF%E5%A2%83%E5%87%86%E5%A4%87)。
 googletest 依赖安装可参考 [通用构建指导](https://github.com/google/googletest/blob/main/googletest/README.md)，也可以在构建时通过 [--no-test](#build-选项) 选项临时关闭 UT 构建。
 
 ### 构建命令
@@ -65,7 +65,7 @@ Target: xxxx-xxxx-xxxx
 
 ### 环境准备
 
-编译器独立构建环境除额外依赖 googletest 执行 UT 外，其他内容与集成构建环境基本一致，详细信息请参阅 [Cangjie 构建指导书 (Macos 14 Sonoma)-环境准备](https://gitcode.com/Cangjie/cangjie_build/blob/dev/docs/macos_zh.md#2-%E7%8E%AF%E5%A2%83%E5%87%86%E5%A4%87)。
+编译器独立构建环境除额外依赖 googletest 执行 UT 外，其他内容与集成构建环境基本一致，详细信息请参阅 [Cangjie 构建指导书 (Macos 14 Sonoma)-环境准备](https://gitcode.com/Cangjie/cangjie_build/blob/main/docs/macos.md#2-%E7%8E%AF%E5%A2%83%E5%87%86%E5%A4%87)。
 googletest 依赖安装可参考 [通用构建指导](https://github.com/google/googletest/blob/main/googletest/README.md)，也可以在构建时通过 [--no-test](#build-选项) 选项临时关闭 UT 构建。
 
 ### 构建命令
@@ -114,7 +114,7 @@ Target: xxxx-xxxx-xxxx
 
 ### 环境准备
 
-编译器独立构建环境除额外依赖 googletest 执行 UT 外，其他内容与集成构建环境基本一致，详细信息请参阅 [Cangjie 构建指导书 (Ubuntu 22.04)-环境准备](https://gitcode.com/Cangjie/cangjie_build/blob/dev/docs/linux_cross_windows_zh.md#2-%E7%8E%AF%E5%A2%83%E5%87%86%E5%A4%87)。
+编译器独立构建环境除额外依赖 googletest 执行 UT 外，其他内容与集成构建环境基本一致，详细信息请参阅 [Cangjie 构建指导书 (Ubuntu 22.04)-环境准备](https://gitcode.com/Cangjie/cangjie_build/blob/main/docs/linux_cross_windows.md#2-%E7%8E%AF%E5%A2%83%E5%87%86%E5%A4%87)。
 googletest 依赖安装可参考 [通用构建指导](https://github.com/google/googletest/blob/main/googletest/README.md)，也可以在构建时通过 [--no-test](#build-选项) 选项临时关闭 UT 构建。
 
 > **注意：**
@@ -165,7 +165,7 @@ source ./output/envsetup.bat
 cjc.exe -v
 ```
 
-该步骤仅生成目标平台 cjc 可执行文件，如需构建周边依赖请参阅 [Cangjie 构建指导书 (Ubuntu 22.04)-源码构建](https://gitcode.com/Cangjie/cangjie_build/blob/dev/docs/linux_cross_windows_zh.md#4-%E7%BC%96%E8%AF%91%E6%B5%81%E7%A8%8B)。
+该步骤仅生成目标平台 cjc 可执行文件，如需构建周边依赖请参阅 [Cangjie 构建指导书 (Ubuntu 22.04)-源码构建](https://gitcode.com/Cangjie/cangjie_build/blob/main/docs/linux_cross_windows.md#4-%E7%BC%96%E8%AF%91%E6%B5%81%E7%A8%8B)。
 
 ## Linux 上构建适用于 Android 平台的基础库（交叉编译）
 
