@@ -1329,7 +1329,8 @@ llvm::DICompositeType* DIBuilder::CreateEnumWithNonRefArgsType(
         CGEnumType::AssociatedNonRefLayout layout;
         if (useAndroidArm32Layout) {
             fields.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
-            fields.insert(fields.end(), ctor.funcType->GetParamTypes().begin(), ctor.funcType->GetParamTypes().end());
+            auto paramTypes = ctor.funcType->GetParamTypes();
+            fields.insert(fields.end(), paramTypes.begin(), paramTypes.end());
             layout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fields);
             totalSize = static_cast<size_t>(layout.size) * 8U;
         } else {
