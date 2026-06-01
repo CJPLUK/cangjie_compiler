@@ -754,6 +754,20 @@ std::vector<Block*> BlockGroup::GetBlocks() const
     return blocks;
 }
 
+std::vector<Block*> BlockGroup::GetAllBlocks() const
+{
+    auto res = blocks;
+    for (auto block : blocks) {
+        for (auto e : block->GetExpressions()) {
+            if (e->GetExprKind() == ExprKind::LAMBDA) {
+                auto lambdaBlocks = StaticCast<Lambda*>(e)->GetBody()->GetAllBlocks();
+                res.insert(res.end(), lambdaBlocks.begin(), lambdaBlocks.end());
+            }
+        }
+    }
+    return res;
+}
+
 Block* BlockGroup::GetBlockByIdx(size_t idx) const
 {
     CJC_ASSERT(idx < blocks.size());

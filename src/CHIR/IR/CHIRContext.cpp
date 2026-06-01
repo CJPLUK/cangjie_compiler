@@ -21,6 +21,7 @@
 #include "cangjie/CHIR/IR/Type/ExtendDef.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/CHIR/Utils/Utils.h"
 
 using namespace Cangjie::CHIR;
 
@@ -130,6 +131,41 @@ static void DivideArray(size_t len, size_t threadNum, std::vector<std::vector<si
 CHIRContext::CHIRContext(std::unordered_map<unsigned int, std::string>* fnMap, size_t threadsNum)
     : curPackage(nullptr), fileNameMap(fnMap), threadsNum(threadsNum)
 {
+    Init();
+}
+
+ClassType* CHIRContext::SearchObjectTyInPackage() const
+{
+    for (auto classDef : this->curPackage->GetImportedClasses()) {
+        if (IsCoreObject(*classDef)) {
+            return classDef->GetType();
+        }
+    }
+    for (auto classDef : this->curPackage->GetClasses()) {
+        if (IsCoreObject(*classDef)) {
+            return classDef->GetType();
+        }
+    }
+    return nullptr;
+}
+
+ClassType* CHIRContext::SearchAnyTyInPackage() const
+{
+    for (auto classDef : this->curPackage->GetImportedClasses()) {
+        if (IsCoreAny(*classDef)) {
+            return classDef->GetType();
+        }
+    }
+    for (auto classDef : this->curPackage->GetClasses()) {
+        if (IsCoreAny(*classDef)) {
+            return classDef->GetType();
+        }
+    }
+    return nullptr;
+}
+
+void CHIRContext::Init()
+{
     unitTy = GetType<UnitType>();
     boolTy = GetType<BooleanType>();
     runeTy = GetType<RuneType>();
@@ -150,7 +186,7 @@ CHIRContext::CHIRContext(std::unordered_map<unsigned int, std::string>* fnMap, s
     cstringTy = GetType<CStringType>();
     voidTy = GetType<VoidType>();
 }
- 
+
 CHIRContext::~CHIRContext()
 {
 #ifndef CANGJIE_ENABLE_GCOV

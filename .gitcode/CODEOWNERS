@@ -22,7 +22,6 @@
 /include/cangjie/Lex/Tokens.inc @mini-tang
 /include/cangjie/Macro/ @mini-tang
 /include/cangjie/Mangle/ @neilliuistaken
-/include/cangjie/MetaTransformation/ @Mr_Kang_Yi
 /include/cangjie/Modules/ @Augus_Jan
 /include/cangjie/Option/ @neilliuistaken
 /include/cangjie/Parse/ @kkkkkkkbbbbbbb
@@ -49,7 +48,6 @@
 /src/Lex/ @kkkkkkkbbbbbbb
 /src/Macro/ @mini-tang
 /src/Mangle/ @neilliuistaken
-/src/MetaTransformation/ @Mr_Kang_Yi
 /src/Modules/ @Augus_Jan
 /src/Option/ @neilliuistaken
 /src/Parse/ @kkkkkkkbbbbbbb
