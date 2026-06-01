@@ -102,15 +102,20 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
     const auto& structParamNeedsBasePtr = calleeType.GetStructParamNeedsBasePtrIndices();
     const auto& realArgIndices = calleeType.GetRealArgIndices();
     std::vector<llvm::Value*> argsVal;
-    // Keep AArch64 global-struct arguments compatible with the existing
+    // Keep non-Android AArch64 global-struct arguments compatible with the existing
     // callee/runtime convention: encode the compatibility marker on the
     // argument value itself and leave the synthetic `basePtr` as null.
-    auto isGlobalStructArgOnAArch64 = [this, applyWrapper, &structParamNeedsBasePtr, &realArgIndices](size_t idx) {
+    // Android tags the high 8 bits of native heap pointers starting from
+    // Android 11 / API 30 to detect native memory errors, so Cangjie cannot
+    // reuse the highest address bit there. The runtime handles Android with
+    // the same logic used on x86_64 instead.
+    auto isGlobalStructArgNeedsTagging = [this, applyWrapper, &structParamNeedsBasePtr, &realArgIndices](size_t idx) {
         return applyWrapper && structParamNeedsBasePtr.find(realArgIndices[idx]) != structParamNeedsBasePtr.end() &&
             applyWrapper->GetArgs()[idx]->IsGlobalVar() &&
-            cgMod.GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::AARCH64;
+            cgMod.GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::AARCH64 &&
+            cgMod.GetCGContext().GetCompileOptions().target.env != Triple::Environment::ANDROID;
     };
-    auto tagGlobalStructAddrForAArch64 = [this](llvm::Value* llvmVal) {
+    auto tagGlobalStructAddr = [this](llvm::Value* llvmVal) {
         auto taggedPtr = CreatePtrToInt(llvmVal, getInt64Ty());
         taggedPtr = CreateOr(taggedPtr, getInt64(1ULL << 63));
         return CreateIntToPtr(taggedPtr, llvmVal->getType());
@@ -120,8 +125,8 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
         bool isThis = idx == 0 && applyWrapper && applyWrapper->IsCalleeStructInstanceMethod();
         auto& paramType = *calleeType.GetParamType(idx);
         auto llvmVal = isThis ? DoSimpleCast(*this, *arg, paramType) : FixFuncArg(*arg, paramType);
-        if (isGlobalStructArgOnAArch64(idx)) {
-            llvmVal = tagGlobalStructAddrForAArch64(llvmVal);
+        if (isGlobalStructArgNeedsTagging(idx)) {
+            llvmVal = tagGlobalStructAddr(llvmVal);
         }
         (void)argsVal.emplace_back(llvmVal); // Insert the fixed argument, may do some casting meanwhile.
         auto cgType = arg->GetCGType();
@@ -134,7 +139,7 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
                 auto addrspace = paramType.GetAddrspace();
                 auto i8PtrTy = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), addrspace);
                 auto basePtrVal = llvm::Constant::getNullValue(i8PtrTy);
-                if (!isGlobalStructArgOnAArch64(idx) && !applyWrapper->GetArgs()[idx]->IsLocalVar()) {
+                if (!isGlobalStructArgNeedsTagging(idx) && !applyWrapper->GetArgs()[idx]->IsLocalVar()) {
                     basePtrVal = llvm::ConstantExpr::getIntToPtr(
                         llvm::ConstantInt::get(llvm::Type::getInt64Ty(cgMod.GetLLVMContext()), 0x1), i8PtrTy);
                 }
