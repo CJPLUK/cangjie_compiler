@@ -64,7 +64,7 @@ size_t GetTokenLenth(const Token& token)
 
 void CollectMacroDebugPosition(MacroInvocation& invocation, const Token& token, unsigned int lastColumn)
 {
-    if (!token.Begin().isCurFile || token.kind == TokenKind::COMMENT || token.kind == TokenKind::NL) {
+    if (token.kind == TokenKind::COMMENT || token.kind == TokenKind::NL) {
         return;
     }
     auto key = token.Begin().Hash64();
