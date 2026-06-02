@@ -15,7 +15,7 @@ The current frontend compiler build supports:
 
 ### Environment Dependencies
 
-The standalone compiler build environment is largely consistent with the integrated build environment, except for the additional dependency on googletest for executing UTs. For detailed information, please refer to [Cangjie Build Guide (Ubuntu 22.04) - Environment Preparation].  
+The standalone compiler build environment is largely consistent with the integrated build environment, except for the additional dependency on googletest for executing UTs. For detailed information, please refer to [Cangjie Build Guide (Ubuntu 22.04) - Environment Preparation](https://gitcode.com/Cangjie/cangjie_build/blob/main/doc_en/linux.md#2-environment-preparation).  
 For googletest dependency installation, refer to [General Build Guide](https://github.com/google/googletest/blob/main/googletest/README.md). Alternatively, you can temporarily disable UT builds during compilation using the [`--no-test`](#build-options) option.
 
 ### Build Commands
@@ -65,7 +65,7 @@ Target: xxxx-xxxx-xxxx
 
 ### Environment Preparation
 
-The standalone compiler build environment is largely consistent with the integrated build environment, except for the additional dependency on googletest for executing UTs. For detailed information, please refer to [Cangjie Build Guide (macOS 14 Sonoma) - Environment Preparation].  
+The standalone compiler build environment is largely consistent with the integrated build environment, except for the additional dependency on googletest for executing UTs. For detailed information, please refer to [Cangjie Build Guide (macOS 14 Sonoma) - Environment Preparation](https://gitcode.com/Cangjie/cangjie_build/blob/main/doc_en/macos.md#2-environment-preparation).  
 For googletest dependency installation, refer to [General Build Guide](https://github.com/google/googletest/blob/main/googletest/README.md). Alternatively, you can temporarily disable UT builds during compilation using the [`--no-test`](#build-options) option.
 
 ### Build Commands
@@ -114,7 +114,7 @@ Target: xxxx-xxxx-xxxx
 
 ### Environment Preparation
 
-The standalone compiler build environment is largely consistent with the integrated build environment, except for the additional dependency on googletest for executing UTs. For detailed information, please refer to [Cangjie Build Guide (Ubuntu 22.04) - Environment Preparation].  
+The standalone compiler build environment is largely consistent with the integrated build environment, except for the additional dependency on googletest for executing UTs. For detailed information, please refer to [Cangjie Build Guide (Ubuntu 22.04) - Environment Preparation](https://gitcode.com/Cangjie/cangjie_build/blob/main/doc_en/linux_cross_windows.md#2-environment-preparation).  
 For googletest dependency installation, refer to [General Build Guide](https://github.com/google/googletest/blob/main/googletest/README.md). Alternatively, you can temporarily disable UT builds during compilation using the [`--no-test`](#build-options) option.
 
 > **Note:**
@@ -164,7 +164,7 @@ source ./output/envsetup.bat
 cjc.exe -v
 ```
 
-This step only generates the target platform cjc executable. For building peripheral dependencies, refer to [Cangjie Build Guide (Ubuntu 22.04) - Source Code Build].
+This step only generates the target platform cjc executable. For building peripheral dependencies, refer to [Cangjie Build Guide (Ubuntu 22.04) - Source Code Build](https://gitcode.com/Cangjie/cangjie_build/blob/main/doc_en/linux_cross_windows.md#4-build-process).
 
 ## Building base libraries of the Android platform on Linux (cross-compilation)
 
