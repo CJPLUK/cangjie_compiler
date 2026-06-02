@@ -308,7 +308,6 @@ public:
     void SetImportedPackageFromASTNode(std::vector<OwnedPtr<AST::Package>>& pkgs);
     using DeclImportsMap = std::unordered_map<Ptr<const AST::Decl>, std::vector<Ptr<const AST::ImportSpec>>>;
     /**
-     * Note: After the macro expansion, the ImportSpec pointer returned by this interface might be unreliable.
      * @param fullPackageName [in]: full package name.
      * @return map of imported decl to the 'ImportSpec' which imports the decl.
      */
@@ -454,6 +453,9 @@ private:
     void HandleStdPackage(const std::string& fullPackageName, const std::string& cjoPath, bool isRecursive = false);
 
     void AddImportedDeclsForSourcePackage(const AST::Package& pkg);
+    void AddImportedDeclsForFile(const AST::Package& pkg, const AST::File& file);
+    void RemoveDeclsImportedByImports(
+        const std::string& fullPackageName, const std::vector<OwnedPtr<AST::ImportSpec>>& imports);
 
     /**
      * Get information of dependency packages of @param pkg in json format.

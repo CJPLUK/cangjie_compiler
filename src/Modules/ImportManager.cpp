@@ -1050,7 +1050,10 @@ void ImportManager::UpdateFileNodeImportInfo(Package& package, const File& file,
     }
     auto index = file.indexOfPackage;
     newFile->indexOfPackage = index;
+    RemoveDeclsImportedByImports(package.fullPackageName, file.imports);
     package.files[index] = std::move(newFile);
+    // Update declsImportedByNodeMap from newFile's imports (stale entries for the old file were removed above).
+    AddImportedDeclsForFile(package, *package.files[index]);
 }
 
 void ImportManager::SetPackageBchirCache(const std::string& fullPackageName, const std::vector<uint8_t>& bchirData)
@@ -1094,66 +1097,90 @@ std::map<std::string, std::set<Ptr<const AST::Decl>, AST::CmpNodeByPos>>& Import
     return fileUsedMacroDeclsMap[file.indexOfPackage];
 }
 
+void ImportManager::RemoveDeclsImportedByImports(
+    const std::string& fullPackageName, const std::vector<OwnedPtr<ImportSpec>>& imports)
+{
+    if (imports.empty()) {
+        return;
+    }
+    auto found = declsImportedByNodeMap.find(fullPackageName);
+    if (found == declsImportedByNodeMap.end()) {
+        return;
+    }
+    std::unordered_set<Ptr<const ImportSpec>> staleImports(imports.begin(), imports.end());
+    for (auto& [decl, importSpecs] : found->second) {
+        (void)decl;
+        importSpecs.erase(std::remove_if(importSpecs.begin(), importSpecs.end(),
+                              [&staleImports](Ptr<const ImportSpec> import) { return staleImports.count(import) > 0; }),
+            importSpecs.end());
+    }
+}
+
 void ImportManager::AddImportedDeclsForSourcePackage(const AST::Package& pkg)
 {
     for (auto& file : pkg.files) {
-        for (auto& import : file->imports) {
-            auto& declMap = import->IsReExport() ? importedDeclsMap : fileImportedDeclsMap[file->fileHash];
-            CJC_NULLPTR_CHECK(import);
-            if (import->IsImportMulti()) {
-                continue;
-            }
-            auto fullPackageName = cjoManager->GetPackageNameByImport(*import);
-            auto pkgDecl = cjoManager->GetPackageDecl(fullPackageName);
-            if (fullPackageName.empty() || !pkgDecl) {
-                continue; // Load package failed.
-            }
-            auto relation = GetPackageRelation(pkg.fullPackageName, fullPackageName);
-            auto importLevel = GetAccessLevel(*import);
-            if (import->content.kind == ImportKind::IMPORT_ALL) {
-                auto members = cjoManager->GetPackageMembers(fullPackageName);
-                for (auto& member : std::as_const(members)) {
-                    auto& targetMap = declMap[member.first];
-                    auto visibleDecls = GetVisibleDeclToMap(member.second, importLevel, relation);
-                    std::for_each(visibleDecls.cbegin(), visibleDecls.cend(), [this, &import, &pkg](auto it) {
-                        declsImportedByNodeMap[pkg.fullPackageName][it].emplace_back(import.get());
-                    });
-                    targetMap.merge(visibleDecls);
-                    std::for_each(member.second.begin(), member.second.end(), [this, member](auto decl) {
-                        if (decl->identifier != member.first) {
-                            declToTypeAlias[decl].emplace(decl->identifier);
-                        }
-                    });
-                }
-                continue;
-            }
-            if (cjoManager->IsImportPackage(*import)) {
-                auto name = import->content.kind == ImportKind::IMPORT_SINGLE
-                    ? Utils::SplitQualifiedName(fullPackageName, true).back()
-                    : import->content.aliasName.Val();
-                declMap[name].emplace(pkgDecl);
-                declsImportedByNodeMap[pkg.fullPackageName][pkgDecl].emplace_back(import.get());
-            } else {
-                auto members = cjoManager->GetPackageMembersByName(fullPackageName, import->content.identifier);
-                const auto& name = import->content.kind == ImportKind::IMPORT_SINGLE ? import->content.identifier.Val()
-                                                                                     : import->content.aliasName.Val();
-                auto& targetMap = declMap[name];
-                auto visibleDecls = GetVisibleDeclToMap(members, importLevel, relation);
-                for (auto member : members) {
-                    if (auto tad = DynamicCast<TypeAliasDecl>(member); tad && tad->type) {
-                        auto originDecl = tad->type->GetTarget();
-                        declToTypeAlias[originDecl].emplace(name);
-                    } else if (member->identifier != name) {
-                        declToTypeAlias[member].emplace(name);
-                        declToTypeAlias[member].emplace(member->identifier);
-                    }
-                }
+        AddImportedDeclsForFile(pkg, *file);
+    }
+}
+
+void ImportManager::AddImportedDeclsForFile(const Package& pkg, const File& file)
+{
+    for (auto& import : file.imports) {
+        auto& declMap = import->IsReExport() ? importedDeclsMap : fileImportedDeclsMap[file.fileHash];
+        CJC_NULLPTR_CHECK(import);
+        if (import->IsImportMulti()) {
+            continue;
+        }
+        auto fullPackageName = cjoManager->GetPackageNameByImport(*import);
+        auto pkgDecl = cjoManager->GetPackageDecl(fullPackageName);
+        if (fullPackageName.empty() || !pkgDecl) {
+            continue; // Load package failed.
+        }
+        auto relation = GetPackageRelation(pkg.fullPackageName, fullPackageName);
+        auto importLevel = GetAccessLevel(*import);
+        if (import->content.kind == ImportKind::IMPORT_ALL) {
+            auto members = cjoManager->GetPackageMembers(fullPackageName);
+            for (auto& member : std::as_const(members)) {
+                auto& targetMap = declMap[member.first];
+                auto visibleDecls = GetVisibleDeclToMap(member.second, importLevel, relation);
                 std::for_each(visibleDecls.cbegin(), visibleDecls.cend(), [this, &import, &pkg](auto it) {
                     declsImportedByNodeMap[pkg.fullPackageName][it].emplace_back(import.get());
                 });
                 targetMap.merge(visibleDecls);
-                import->content.isDecl = true;
+                std::for_each(member.second.begin(), member.second.end(), [this, member](auto decl) {
+                    if (decl->identifier != member.first) {
+                        declToTypeAlias[decl].emplace(decl->identifier);
+                    }
+                });
             }
+            continue;
+        }
+        if (cjoManager->IsImportPackage(*import)) {
+            auto name = import->content.kind == ImportKind::IMPORT_SINGLE
+                ? Utils::SplitQualifiedName(fullPackageName, true).back()
+                : import->content.aliasName.Val();
+            declMap[name].emplace(pkgDecl);
+            declsImportedByNodeMap[pkg.fullPackageName][pkgDecl].emplace_back(import.get());
+        } else {
+            auto members = cjoManager->GetPackageMembersByName(fullPackageName, import->content.identifier);
+            const auto& name = import->content.kind == ImportKind::IMPORT_SINGLE ? import->content.identifier.Val()
+                                                                                 : import->content.aliasName.Val();
+            auto& targetMap = declMap[name];
+            auto visibleDecls = GetVisibleDeclToMap(members, importLevel, relation);
+            for (auto member : members) {
+                if (auto tad = DynamicCast<TypeAliasDecl>(member); tad && tad->type) {
+                    auto originDecl = tad->type->GetTarget();
+                    declToTypeAlias[originDecl].emplace(name);
+                } else if (member->identifier != name) {
+                    declToTypeAlias[member].emplace(name);
+                    declToTypeAlias[member].emplace(member->identifier);
+                }
+            }
+            std::for_each(visibleDecls.cbegin(), visibleDecls.cend(), [this, &import, &pkg](auto it) {
+                declsImportedByNodeMap[pkg.fullPackageName][it].emplace_back(import.get());
+            });
+            targetMap.merge(visibleDecls);
+            import->content.isDecl = true;
         }
     }
 }
