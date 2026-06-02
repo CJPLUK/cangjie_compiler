@@ -396,11 +396,22 @@ Ptr<Ty> TypeManager::GetInstantiatedTy(Ptr<Ty> ty, const TypeSubst& typeMapping)
     return instantiator.Instantiate(ty);
 }
 
+Ptr<Ty> TypeManager::ApplyTypeSubstForTy(const TypeSubst& typeMapping, const Ptr<Ty> ty)
+{
+    if (typeMapping.empty()) {
+        return ty;
+    }
+    TyVarScope ts(*this);
+    SubstPack substPack;
+    PackMapping(substPack, typeMapping);
+    return ApplySubstPack(ty, substPack);
+}
+
 std::set<Ptr<Ty>> TypeManager::ApplyTypeSubstForTys(const TypeSubst& subst, const std::set<Ptr<TyVar>>& tys)
 {
     std::set<Ptr<Ty>> res;
     for (auto& i : tys) {
-        res.insert(GetInstantiatedTy(i, subst));
+        res.insert(ApplyTypeSubstForTy(subst, i));
     }
     return res;
 }
@@ -1494,7 +1505,7 @@ std::unordered_set<Ptr<Ty>> TypeManager::GetAllSuperTys(Ty& ty, const TypeSubst&
     if (auto found = tyToSuperTysMap.find(key); found != tyToSuperTysMap.end()) {
         return found->second;
     }
-    auto maybeInstTy = typeMapping.empty() ? Ptr(&ty) : GetInstantiatedTy(&ty, typeMapping);
+    auto maybeInstTy = ApplyTypeSubstForTy(typeMapping, &ty);
     if (auto classLikeTy = DynamicCast<ClassLikeTy*>(maybeInstTy)) {
         tyList.emplace(classLikeTy);
     } else if (auto structTy = DynamicCast<StructTy*>(maybeInstTy)) {
