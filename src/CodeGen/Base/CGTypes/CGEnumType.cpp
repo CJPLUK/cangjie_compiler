@@ -61,6 +61,9 @@ std::optional<std::size_t> TryComputeAndroidArm32StructConstructorUnionSize(
     CGModule& cgMod, const std::vector<CHIR::Type*>& paramTypes)
 {
     for (auto associatedValueCHIRType : paramTypes) {
+        if (IsReferenceType(*associatedValueCHIRType, cgMod)) {
+            continue;
+        }
         auto associatedValueCGType = CGType::GetOrCreate(cgMod, associatedValueCHIRType);
         if (!associatedValueCGType->GetSize().has_value()) {
             return std::nullopt;
@@ -148,7 +151,12 @@ llvm::StructType* CGEnumType::GetAndroidArm32AssociatedNonRefLayoutType(
     std::vector<llvm::Type*> llvmFieldTypes;
     llvmFieldTypes.reserve(fieldTypes.size());
     for (auto fieldType : fieldTypes) {
-        llvmFieldTypes.emplace_back(CGType::GetOrCreate(cgMod, DeRef(*fieldType))->GetLLVMType());
+        auto* derefType = DeRef(*fieldType);
+        if (IsReferenceType(*derefType, cgMod)) {
+            llvmFieldTypes.emplace_back(CGType::GetRefType(cgMod.GetLLVMContext()));
+        } else {
+            llvmFieldTypes.emplace_back(CGType::GetOrCreate(cgMod, derefType)->GetLLVMType());
+        }
     }
     return llvm::StructType::get(cgMod.GetLLVMContext(), llvmFieldTypes, false);
 }
