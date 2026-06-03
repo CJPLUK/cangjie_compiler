@@ -15,6 +15,24 @@ Please describe the type of changes in this Pull Request (reason). **Simply save
 
 **Please do not modify or delete the following options. Simply save and click the checkbox, or when editing, change `[ ]` to `[x]` for the relevant item.**
 
+### Platform Differences:
+
+- [ ] No difference
+- [ ] Difference
+    - [ ] Windows
+    - [ ] Linux
+    - [ ] macOS
+    - [ ] Other (Please explain the reasons below)
+
+### Affected Components:
+
+- [ ] cjc (Cangjie Compiler)
+- [ ] LSP (Cangjie Language Server)
+- [ ] cjfmt (Cangjie Formatter)
+- [ ] cjlint (Cangjie Lint Tool)
+- [ ] stdx (Cangjie Standard Library Extensions)
+- [ ] Other (Please explain the reasons below)
+
 ### Local Compilation Verification Results:
 
 - [ ] Cangjie Compiler compiled successfully
