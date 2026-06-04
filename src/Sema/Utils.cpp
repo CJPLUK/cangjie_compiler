@@ -378,6 +378,13 @@ void TypeChecker::TypeCheckerImpl::AddDefaultCtor(InheritableDecl& decl) const
         return;
     }
 
+    // Do not add default constructor to Java mirrors / registry companion / mirror wrapper declarations
+    // because it requires explicitly added one.
+    if (decl.TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER,
+        Attribute::JAVA_IMPL_REGISTRY_COMPANION)) {
+            return;
+    }
+
     // Do not add default constructor to common class(struct) because
     // it requires explicitly added one
     // Do not add default constructor to specific class(struct) because it
@@ -389,7 +396,7 @@ void TypeChecker::TypeCheckerImpl::AddDefaultCtor(InheritableDecl& decl) const
         }
     } else if (decl.astKind == ASTKind::CLASS_DECL) {
         auto classDecl = StaticAs<ASTKind::CLASS_DECL>(&decl);
-        if (!classDecl->TestAnyAttr(Attribute::COMMON, Attribute::JAVA_MIRROR)) {
+        if (!classDecl->TestAttr(Attribute::COMMON)) {
             classDecl->body->decls.push_back(CreateDefaultCtor(decl));
         }
     }

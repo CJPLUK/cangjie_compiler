@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -7,8 +7,8 @@
 #include "Utils.h"
 #include "TypeCheckUtil.h"
 
-#include "Desugar/AfterTypeCheck.h"
 #include "cangjie/AST/AttributePack.h"
+#include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Mangle/BaseMangler.h"
@@ -140,6 +140,15 @@ OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, std::vector
     auto retTy = nodes.back()->GetTy();
     auto lambda = WrapReturningLambdaExpr(typeManager, std::move(nodes));
     return CreateCallExpr(std::move(lambda), {}, nullptr, retTy);
+}
+
+OwnedPtr<LambdaExpr> WrapUnitLambdaExpr(
+    TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes, std::vector<OwnedPtr<FuncParam>> lambdaParams)
+{
+    auto unitLiteral = CreateUnitExpr(TypeManager::GetPrimitiveTy(AST::TypeKind::TYPE_UNIT));
+    nodes.push_back(std::move(unitLiteral));
+
+    return WrapReturningLambdaExpr(typeManager, std::move(nodes), std::move(lambdaParams));
 }
 
 OwnedPtr<LambdaExpr> WrapReturningLambdaExpr(
@@ -672,15 +681,15 @@ bool IsVisibalFunc(const FuncDecl& funcDecl, const AST::Decl& decl, Native::FFI:
 {
     bool hasGenericParm = false;
     auto& params = funcDecl.funcBody->paramLists[0]->params;
-    auto& retType = funcDecl.funcBody->retType;
+    auto retTy = StaticCast<FuncTy&>(*funcDecl.GetTy()).retTy;
     for (auto& param : params) {
-        if (IsGenericParam(param->type->GetTy(), decl, genericConfig)) {
+        if (IsGenericParam(param->GetTy(), decl, genericConfig)) {
             hasGenericParm = true;
             break;
         }
     }
     if (!hasGenericParm) {
-        hasGenericParm = IsGenericParam(retType->GetTy(), decl, genericConfig);
+        hasGenericParm = IsGenericParam(retTy, decl, genericConfig);
     }
 
     if (!hasGenericParm) {
@@ -746,8 +755,8 @@ ClassDecl& GetExceptionDecl(const ImportManager& importManager)
     return *exception;
 }
 
-OwnedPtr<ThrowExpr> CreateThrowExceptionCall(
-    ImportManager& importManager, TypeManager& typeManager, const std::string& msg, Ptr<File> curFile)
+OwnedPtr<ThrowExpr> CreateThrowExceptionCall(const ImportManager& importManager,
+    TypeManager& typeManager, const std::string& msg, Ptr<File> curFile)
 {
     auto exceptionArgs = [&] {
         auto exceptionMsg =

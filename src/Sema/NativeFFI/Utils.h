@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -149,8 +149,13 @@ StructDecl& GetStringDecl(const ImportManager& importManager);
  *     return noden;
  * }()
  */
-
 OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes);
+
+/**
+ * Returns lambda expression of nodes returning `Unit`.
+ */
+OwnedPtr<LambdaExpr> WrapUnitLambdaExpr(TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes,
+    std::vector<OwnedPtr<FuncParam>> lambdaParams = {});
 OwnedPtr<LambdaExpr> WrapReturningLambdaExpr(
     TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes, std::vector<OwnedPtr<FuncParam>> lambdaParams = {});
 
@@ -221,8 +226,8 @@ std::string GetLambdaJavaClassName(Ptr<Ty> ty);
 std::string GetCjMappingTupleName(const Ty& tupleTy);
 
 ClassDecl& GetExceptionDecl(const ImportManager& importManager);
-OwnedPtr<ThrowExpr> CreateThrowExceptionCall(
-    ImportManager& importManager, TypeManager& typeManager, const std::string& msg, Ptr<File> curFile);
+OwnedPtr<ThrowExpr> CreateThrowExceptionCall(const ImportManager& importManager,
+    TypeManager& typeManager, const std::string& msg, Ptr<File> curFile);
 bool AreParamTypeKindsValid(const FuncDecl& fd, const std::vector<TypeKind>& typeKinds);
 
 } // namespace Cangjie::Native::FFI

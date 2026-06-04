@@ -4,23 +4,19 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include "NativeFFI/Java/AfterTypeCheck/JArrayDesugarer.h"
-#include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
-#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
+#include "DesugarJArray.h"
+#include "JavaDesugarManager.h"
+#include "Utils.h"
 #include "NativeFFI/Utils.h"
-#include "cangjie/AST/AttributePack.h"
-#include "cangjie/AST/Clone.h"
-#include "cangjie/AST/Create.h"
+
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Walker.h"
-#include "cangjie/Modules/ImportManager.h"
-#include "cangjie/Sema/TypeManager.h"
-#include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/SafePointer.h"
-#include <utility>
+
+namespace Cangjie::Native::FFI::Java {
 
 namespace {
 using namespace Cangjie;
@@ -53,14 +49,7 @@ bool IsSizeJNITypeConstructor(const FuncDecl& constr, const ImportManager& impor
 
 } // namespace
 
-namespace Cangjie::Interop::Java {
-
-JArrayDesugarer::JArrayDesugarer(TypeManager& typeManager, ImportManager& importManager, InteropLibBridge& lib)
-    : typeManager(typeManager), importManager(importManager), lib(lib)
-{
-}
-
-void JArrayDesugarer::GenerateJniTypeConstructor(ClassDecl& jarray)
+void DesugarJArray::GenerateJniTypeConstructor(ClassDecl& jarray) const
 {
     CJC_ASSERT_WITH_MSG(IsJArray(jarray), "Expected JArray decl");
 
@@ -78,15 +67,16 @@ void JArrayDesugarer::GenerateJniTypeConstructor(ClassDecl& jarray)
     jarray.GetMemberDecls().emplace_back(std::move(newConstr));
 }
 
-void JArrayDesugarer::InsertOriginalSizeConstructorBody(FuncDecl& constr)
+void DesugarJArray::InsertOriginalSizeConstructorBody(FuncDecl& constr) const
 {
     if (IsSizeConstructor(constr)) {
-        auto exceptionCall = CreateThrowExceptionCall(importManager, typeManager, "unexpected call", constr.curFile);
+        auto exceptionCall = CreateThrowExceptionCall(importManager, typeManager,
+            "Internal error: unhandled call to JArray constructor", constr.curFile);
         constr.funcBody->body->body.emplace_back(std::move(exceptionCall));
     }
 }
 
-void JArrayDesugarer::TransformConstructorCallsToPassJNIParam(File& file)
+void DesugarJArray::TransformConstructorCallsToPassJNIParam(File& file) const
 {
     Walker(&file, Walker::GetNextWalkerID(), [this, &file](auto node) {
         CJC_ASSERT_WITH_MSG(file.curPackage, "file's curPackage is nullptr");
@@ -126,7 +116,7 @@ void JArrayDesugarer::TransformConstructorCallsToPassJNIParam(File& file)
 
         CJC_ASSERT_WITH_MSG(newCallExpr->args.size() == 1, "expected to be init(length: Int32)");
         { // add jniType param in new constructor call
-            auto jniType = lib.SelectJSigByTypeKind(jarrayElementType->kind, jarrayElementType);
+            auto jniType = ilib.SelectJSigByTypeKind(jarrayElementType->kind, jarrayElementType);
             auto fa = CreateFuncArg(std::move(jniType));
             newCallExpr->args.emplace_back(std::move(fa));
         }
@@ -145,7 +135,7 @@ void JArrayDesugarer::TransformConstructorCallsToPassJNIParam(File& file)
     }).Walk();
 }
 
-void JArrayDesugarer::InsertJniTypeParamIntoConstructor(FuncDecl& constr)
+void DesugarJArray::InsertJniTypeParamIntoConstructor(FuncDecl& constr) const
 {
     CJC_ASSERT_WITH_MSG(IsJArray(*constr.outerDecl), "Expected JArray decl");
     CJC_ASSERT_WITH_MSG(constr.TestAttr(Attribute::CONSTRUCTOR), "'constr' argument expected to be constructor");
@@ -169,12 +159,12 @@ void JArrayDesugarer::InsertJniTypeParamIntoConstructor(FuncDecl& constr)
     }
 }
 
-void JArrayDesugarer::InsertConstructorBody(FuncDecl& constr)
+void DesugarJArray::InsertConstructorBody(FuncDecl& constr) const
 {
     CJC_ASSERT_WITH_MSG(IsJArray(*constr.outerDecl), "Expected JArray decl");
 
-    auto jniEnvCall = lib.CreateGetJniEnvCall(constr.curFile);
-    auto jniEnvPtrDecl = lib.GetJniEnvPtrDecl();
+    auto jniEnvCall = ilib.CreateGetJniEnvCall(constr.curFile);
+    auto jniEnvPtrDecl = ilib.GetJniEnvPtrDecl();
 
     if (!jniEnvCall || !jniEnvCall) {
         constr.EnableAttr(Attribute::IS_BROKEN);
@@ -182,7 +172,7 @@ void JArrayDesugarer::InsertConstructorBody(FuncDecl& constr)
     }
 
     auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, jniEnvCall);
-    auto newObjectCall = lib.CreateCFFINewJavaArrayCall(
+    auto newObjectCall = ilib.CreateCFFINewJavaArrayCall(
         WithinFile(CreateRefExpr(*jniEnvVar), constr.curFile), *constr.funcBody->paramLists[0]);
     std::vector<OwnedPtr<Node>> lambdaNodes = Nodes(std::move(jniEnvVar), std::move(newObjectCall));
 
@@ -193,13 +183,14 @@ void JArrayDesugarer::InsertConstructorBody(FuncDecl& constr)
         auto thisCall = CreateThisCall(
             *constr.outerDecl, *generatedJavaRefInitConstr, generatedJavaRefInitConstr->GetTy(), constr.curFile);
         thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(lambdaNodes))));
+        constr.funcBody->body->body.clear();
         constr.funcBody->body->body.push_back(std::move(thisCall));
     } else {
         CJC_ABORT_WITH_MSG("Jarray expected to be ClassLikeDecl");
     }
 }
 
-Ptr<FuncDecl> JArrayDesugarer::FindSizeJNITypeConstructor(ClassDecl& jarray)
+Ptr<FuncDecl> DesugarJArray::FindSizeJNITypeConstructor(ClassDecl& jarray) const
 {
     CJC_ASSERT_WITH_MSG(IsJArray(jarray), "Expected JArray decl");
 
@@ -214,7 +205,7 @@ Ptr<FuncDecl> JArrayDesugarer::FindSizeJNITypeConstructor(ClassDecl& jarray)
     return nullptr;
 }
 
-Ptr<FuncDecl> JArrayDesugarer::FindSizeJNITypeConstructorFromInnerDecl(const Decl& decl)
+Ptr<FuncDecl> DesugarJArray::FindSizeJNITypeConstructorFromInnerDecl(const Decl& decl) const
 {
     if (auto jarray = As<ASTKind::CLASS_DECL>(decl.outerDecl)) {
         return FindSizeJNITypeConstructor(*jarray);
@@ -223,4 +214,126 @@ Ptr<FuncDecl> JArrayDesugarer::FindSizeJNITypeConstructorFromInnerDecl(const Dec
         return nullptr;
     }
 }
-} // namespace Cangjie::Interop::Java
+
+void DesugarJArray::ReplaceCallsWithArrayJavaEntityGet(File& file) const
+{
+    Walker(&file, Walker::GetNextWalkerID(), [this, &file](auto node) {
+        if (!node->IsSamePackage(*file.curPackage)) {
+            return VisitAction::WALK_CHILDREN;
+        }
+
+        Ptr<CallExpr> callExpr = As<ASTKind::CALL_EXPR>(node);
+        if (!callExpr) {
+            return VisitAction::WALK_CHILDREN;
+        }
+
+        auto funcDecl = callExpr->resolvedFunction;
+        if (!funcDecl || !funcDecl->outerDecl || !IsJArray(*funcDecl->outerDecl) ||
+            funcDecl->identifier != "[]" || callExpr->args.size() != 1
+        ) {
+            return VisitAction::WALK_CHILDREN;
+        }
+
+        auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
+        CJC_ASSERT_WITH_MSG(!ma->baseExpr->GetTy()->typeArgs.empty(), "JArray type must be generic");
+        auto arrayElementType = ma->baseExpr->GetTy()->typeArgs[0];
+        if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
+            return VisitAction::WALK_CHILDREN;
+        }
+
+        static auto arrayJavaEntityGetDecl = ilib.FindArrayJavaEntityGetDecl(
+            *As<ASTKind::CLASS_DECL>(funcDecl->outerDecl));
+        CJC_ASSERT(arrayJavaEntityGetDecl);
+        auto newCallExpr = ASTCloner::Clone(callExpr);
+        newCallExpr->resolvedFunction = arrayJavaEntityGetDecl;
+        auto base = As<ASTKind::MEMBER_ACCESS>(newCallExpr->baseFunc);
+        base->target = arrayJavaEntityGetDecl;
+        base->SetTy(arrayJavaEntityGetDecl->GetTy());
+        callExpr->desugarExpr = ilib.UnwrapJavaEntity(
+            std::move(newCallExpr), arrayElementType, *As<ASTKind::CLASS_LIKE_DECL>(funcDecl->outerDecl));
+        callExpr->desugarArgs = std::nullopt;
+
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+}
+
+void DesugarJArray::ReplaceCallsWithArrayJavaEntitySet(File& file) const
+{
+    Walker(&file, Walker::GetNextWalkerID(), [this, &file](auto node) {
+        if (!node->IsSamePackage(*file.curPackage)) {
+            return VisitAction::WALK_CHILDREN;
+        }
+
+        Ptr<CallExpr> callExpr = As<ASTKind::CALL_EXPR>(node);
+        if (!callExpr) {
+            return VisitAction::WALK_CHILDREN;
+        }
+
+        auto funcDecl = callExpr->resolvedFunction;
+        if (!funcDecl || !funcDecl->outerDecl || !IsJArray(*funcDecl->outerDecl) ||
+            funcDecl->identifier != "[]" || callExpr->args.size() != 2
+        ) {
+            return VisitAction::WALK_CHILDREN;
+        }
+
+        auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
+        CJC_ASSERT_WITH_MSG(!ma->baseExpr->GetTy()->typeArgs.empty(), "JArray type must be generic");
+        auto arrayElementType = ma->baseExpr->GetTy()->typeArgs[0];
+        if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
+            return VisitAction::WALK_CHILDREN;
+        }
+
+        static auto arrayJavaEntitySetDecl = ilib.FindArrayJavaEntitySetDecl(
+            *As<ASTKind::CLASS_DECL>(funcDecl->outerDecl));
+        CJC_ASSERT(arrayJavaEntitySetDecl);
+        auto newCallExpr = ASTCloner::Clone(callExpr);
+        newCallExpr->resolvedFunction = arrayJavaEntitySetDecl;
+
+        newCallExpr->args[1] = ASTCloner::Clone(newCallExpr->args[1].get());
+        newCallExpr->args[1]->expr = ilib.WrapJavaEntity(std::move(newCallExpr->args[1]->expr));
+        newCallExpr->desugarArgs = std::nullopt;
+        callExpr->desugarArgs = std::nullopt;
+        auto base = As<ASTKind::MEMBER_ACCESS>(newCallExpr->baseFunc);
+        base->target = arrayJavaEntitySetDecl;
+        base->SetTy(arrayJavaEntitySetDecl->GetTy());
+        callExpr->args[1] = ASTCloner::Clone(newCallExpr->args[1].get());
+
+        callExpr->baseFunc = ASTCloner::Clone(newCallExpr->baseFunc.get());
+        callExpr->resolvedFunction = newCallExpr->resolvedFunction;
+        callExpr->desugarExpr = std::move(newCallExpr);
+
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+}
+
+DesugarJArray::DesugarJArray(JavaDesugarManager& man)
+    : typeManager(man.typeManager), importManager(man.importManager), ilib(man.lib)
+{
+}
+
+void DesugarJArray::Process(AfterTypeCheckContext& ctx)
+{
+    for (auto& mirror : ctx.GetJavaMirrors()) {
+        if (!IsJArray(*mirror)) {
+            continue;
+        }
+
+        auto& jArray = *StaticAs<ASTKind::CLASS_DECL>(mirror);
+        for (auto member : jArray.GetMemberDeclPtrs()) {
+            auto fd = As<ASTKind::FUNC_DECL>(member);
+            if (!fd) {
+                continue;
+            }
+            InsertOriginalSizeConstructorBody(*fd);
+        }
+        GenerateJniTypeConstructor(jArray);
+    }
+
+    for (auto& file : ctx.pkg.files) {
+        ReplaceCallsWithArrayJavaEntityGet(*file);
+        ReplaceCallsWithArrayJavaEntitySet(*file);
+        TransformConstructorCallsToPassJNIParam(*file);
+    }
+}
+
+}

@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -188,11 +188,6 @@ public:
     Ptr<FuncDecl> GetCallStaticMethodDecl();
 
     /**
-     * Java_CFFI_deleteCJObject
-     */
-    Ptr<FuncDecl> GetDeleteCJObjectDecl();
-
-    /**
      * Java_CFFI_removeFromRegistry
      */
     Ptr<FuncDecl> GetRemoveFromRegistryDecl();
@@ -204,8 +199,10 @@ public:
 
     /**
      * Java_CFFI_put_to_registry
+     * Puts to registry the passed object.
+     * Sets registry id field for corresponding java object.
      */
-    Ptr<FuncDecl> GetPutToRegistrySelfInitDecl();
+    Ptr<FuncDecl> GetPutSetToRegistryDecl();
 
     /**
      * Java_CFFI_unwrapJavaEntityAsValue
@@ -221,6 +218,16 @@ public:
      * Java_CFFI_getFromRegistryByEntityOption<T>
      */
     Ptr<FuncDecl> GetGetFromRegistryByEntityOptionDecl();
+
+    /**
+     * Java_CFFI_getRegistryId
+     */
+    Ptr<AST::FuncDecl> GetGetRegistryIdDecl();
+
+    /**
+     * Java_CFFI_getRegistryIdOrNone
+     */
+    Ptr<AST::FuncDecl> GetGetRegistryIdOrNoneDecl();
 
     /**
      * Java_CFFI_getFromRegistryByEntity<T>
@@ -513,13 +520,7 @@ public:
                                                   std::vector<OwnedPtr<Expr>> args, File& curFile);
 
     /**
-     * Java_CFFI_deleteCJObject(env, obj, self, getWeakRef)
-     */
-    OwnedPtr<CallExpr> CreateDeleteCJObjectCall(OwnedPtr<Expr> env, OwnedPtr<Expr> self,
-                                                OwnedPtr<Expr> getWeakRef, Ptr<Ty> cjTy /* generic param ty */);
-
-    /**
-     * Java_CFFI_removeFromRegistry(self)
+     * Java_CFFI_removeFromRegistry(registryId)
      */
     OwnedPtr<CallExpr> CreateRemoveFromRegistryCall(OwnedPtr<Expr> self);
 
@@ -528,13 +529,21 @@ public:
      */
     OwnedPtr<CallExpr> CreatePutToRegistryCall(OwnedPtr<Expr> obj);
 
-    OwnedPtr<CallExpr> CreatePutToRegistrySelfInitCall(OwnedPtr<Expr> env, OwnedPtr<Expr> entity, OwnedPtr<Expr> obj);
+    /**
+     * Java_CFFI_putToRegistry($jnienv, entity, obj)
+     * Puts the passed object obj to the registry.
+     * Assigns registry id field to corresponding java object.
+     */
+    OwnedPtr<CallExpr> CreatePutSetToRegistryCall(OwnedPtr<Expr> env, OwnedPtr<Expr> entity, OwnedPtr<Expr> obj);
+
+    OwnedPtr<AST::CallExpr> CreateGetRegistryIdCall(OwnedPtr<AST::Expr> env, OwnedPtr<AST::Expr> entity,
+        bool nullable = false);
 
     /**
      * Java_CFFI_getFromRegistryByObj{Option}<ty>(env, obj)
      */
     OwnedPtr<CallExpr> CreateGetFromRegistryByEntityCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj, Ptr<Ty> ty,
-                                                      bool retAsOption);
+                                                         bool retAsOption);
 
     /**
      * Java_CFFI_JavaStringToCangjie(env, jstring)
@@ -602,15 +611,17 @@ public:
     /**
      * env: JNIEnv_Ptr
      */
-    OwnedPtr<FuncParam> CreateEnvFuncParam();
+    OwnedPtr<FuncParam> CreateEnvFuncParam(); // TODO: merge with the same function but in `JavaDesugarManager`
 
     /**
      * _: jobject or jclass, default name is '_'
+     * TODO: merge with the same function but in `JavaDesugarManager`
      */
     OwnedPtr<FuncParam> CreateJClassOrJObjectFuncParam(const std::string& name = "_");
 
     /**
      * self: jlong
+     * TODO: merge with the same function but in `JavaDesugarManager`
      */
     OwnedPtr<FuncParam> CreateSelfFuncParam();
 
@@ -627,6 +638,11 @@ public:
 
     OwnedPtr<Expr> UnwrapJavaImplOption(OwnedPtr<Expr> env, OwnedPtr<Expr> entityOption, Ptr<Ty> ty,
         const ClassLikeDecl& mirror, bool toRaw = false);
+
+    /**
+     * Java_CFFI_JavaEntity -> reference wrapper
+     */
+    OwnedPtr<Expr> UnwrapJavaImpl(OwnedPtr<Expr> env, OwnedPtr<Expr> entity, Ptr<Ty> ty);
 
     /**
      * Creates unwrap call Java_CFFI_JavaEntity [entity] and returns the value it stores as [ty] if [toRaw] is `false`:
@@ -674,10 +690,17 @@ public:
         std::string classSign,
         Ptr<File> curFile);
 
+    /**
+     * ~init() {
+     *     Java_CFFI_deleteGlobalReference($jnienv, this.javaref)
+     * }
+     */
+    OwnedPtr<AST::FuncDecl> CreateDeletingGlobalRefFinalizer(AST::ClassDecl& decl);
+
     bool IsInteropLibAccessible() const;
     void CheckInteropLibVersion();
     static bool IsInteropLibAccessible(ImportManager& importManager);
-
+    static bool IsJavaEntityTy(Ty& ty);
 private:
    /**
     * Version value should be the same as for java interop library for the same SDK.
@@ -691,9 +714,6 @@ private:
         TypeKind::TYPE_INT8, TypeKind::TYPE_UINT16, TypeKind::TYPE_INT16, TypeKind::TYPE_INT32, TypeKind::TYPE_INT64,
         TypeKind::TYPE_FLOAT32, TypeKind::TYPE_FLOAT64
     };
-
-    OwnedPtr<Expr> CreateMirrorContructorCall(
-        Ptr<ClassLikeDecl> mirror, OwnedPtr<Expr> javaEntity, Ptr<Ty> expectedTy) const;
 
     OwnedPtr<Expr> UnwrapJavaArrayEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, const ClassLikeDecl& mirror);
     OwnedPtr<Expr> UnwrapJavaPrimitiveEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty);

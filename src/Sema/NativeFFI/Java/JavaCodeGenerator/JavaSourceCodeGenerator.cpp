@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -10,12 +10,10 @@
  * This file implements Java class generation.
  */
 
-#include <limits>
-
 #include "JavaSourceCodeGenerator.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Symbol.h"
-#include "cangjie/Utils/FileUtil.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/Utils/StdUtils.h"
 
 namespace {
@@ -434,6 +432,13 @@ std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(
         case TypeKind::TYPE_FUNC:
             javaType = GetLambdaJavaClassName(ty);
             break;
+        case TypeKind::TYPE_GENERICS:
+            if (IsGenericParam(ty, *decl, genericConfig)) {
+                // Current generic only support primitive type.
+                auto genericActualTy = GetGenericInstTy(genericConfig, ty, typeManager);
+                return MapCJTypeToJavaType(genericActualTy, javaImports, curPackageName, isNativeMethod);
+            }
+            break;
         default:
             if (ty->name == "String") {
                 javaType = "String";
@@ -566,9 +571,7 @@ void JavaSourceCodeGenerator::AddProperties()
     for (auto& pdecl : propDecls) {
         const PropDecl& propDecl = *StaticAs<ASTKind::PROP_DECL>(pdecl);
         CJC_ASSERT_WITH_MSG(!propDecl.getters.empty(), "property must have at least one getter");
-        const OwnedPtr<FuncDecl>& funcDecl = propDecl.getters[0];
-        const std::string type =
-            MapCJTypeToJavaType(funcDecl->funcBody->retType, &imports, &decl->fullPackageName, false);
+        const std::string type = MapCJTypeToJavaType(propDecl.GetTy(), &imports, &decl->fullPackageName, false);
 
         std::string varDecl = GetJavaMemberName(propDecl);
         std::string varDeclSuffix = varDecl;
@@ -823,17 +826,23 @@ void JavaSourceCodeGenerator::AddConstructor(const FuncDecl& ctor, const std::st
             AddWithIndent(TAB2, "overrideMask = classAnalyser.getOverrideMask(getClass());");
         }
         auto& params = ctor.funcBody->paramLists[0]->params;
-        std::string selfInit = "self = " + GetMangledJniInitCjObjectFuncName(mangler, params, false) + "(";
+        std::string initCall = GetMangledJniInitCjObjectFuncName(mangler, params, false) + "(";
         if (IsCJMappingOpenClass(ctor)) {
-            selfInit = selfInit + (params.empty() ? "overrideMask" : "overrideMask, ");
+            initCall += (params.empty() ? "overrideMask" : "overrideMask, ");
         }
         if (ctor.funcBody) {
-            selfInit += GenerateParamLists(ctor.funcBody->paramLists, [this](const OwnedPtr<FuncParam>& p) {
+            initCall += GenerateParamLists(ctor.funcBody->paramLists, [this](const OwnedPtr<FuncParam>& p) {
                 return FuncParamToString(p, this->genericConfig, this->typeManager);
             });
         }
-        selfInit += ");";
-        AddWithIndent(TAB2, selfInit);
+        initCall += ");";
+
+        if (!ctor.outerDecl || !IsImpl(*ctor.outerDecl)) {
+            // For JavaImpl classes, `init` call is `void`. registry ID is assigned in cangjie via JNI.
+            initCall = "self = " + initCall;
+        }
+
+        AddWithIndent(TAB2, initCall);
     } else {
         if (IsCJMappingOpenClass(ctor)) {
             AddWithIndent(TAB2, "overrideMask = 0;");
@@ -1244,7 +1253,14 @@ void JavaSourceCodeGenerator::AddNativeInitCJObject(
         strParams = strParams.empty() ? "long overrideMask" : "long overrideMask, " + strParams;
     }
 
-    std::string signature = modifier + "native long " + name + "(" + strParams + ");\n";
+    std::string signature = "private native ";
+    if (!fd.outerDecl || !IsImpl(*fd.outerDecl)) {
+        signature += "long ";
+    } else {
+        // For JavaImpl classes, `init` function is `void`.
+        signature += "void ";
+    }
+    signature += name + "(" + strParams + ");\n";
     AddWithIndent(TAB, signature);
 }
 
