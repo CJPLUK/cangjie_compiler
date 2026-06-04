@@ -171,7 +171,7 @@ OwnedPtr<Expr> ASTFactory::UnwrapEntity(OwnedPtr<Expr> expr)
     }
 
     CJC_ASSERT(expr->GetTy()->IsPrimitive() || expr->GetTy()->IsPointer() || Ty::IsCStructType(*expr->GetTy()) ||
-        expr->GetTy()->IsCFunc());
+        expr->GetTy()->IsCFunc() || expr->GetTy()->IsCString());
     return expr;
 }
 
@@ -278,8 +278,9 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy)
         }
     }
 
-    CJC_ASSERT(expr->GetTy()->IsPrimitive() || Ty::IsCStructType(*expr->GetTy()) || expr->GetTy()->IsCFunc());
-    CJC_ASSERT(wrapTy.IsPrimitive() || Ty::IsCStructType(wrapTy) || wrapTy.IsCFunc());
+    CJC_ASSERT(expr->GetTy()->IsPrimitive() || Ty::IsCStructType(*expr->GetTy()) || expr->GetTy()->IsCFunc() ||
+        expr->GetTy()->IsCString());
+    CJC_ASSERT(wrapTy.IsPrimitive() || Ty::IsCStructType(wrapTy) || wrapTy.IsCFunc() || wrapTy.IsCString());
     return expr;
 }
 

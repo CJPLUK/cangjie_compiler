@@ -33,6 +33,7 @@ static constexpr auto NATIVE_UINT_TYPE = "size_t";
 static constexpr auto FLOAT_TYPE = "float";
 static constexpr auto DOUBLE_TYPE = "double";
 static constexpr auto BOOL_TYPE = "BOOL";
+static constexpr auto CHAR_PTR_TYPE = "char*";
 static constexpr auto STRUCT_TYPE_PREFIX = "struct ";
 
 static constexpr auto TYPEDEF_PREFIX = "typedef ";
@@ -145,6 +146,8 @@ MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from) const
             return DOUBLE_TYPE;
         case TypeKind::TYPE_BOOLEAN:
             return BOOL_TYPE;
+        case TypeKind::TYPE_CSTRING:
+            return CHAR_PTR_TYPE;
         case TypeKind::TYPE_STRUCT:
             if (IsObjCPointer(from)) {
                 auto result = Cj2ObjCForObjC(*from.typeArgs[0]);
@@ -283,6 +286,10 @@ bool TypeMapper::IsObjCCompatible(const Ty& ty)
             }
         case TypeKind::TYPE_FUNC:
             if (ty.IsCFunc()) {
+                return true;
+            }
+        case TypeKind::TYPE_CSTRING:
+            if (ty.IsCString()) {
                 return true;
             }
         default:
