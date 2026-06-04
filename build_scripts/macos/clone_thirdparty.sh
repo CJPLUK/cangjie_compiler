@@ -18,10 +18,10 @@ cd ${WORKSPACE}
 	cd cangjie_tools/cangjie-language-server/third_party/sqlite3;
 	[ -d amalgamation ] || (
 		mkdir amalgamation;
-		cp src/shell.c amalgamation/;
-		cp src/sqlite3.c amalgamation/;
-		cp include/sqlite3.h amalgamation/;
-		cp include/sqlite3ext.h amalgamation/;
+		rsync -a --link-dest="$PWD/src" src/shell.c amalgamation/;
+		rsync -a --link-dest="$PWD/src" src/sqlite3.c amalgamation/;
+		rsync -a --link-dest="$PWD/include" include/sqlite3.h amalgamation/;
+		rsync -a --link-dest="$PWD/include" include/sqlite3ext.h amalgamation/;
 	)
 )
 [ -e cangjie_stdx/third_party/flatbuffers ] || ln -s ../../third_party/third_party_flatbuffers cangjie_stdx/third_party/flatbuffers
@@ -31,4 +31,3 @@ cd ${WORKSPACE}
 [ -e cangjie_runtime/runtime/third_party/third_party_bounds_checking_function ] || ln -s ../../../third_party/third_party_bounds_checking_function/ cangjie_runtime/runtime/third_party/third_party_bounds_checking_function
 [ -e cangjie_runtime/stdlib/third_party/boundscheck-v1.1.16 ] || ln -s ../../../third_party/third_party_bounds_checking_function/ cangjie_runtime/stdlib/third_party/boundscheck-v1.1.16
 [ -e cangjie_stdx/third_party/boundscheck-v1.1.16 ] || ln -s ../../third_party/third_party_bounds_checking_function/ cangjie_stdx/third_party/boundscheck-v1.1.16
-

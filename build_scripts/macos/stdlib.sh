@@ -10,4 +10,4 @@ cd $WORKSPACE/cangjie_runtime/stdlib;
 bash $WORKSPACE/build_scripts/macos/clone_thirdparty.sh
 python3 build.py build -t "$STDLIB_TARGET" --target-lib=$WORKSPACE/cangjie_runtime/runtime/output
 python3 build.py install;
-cp -R $WORKSPACE/cangjie_runtime/stdlib/output/* $WORKSPACE/cangjie_compiler/output/;
+rsync -a --link-dest="$WORKSPACE/cangjie_runtime/stdlib/output" "$WORKSPACE/cangjie_runtime/stdlib/output/" "$WORKSPACE/cangjie_compiler/output/";
