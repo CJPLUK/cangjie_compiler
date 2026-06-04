@@ -12,6 +12,8 @@
 #include "Diags.h"
 #include "TypeCheckUtil.h"
 
+#include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Create.h"
 #include "cangjie/AST/RecoverDesugar.h"
 
 using namespace Cangjie;
@@ -20,6 +22,75 @@ using namespace TypeCheckUtil;
 
 namespace {
 const std::vector<TokenKind> SHIFT_ASSIGN_OPERATOR = {TokenKind::LSHIFT_ASSIGN, TokenKind::RSHIFT_ASSIGN};
+
+template <typename F>
+bool TryDesugarExternMemberUpdate(
+    TypeManager& typeManager, ImportManager& importManager, AssignExpr& ae, F typecheck)
+{
+    if (ae.isCompound) {
+        return false;
+    }
+    auto ma = DynamicCast<MemberAccess*>(ae.leftValue.get());
+    if (!ma || !ma->baseExpr || !Ty::IsTyCorrect(ma->baseExpr->GetTy()) ||
+        !TypeIsExtern(importManager, ma->baseExpr->GetTy())) {
+        return false;
+    }
+
+    Ptr<Ty> rightTy = typecheck(ae.rightExpr.get());
+    if (!Ty::IsTyCorrect(rightTy)) {
+        ae.SetTy(TypeManager::GetInvalidTy());
+        return true;
+    }
+    rightTy = ae.rightExpr->GetTy();
+
+    auto sourceExternTy = ma->baseExpr->GetTy();
+    auto runtimeTy = sourceExternTy->typeArgs[0];
+    CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
+    auto runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    CJC_ASSERT(runtimeDecl);
+
+    auto runtimeRef = CreateRefExpr(*runtimeDecl);
+    runtimeRef->isAlone = false;
+    runtimeRef->SetTy(runtimeTy);
+    runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
+    CopyBasicInfo(&ae, runtimeRef.get());
+
+    auto memberUpdate = CreateMemberAccess(std::move(runtimeRef), "memberUpdate");
+    memberUpdate->isAlone = false;
+    memberUpdate->EnableAttr(Attribute::COMPILER_ADD);
+    CopyBasicInfo(&ae, memberUpdate.get());
+    auto memberUpdateDecl = DynamicCast<FuncDecl*>(memberUpdate->target);
+    if (!memberUpdateDecl) {
+        ae.SetTy(TypeManager::GetInvalidTy());
+        return true;
+    }
+    memberUpdate->instTys.emplace_back(rightTy);
+    memberUpdate->targets.emplace_back(memberUpdateDecl);
+
+    std::vector<OwnedPtr<FuncArg>> args;
+    args.emplace_back(CreateFuncArg(ASTCloner::Clone(Ptr(ma->baseExpr.get()))));
+    args.emplace_back(CreateFuncArg(CreateStringLit(importManager, ma->field.Val())));
+    args.emplace_back(CreateFuncArg(ASTCloner::Clone(Ptr(ae.rightExpr.get()))));
+
+    auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    auto call = CreateCallExpr(
+        std::move(memberUpdate), std::move(args), memberUpdateDecl, unitTy, CallKind::CALL_DECLARED_FUNCTION);
+    CopyBasicInfo(&ae, call.get());
+    call->sourceExpr = &ae;
+    call->EnableAttr(Attribute::COMPILER_ADD);
+
+    Ptr<Ty> callTy = typecheck(call.get());
+    bool isOk = Ty::IsTyCorrect(callTy) && call->resolvedFunction &&
+        call->resolvedFunction->identifier == "memberUpdate" && typeManager.IsSubtype(call->GetTy(), unitTy);
+
+    Ptr<Ty> resultTy = isOk ? Ptr<Ty>(unitTy) : Ptr<Ty>(TypeManager::GetInvalidTy());
+    ae.SetTy(resultTy);
+    call->SetTy(resultTy);
+    if (isOk) {
+        ae.desugarExpr = std::move(call);
+    }
+    return true;
+}
 
 /**
  * This table encodes the types of the operator and result, for every assignment operator, where key is assignment
@@ -360,6 +431,13 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr&
         return ae.GetTy();
     }
     auto lTy = Synthesize({ctx, SynPos::LEFT_VALUE}, ae.leftValue.get());
+    if (TryDesugarExternMemberUpdate(typeManager, importManager, ae, [this, &ctx](Ptr<Node> node) {
+        auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
+        ReplaceIdealTy(*node);
+        return ty;
+    })) {
+        return ae.GetTy();
+    }
     if (lTy->IsInvalid()) {
         ae.SetTy(TypeManager::GetInvalidTy());
         return TypeManager::GetInvalidTy();
