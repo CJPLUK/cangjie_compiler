@@ -22,8 +22,8 @@
 #include "Diags.h"
 #include "ExtraScopes.h"
 #include "JoinAndMeet.h"
-#include "NativeFFI/Java/BeforeTypeCheck/GenerateJavaMirror.h"
 #include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
+#include "NativeFFI/Java/BeforeTypeCheck/GenerateJavaMirror.h"
 #include "NativeFFI/ObjC/BeforeTypeCheck/Desugar.h"
 #include "NativeFFI/ObjC/Utils/InteropLibBridge.h"
 #include "Plugin/PluginCustomAnnoChecker.h"
@@ -37,9 +37,10 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Frontend/CompilerInstance.h"
+#include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Utils/CheckUtils.h"
-#include "cangjie/Utils/Utils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
+#include "cangjie/Utils/Utils.h"
 
 namespace Cangjie {
 using namespace Sema;
@@ -53,32 +54,27 @@ enum class ExternifyResult {
 };
 
 template <typename F>
-ExternifyResult TryExternify(TypeManager& typeManager, ImportManager& importManager, Ptr<Ty> target,
-    Ptr<Node> node, F typecheck)
+ExternifyResult CoerceToExtern(
+    TypeManager& typeManager, ImportManager& importManager, Ptr<Ty> target, Ptr<Node> node, F typecheck)
 {
-    // Extern declaration always exists
-    auto externDecl = importManager.GetCoreDecl<StructDecl>("Extern");
-    CJC_ASSERT(externDecl);
-
-    auto externTy = DynamicCast<StructTy*>(target);
     // Check if the type of the actual target is valid, and is Extern. If not, externification is unnecessary
-    if (!externTy || externTy->declPtr != externDecl || externTy->typeArgs.size() != 1) {
+    if (!TypeIsExtern(importManager, target)) {
         return ExternifyResult::Unnecessary;
     }
 
     // Externification only applies to expressions
-    auto expr = DynamicCast<Expr*>(node);
-    if (!expr) {
+    auto nodeExpr = DynamicCast<Expr*>(node);
+    if (!nodeExpr) {
         return ExternifyResult::Unnecessary;
     }
 
     // Typecheck the RHS as itself first.
     typecheck(node);
 
-    auto sourceTy = expr->GetTy();
+    auto sourceTy = nodeExpr->GetTy();
     // Typechecking of the inner node failed, so we fail
     if (!Ty::IsTyCorrect(sourceTy)) {
-        expr->SetTy(TypeManager::GetInvalidTy());
+        nodeExpr->SetTy(TypeManager::GetInvalidTy());
         return ExternifyResult::Failure;
     }
 
@@ -89,17 +85,17 @@ ExternifyResult TryExternify(TypeManager& typeManager, ImportManager& importMana
     }
 
     // Runtime type T in Extern<T>.
-    auto runtimeTy = externTy->typeArgs[0];
+    auto runtimeTy = target->typeArgs[0];
     CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
 
     auto runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
     CJC_ASSERT(runtimeDecl);
 
     OwnedPtr<Expr> inner;
-    if (expr->desugarExpr) {
-        inner = std::move(expr->desugarExpr);
+    if (nodeExpr->desugarExpr) {
+        inner = std::move(nodeExpr->desugarExpr);
     } else {
-        inner = ASTCloner::Clone(Ptr(expr));
+        inner = ASTCloner::Clone(Ptr(nodeExpr));
     }
 
     // Grab the reference to the runtime type from the Extern
@@ -108,15 +104,19 @@ ExternifyResult TryExternify(TypeManager& typeManager, ImportManager& importMana
     runtimeRef->isAlone = false;
     runtimeRef->SetTy(runtimeTy);
     runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
-    CopyBasicInfo(expr, runtimeRef.get());
+    CopyBasicInfo(nodeExpr, runtimeRef.get());
 
     // This yields T.toExtern
     auto toExtern = CreateMemberAccess(std::move(runtimeRef), "toExtern");
     toExtern->isAlone = false;
     toExtern->EnableAttr(Attribute::COMPILER_ADD);
-    CopyBasicInfo(expr, toExtern.get());
+    CopyBasicInfo(nodeExpr, toExtern.get());
     // TODO: Instantiate toExtern with the generic type parameter T
     auto toExternDecl = DynamicCast<FuncDecl*>(toExtern->target);
+    if (!toExternDecl) {
+        nodeExpr->SetTy(TypeManager::GetInvalidTy());
+        return ExternifyResult::Failure;
+    }
 
     // This is the the type parameter, as in T.toExtern<soruceTy>
     toExtern->instTys.emplace_back(sourceTy);
@@ -132,23 +132,27 @@ ExternifyResult TryExternify(TypeManager& typeManager, ImportManager& importMana
     // The actual call expressions, at last
     auto call =
         CreateCallExpr(std::move(toExtern), std::move(args), toExternDecl, target, CallKind::CALL_DECLARED_FUNCTION);
-    CopyBasicInfo(expr, call.get());
-    call->sourceExpr = expr;
+    CopyBasicInfo(nodeExpr, call.get());
+    call->sourceExpr = nodeExpr;
     call->EnableAttr(Attribute::COMPILER_ADD);
 
-    // Typecheck the function call
+    // Typecheck the function call.
     Ptr<Ty> callTy = typecheck(call.get());
-    CJC_ASSERT(Ty::IsTyCorrect(callTy));
+    if (!Ty::IsTyCorrect(callTy)) {
+        nodeExpr->SetTy(TypeManager::GetInvalidTy());
+        call->SetTy(TypeManager::GetInvalidTy());
+        return ExternifyResult::Failure;
+    }
 
     // Make sure everything ends up well
     bool isOk = call->resolvedFunction && call->resolvedFunction->identifier == "toExtern" &&
         typeManager.IsSubtype(call->GetTy(), target);
 
     Ty* resultTy = isOk ? target : TypeManager::GetInvalidTy();
-    expr->SetTy(resultTy);
+    nodeExpr->SetTy(resultTy);
     call->SetTy(resultTy);
     if (isOk) {
-        expr->desugarExpr = std::move(call);
+        nodeExpr->desugarExpr = std::move(call);
     }
     return isOk ? ExternifyResult::Success : ExternifyResult::Failure;
 }
@@ -1207,7 +1211,7 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
 
     // We have an expression of an arbitrary type, but we are expecting to go
     // into an extern. We do not actually fail here
-    switch (TryExternify(typeManager, importManager, realTarget, node, [this, &ctx](Ptr<Node> node) {
+    switch (CoerceToExtern(typeManager, importManager, realTarget, node, [this, &ctx](Ptr<Node> node) {
         auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
         ReplaceIdealTy(*node);
         return ty;
