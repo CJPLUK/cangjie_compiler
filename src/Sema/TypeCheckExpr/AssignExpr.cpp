@@ -23,6 +23,14 @@ using namespace TypeCheckUtil;
 namespace {
 const std::vector<TokenKind> SHIFT_ASSIGN_OPERATOR = {TokenKind::LSHIFT_ASSIGN, TokenKind::RSHIFT_ASSIGN};
 
+OwnedPtr<Expr> CloneEffectiveExpr(Ptr<Expr> expr)
+{
+    if (expr && expr->desugarExpr) {
+        return ASTCloner::Clone(Ptr(expr->desugarExpr.get()));
+    }
+    return ASTCloner::Clone(expr);
+}
+
 template <typename F>
 bool TryDesugarExternMemberUpdate(
     TypeManager& typeManager, ImportManager& importManager, AssignExpr& ae, F typecheck)
@@ -68,9 +76,9 @@ bool TryDesugarExternMemberUpdate(
     memberUpdate->targets.emplace_back(memberUpdateDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
-    args.emplace_back(CreateFuncArg(ASTCloner::Clone(Ptr(ma->baseExpr.get()))));
+    args.emplace_back(CreateFuncArg(CloneEffectiveExpr(Ptr(ma->baseExpr.get()))));
     args.emplace_back(CreateFuncArg(CreateStringLit(importManager, ma->field.Val())));
-    args.emplace_back(CreateFuncArg(ASTCloner::Clone(Ptr(ae.rightExpr.get()))));
+    args.emplace_back(CreateFuncArg(CloneEffectiveExpr(Ptr(ae.rightExpr.get()))));
 
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     auto call = CreateCallExpr(
@@ -82,6 +90,126 @@ bool TryDesugarExternMemberUpdate(
     Ptr<Ty> callTy = typecheck(call.get());
     bool isOk = Ty::IsTyCorrect(callTy) && call->resolvedFunction &&
         call->resolvedFunction->identifier == "memberUpdate" && typeManager.IsSubtype(call->GetTy(), unitTy);
+
+    Ptr<Ty> resultTy = isOk ? Ptr<Ty>(unitTy) : Ptr<Ty>(TypeManager::GetInvalidTy());
+    ae.SetTy(resultTy);
+    call->SetTy(resultTy);
+    if (isOk) {
+        ae.desugarExpr = std::move(call);
+    }
+    return true;
+}
+
+template <typename F>
+bool TryDesugarExternIndexUpdate(TypeManager& typeManager, ImportManager& importManager, AssignExpr& ae, F typecheck)
+{
+    if (ae.isCompound) {
+        return false;
+    }
+    auto se = DynamicCast<SubscriptExpr*>(ae.leftValue.get());
+    if (!se || !se->baseExpr || se->indexExprs.empty()) {
+        return false;
+    }
+
+    SetIsNotAlone(*se->baseExpr);
+    Ptr<Ty> sourceExternTy = typecheck(se->baseExpr.get());
+    for (auto& indexExpr : se->indexExprs) {
+        (void)typecheck(indexExpr.get());
+    }
+    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(importManager, sourceExternTy)) {
+        return false;
+    }
+    if (!std::all_of(se->indexExprs.cbegin(), se->indexExprs.cend(), [](auto& indexExpr) {
+        return indexExpr && Ty::IsTyCorrect(indexExpr->GetTy());
+    })) {
+        ae.SetTy(TypeManager::GetInvalidTy());
+        return true;
+    }
+
+    Ptr<Ty> rightTy = typecheck(ae.rightExpr.get());
+    if (!Ty::IsTyCorrect(rightTy)) {
+        ae.SetTy(TypeManager::GetInvalidTy());
+        return true;
+    }
+    rightTy = ae.rightExpr->GetTy();
+
+    auto runtimeTy = sourceExternTy->typeArgs[0];
+    CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
+    auto runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    CJC_ASSERT(runtimeDecl);
+
+    auto createRuntimeAccess = [&](OwnedPtr<Expr> baseExpr, Expr& indexExpr) -> OwnedPtr<CallExpr> {
+        auto runtimeRef = CreateRefExpr(*runtimeDecl);
+        runtimeRef->isAlone = false;
+        runtimeRef->SetTy(runtimeTy);
+        runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
+        CopyBasicInfo(&ae, runtimeRef.get());
+
+        auto indexAccess = CreateMemberAccess(std::move(runtimeRef), "indexAccess");
+        indexAccess->isAlone = false;
+        indexAccess->EnableAttr(Attribute::COMPILER_ADD);
+        CopyBasicInfo(&ae, indexAccess.get());
+        auto indexAccessDecl = DynamicCast<FuncDecl*>(indexAccess->target);
+        if (!indexAccessDecl) {
+            return nullptr;
+        }
+        indexAccess->targets.emplace_back(indexAccessDecl);
+
+        std::vector<OwnedPtr<FuncArg>> args;
+        args.emplace_back(CreateFuncArg(std::move(baseExpr)));
+        args.emplace_back(CreateFuncArg(CloneEffectiveExpr(Ptr(&indexExpr))));
+
+        auto call = CreateCallExpr(
+            std::move(indexAccess), std::move(args), indexAccessDecl, sourceExternTy, CallKind::CALL_DECLARED_FUNCTION);
+        CopyBasicInfo(&ae, call.get());
+        call->sourceExpr = &ae;
+        call->EnableAttr(Attribute::COMPILER_ADD);
+        call->SetTy(sourceExternTy);
+        return call;
+    };
+
+    OwnedPtr<Expr> updateBaseExpr = CloneEffectiveExpr(Ptr(se->baseExpr.get()));
+    for (size_t i = 0; i + 1 < se->indexExprs.size(); ++i) {
+        updateBaseExpr = createRuntimeAccess(std::move(updateBaseExpr), *se->indexExprs[i]);
+        if (!updateBaseExpr) {
+            ae.SetTy(TypeManager::GetInvalidTy());
+            return true;
+        }
+    }
+
+    auto runtimeRef = CreateRefExpr(*runtimeDecl);
+    runtimeRef->isAlone = false;
+    runtimeRef->SetTy(runtimeTy);
+    runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
+    CopyBasicInfo(&ae, runtimeRef.get());
+
+    auto indexUpdate = CreateMemberAccess(std::move(runtimeRef), "indexUpdate");
+    indexUpdate->isAlone = false;
+    indexUpdate->EnableAttr(Attribute::COMPILER_ADD);
+    CopyBasicInfo(&ae, indexUpdate.get());
+    auto indexUpdateDecl = DynamicCast<FuncDecl*>(indexUpdate->target);
+    if (!indexUpdateDecl) {
+        ae.SetTy(TypeManager::GetInvalidTy());
+        return true;
+    }
+    indexUpdate->instTys.emplace_back(rightTy);
+    indexUpdate->targets.emplace_back(indexUpdateDecl);
+
+    std::vector<OwnedPtr<FuncArg>> args;
+    args.emplace_back(CreateFuncArg(std::move(updateBaseExpr)));
+    args.emplace_back(CreateFuncArg(CloneEffectiveExpr(Ptr(se->indexExprs.back().get()))));
+    args.emplace_back(CreateFuncArg(CloneEffectiveExpr(Ptr(ae.rightExpr.get()))));
+
+    auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    auto call = CreateCallExpr(
+        std::move(indexUpdate), std::move(args), indexUpdateDecl, unitTy, CallKind::CALL_DECLARED_FUNCTION);
+    CopyBasicInfo(&ae, call.get());
+    call->sourceExpr = &ae;
+    call->EnableAttr(Attribute::COMPILER_ADD);
+
+    Ptr<Ty> callTy = typecheck(call.get());
+    bool isOk = Ty::IsTyCorrect(callTy) && call->resolvedFunction &&
+        call->resolvedFunction->identifier == "indexUpdate" && typeManager.IsSubtype(call->GetTy(), unitTy);
 
     Ptr<Ty> resultTy = isOk ? Ptr<Ty>(unitTy) : Ptr<Ty>(TypeManager::GetInvalidTy());
     ae.SetTy(resultTy);
@@ -413,13 +541,20 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr&
         }
         return ae.desugarExpr->GetTy();
     }
+    CJC_ASSERT(ae.leftValue && ae.rightExpr);
+    ae.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    if (TryDesugarExternIndexUpdate(typeManager, importManager, ae, [this, &ctx](Ptr<Node> node) {
+        auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
+        ReplaceIdealTy(*node);
+        return ty;
+    })) {
+        return ae.GetTy();
+    }
     std::vector<Diagnostic> diagsForOverload;
     // Check operator overloading for index accessing or compound assignment.
     if (auto ret = InferAssignExprCheckCaseOverloading(ctx, ae, diagsForOverload)) {
         return *ret;
     }
-    CJC_ASSERT(ae.leftValue && ae.rightExpr);
-    ae.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
     if (ae.leftValue->astKind == ASTKind::WILDCARD_EXPR) {
         if (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ae.rightExpr.get()))) {
             Ptr<Ty> rightTy = typeManager.ReplaceIdealTy(ae.rightExpr->GetTy());
