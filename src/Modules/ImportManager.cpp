@@ -1030,6 +1030,9 @@ void ImportManager::UpdateFileNodeImportInfo(Package& package, const File& file,
             (void)newFile->imports.emplace_back(ASTCloner::Clone(import.get()));
         }
     }
+    // Remove stale importSpec->packageName entries before resolving new imports; old ImportSpec pointers
+    // may be reused after the file is replaced, causing GetPackageNameByImport to return wrong package names.
+    cjoManager->RemoveImportedPackageNames(file.imports);
     for (auto& import : newFile->imports) {
         if (import->IsImportMulti()) {
             continue;
