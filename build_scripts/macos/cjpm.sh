@@ -7,5 +7,6 @@ set -o xtrace
 # cjpm
 cd $WORKSPACE/cangjie_tools/cjpm/build;
 [ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
+bash $WORKSPACE/build_scripts/macos/clone_thirdparty.sh
 python3 build.py build -t "$CJPM_TARGET" --set-rpath @loader_path/../../runtime/lib/darwin_${ARCH}_cjnative;
 python3 build.py install;

@@ -7,5 +7,6 @@ set -o xtrace
 # LSP
 cd $WORKSPACE/cangjie_tools/cangjie-language-server/build;
 [ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
+bash $WORKSPACE/build_scripts/macos/clone_thirdparty.sh
 python3 build.py build -t "$LSP_TARGET";
 python3 build.py install;

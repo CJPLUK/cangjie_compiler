@@ -7,6 +7,7 @@ set -o xtrace
 # STDX
 cd $WORKSPACE/cangjie_stdx;
 [ "$SKIP_CLEAN" -eq 1 ] || python3 build.py clean;
+bash $WORKSPACE/build_scripts/macos/clone_thirdparty.sh
 python3 build.py build -t "$STDX_TARGET" --include=$WORKSPACE/cangjie_compiler/include
 python3 build.py install;
 # export CANGJIE_STDX_PATH=$WORKSPACE/cangjie_stdx/target/darwin_${ARCH}_cjnative/static/stdx;
