@@ -822,7 +822,7 @@ bool IsEnumCtorWithoutTypeArgs(const Expr& expr, Ptr<const Decl> target)
         // For enum like 'None'.
         return expr.GetTypeArgs().empty();
     } else if (auto ma = DynamicCast<const MemberAccess*>(&expr);
-        ma && ma->baseExpr && ma->baseExpr->IsReferenceExpr()) {
+               ma && ma->baseExpr && ma->baseExpr->IsReferenceExpr()) {
         auto baseTypeArgs = ma->baseExpr->GetTypeArgs();
         auto baseDecl = ma->baseExpr->GetTarget();
         CJC_NULLPTR_CHECK(baseDecl);
@@ -1230,8 +1230,8 @@ inline bool IsNormalCtorRef(const AST::Node& node)
     return !re || (!re->isThis && !re->isSuper);
 }
 
-bool IsLegalAccess(Symbol* curComposite, const Decl& d, const AST::Node& node, ImportManager& importManager,
-    TypeManager& typeManager)
+bool IsLegalAccess(
+    Symbol* curComposite, const Decl& d, const AST::Node& node, ImportManager& importManager, TypeManager& typeManager)
 {
     auto vd = DynamicCast<const VarDecl*>(&d);
     auto fd = DynamicCast<const FuncDecl*>(&d);
@@ -1312,4 +1312,21 @@ Ptr<Decl> FindCorrespondingCommonDecl(const Decl& specificDecl)
     return nullptr;
 }
 
+bool TypeIsExtern(ImportManager& importManager, Ptr<Ty> ty)
+{
+    // Extern declaration always exists
+    auto externDecl = importManager.GetCoreDecl<StructDecl>("Extern");
+    CJC_ASSERT(externDecl);
+
+    // Check if the type of the actual target is valid, and is Extern. If not, externification is unnecessary
+    auto structTy = DynamicCast<StructTy*>(ty);
+    return structTy && structTy->declPtr == externDecl && structTy->typeArgs.size() == 1;
+}
+
+OwnedPtr<LitConstExpr> CreateStringLit(ImportManager& importManager, const std::string& value)
+{
+    auto stringDecl = importManager.GetCoreDecl<StructDecl>("String");
+    CJC_ASSERT(stringDecl);
+    return CreateLitConstExpr(LitConstKind::STRING, value, stringDecl->GetTy(), true);
+}
 } // namespace Cangjie::TypeCheckUtil
