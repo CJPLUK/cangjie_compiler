@@ -47,6 +47,116 @@ using namespace Sema;
 using namespace TypeCheckUtil;
 using namespace AST;
 
+enum class ExternifyResult {
+    Unnecessary,
+    Failure,
+    Success,
+};
+
+template <typename F>
+ExternifyResult CoerceToExtern(
+    TypeManager& typeManager, ImportManager& importManager, Ptr<Ty> target, Ptr<Node> node, F typecheck)
+{
+    // Check if the type of the actual target is valid, and is Extern. If not, externification is unnecessary
+    if (!TypeIsExtern(importManager, target)) {
+        return ExternifyResult::Unnecessary;
+    }
+
+    // Externification only applies to expressions
+    auto nodeExpr = DynamicCast<Expr*>(node);
+    if (!nodeExpr) {
+        return ExternifyResult::Unnecessary;
+    }
+
+    // Typecheck the RHS as itself first.
+    typecheck(node);
+
+    auto sourceTy = nodeExpr->GetTy();
+    // Typechecking of the inner node failed, so we fail
+    if (!Ty::IsTyCorrect(sourceTy)) {
+        nodeExpr->SetTy(TypeManager::GetInvalidTy());
+        return ExternifyResult::Failure;
+    }
+
+    // Node is extern as well, nothing to be done
+    if (typeManager.IsSubtype(sourceTy, target)) {
+        // Should this be unnecessary??
+        return ExternifyResult::Success;
+    }
+
+    // Runtime type T in Extern<T>.
+    auto runtimeTy = target->typeArgs[0];
+    CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
+
+    auto runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    CJC_ASSERT(runtimeDecl);
+
+    OwnedPtr<Expr> inner;
+    if (nodeExpr->desugarExpr) {
+        inner = std::move(nodeExpr->desugarExpr);
+    } else {
+        inner = ASTCloner::Clone(Ptr(nodeExpr));
+    }
+
+    // Grab the reference to the runtime type from the Extern
+    // Ie, if target is Extern<T>, this grabs T
+    auto runtimeRef = CreateRefExpr(*runtimeDecl);
+    runtimeRef->isAlone = false;
+    runtimeRef->SetTy(runtimeTy);
+    runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
+    CopyBasicInfo(nodeExpr, runtimeRef.get());
+
+    // This yields T.toExtern
+    auto toExtern = CreateMemberAccess(std::move(runtimeRef), "toExtern");
+    toExtern->isAlone = false;
+    toExtern->EnableAttr(Attribute::COMPILER_ADD);
+    CopyBasicInfo(nodeExpr, toExtern.get());
+    // TODO: Instantiate toExtern with the generic type parameter T
+    auto toExternDecl = DynamicCast<FuncDecl*>(toExtern->target);
+    if (!toExternDecl) {
+        nodeExpr->SetTy(TypeManager::GetInvalidTy());
+        return ExternifyResult::Failure;
+    }
+
+    // This is the the type parameter, as in T.toExtern<soruceTy>
+    toExtern->instTys.emplace_back(sourceTy);
+    // This adds the toExternDecl to the sets of overload targets, we need this
+    // as we are gonna pass this into Synthesise that runs inference for the entire tree
+    toExtern->targets.emplace_back(toExternDecl);
+
+    // The array of arguments, which grabs wahatevet the inner expression of node is -- due to the fact that
+    // node could be desugared already
+    std::vector<OwnedPtr<FuncArg>> args = {};
+    args.emplace_back(CreateFuncArg(std::move(inner)));
+
+    // The actual call expressions, at last
+    auto call =
+        CreateCallExpr(std::move(toExtern), std::move(args), toExternDecl, target, CallKind::CALL_DECLARED_FUNCTION);
+    CopyBasicInfo(nodeExpr, call.get());
+    call->sourceExpr = nodeExpr;
+    call->EnableAttr(Attribute::COMPILER_ADD);
+
+    // Typecheck the function call.
+    Ptr<Ty> callTy = typecheck(call.get());
+    if (!Ty::IsTyCorrect(callTy)) {
+        nodeExpr->SetTy(TypeManager::GetInvalidTy());
+        call->SetTy(TypeManager::GetInvalidTy());
+        return ExternifyResult::Failure;
+    }
+
+    // Make sure everything ends up well
+    bool isOk = call->resolvedFunction && call->resolvedFunction->identifier == "toExtern" &&
+        typeManager.IsSubtype(call->GetTy(), target);
+
+    Ty* resultTy = isOk ? target : TypeManager::GetInvalidTy();
+    nodeExpr->SetTy(resultTy);
+    call->SetTy(resultTy);
+    if (isOk) {
+        nodeExpr->desugarExpr = std::move(call);
+    }
+    return isOk ? ExternifyResult::Success : ExternifyResult::Failure;
+}
+
 TypeChecker::TypeChecker(CompilerInstance* ci)
 {
     impl = std::make_unique<TypeCheckerImpl>(ci);
@@ -243,7 +353,7 @@ bool TypeChecker::TypeCheckerImpl::CheckNormalFuncBody(ASTContext& ctx, FuncBody
     // Check and update return type for foreign functions.
     if (!Ty::IsTyCorrect(fb.retType->GetTy())) {
         if (!fb.TestAttr(Attribute::IS_CHECK_VISITED)) {
-            fb.EnableAttr(Attribute::IS_CHECK_VISITED); // Avoid re-enter funcDecl check, when function is invalid.
+            fb.EnableAttr(Attribute::IS_CHECK_VISITED);     // Avoid re-enter funcDecl check, when function is invalid.
             Synthesize({ctx, SynPos::NONE}, fb.body.get()); // Synthesize for other decl/expr in function body.
         }
         fb.SetTy(typeManager.GetFunctionTy(paramTys, fb.retType->GetTy(), {isCFunc, false, hasVariableLenArg}));
@@ -1098,6 +1208,22 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
 
     bool chkRet = false;
     auto realTarget = typeManager.TryGreedySubst(target);
+
+    // We have an expression of an arbitrary type, but we are expecting to go
+    // into an extern. We do not actually fail here
+    switch (CoerceToExtern(typeManager, importManager, realTarget, node, [this, &ctx](Ptr<Node> node) {
+        auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
+        ReplaceIdealTy(*node);
+        return ty;
+    })) {
+        case ExternifyResult::Unnecessary:
+            break;
+        case ExternifyResult::Failure:
+            return false;
+        case ExternifyResult::Success:
+            return true;
+    }
+
     if (realTarget->IsPlaceholder() && !AcceptPlaceholderTarget(*node)) {
         auto& cst = typeManager.constraints[RawStaticCast<GenericsTy*>(realTarget)];
         Ptr<Ty> lub = nullptr;
@@ -1419,7 +1545,8 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithNegCache(const CheckerContex
         return Synthesize(ctx, node);
     }
     CacheKey key = GetCacheKeyForSyn(ctx.Ctx(), node);
-    if (ctx.Ctx().typeCheckCache[node].synCache.count(key) != 0 && !ctx.Ctx().typeCheckCache[node].synCache[key].successful) {
+    if (ctx.Ctx().typeCheckCache[node].synCache.count(key) != 0 &&
+        !ctx.Ctx().typeCheckCache[node].synCache[key].successful) {
         auto& cache = ctx.Ctx().typeCheckCache[node].synCache[key];
         RestoreCached(ctx.Ctx(), node, cache);
         return cache.result;
@@ -1466,7 +1593,8 @@ bool TypeChecker::TypeCheckerImpl::CheckWithEffectiveCache(
     return CheckAndCache(ctx, target, node, key);
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithEffectiveCache(const CheckerContext& ctx, Ptr<Node> node, bool recoverDiag)
+Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithEffectiveCache(
+    const CheckerContext& ctx, Ptr<Node> node, bool recoverDiag)
 {
     if (!typeManager.GetUnsolvedTyVars().empty() || !node) {
         return Synthesize(ctx, node);
@@ -1890,7 +2018,8 @@ void MarkImplicitUsedFunctions(const Package& pkg)
             {"arrayInitByCollection", "arrayInitByFunction", "composition", "handleException",
                 "createOverflowExceptionMsg", "createArithmeticExceptionMsg", "getCommandLineArgs"}},
         {AST_PACKAGE_NAME,
-            {MACRO_OBJECT_NAME, "refreshTokensPosition", "refreshPos", "unsafePointerCastFromUint8Array", "transformTokens"}}};
+            {MACRO_OBJECT_NAME, "refreshTokensPosition", "refreshPos", "unsafePointerCastFromUint8Array",
+                "transformTokens"}}};
     auto found = SPECIAL_EXPORTED_FUNCS.find(pkg.fullPackageName);
     if (found == SPECIAL_EXPORTED_FUNCS.end()) {
         return;
