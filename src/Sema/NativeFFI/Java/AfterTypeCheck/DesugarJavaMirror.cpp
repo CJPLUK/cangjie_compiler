@@ -260,19 +260,7 @@ void JavaDesugarManager::InsertAbstractJavaRefGetter(ClassLikeDecl& decl)
 
 void JavaDesugarManager::InsertJavaRefGetterWithBody(ClassDecl& decl)
 {
-    auto iter = decl.GetMemberDecls().begin();
-    for (auto& member : decl.GetMemberDecls()) {
-        if (auto fd = DynamicCast<FuncDecl*>(member.get())) {
-            if (IsJavaRefGetter(*fd)) {
-                // remove stub from parser stage
-                decl.GetMemberDecls().erase(iter);
-                break;
-            }
-        }
-        iter++;
-    }
     auto javaEntityDecl = lib.GetJavaEntityDecl();
-
     std::vector<OwnedPtr<FuncParam>> callParams;
     std::vector<OwnedPtr<FuncParamList>> paramLists;
     paramLists.push_back(CreateFuncParamList(std::move(callParams)));

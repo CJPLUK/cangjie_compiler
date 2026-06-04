@@ -19,11 +19,6 @@ namespace Cangjie::Interop::Java {
     {
         for (auto& file : pkg.files) {
             for (auto& decl : file->decls) {
-                if (IsJObject(*decl, pkg.fullPackageName)) {
-                    if (auto cd = DynamicCast<ClassDecl*>(decl.get())) {
-                        InsertJavaRefGetterStubWithBody(*cd);
-                    }
-                }
                 if (IsMirror(*decl)) {
                     if (auto cd = DynamicCast<ClassDecl*>(decl.get())) {
                         InsertMirrorVarProp(*cd, Attribute::JAVA_MIRROR);

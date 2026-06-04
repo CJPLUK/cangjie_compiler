@@ -816,40 +816,6 @@ bool IsFwdClass(const Node& node)
     return node.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD);
 }
 
-/**
- * public func $getJavaRef(): Java_CFFI_JavaEntity {
- *     return Java_CFFI_JavaEntity()
- * }
- */
-void InsertJavaRefGetterStubWithBody(ClassDecl& decl)
-{
-    std::vector<OwnedPtr<FuncParam>> callParams;
-    std::vector<OwnedPtr<FuncParamList>> paramLists;
-    auto pl = CreateFuncParamList(std::move(callParams));
-    pl->begin = decl.begin;
-    pl->end = decl.end;
-    paramLists.push_back(std::move(pl));
-
-    auto constructor = CreateCallExpr(CreateRefExpr(INTEROPLIB_CFFI_JAVA_ENTITY), {});
-    auto ret = CreateReturnExpr(std::move(constructor));
-    std::vector<OwnedPtr<Node>> nodes;
-    nodes.emplace_back(std::move(ret));
-
-    auto funcBody = CreateFuncBody(
-        std::move(paramLists),
-        CreateRefType(INTEROPLIB_CFFI_JAVA_ENTITY),
-        CreateBlock(std::move(nodes)));
-
-    auto fd = CreateFuncDecl(JAVA_REF_GETTER_FUNC_NAME, std::move(funcBody), nullptr);
-    fd->EnableAttr(Attribute::PUBLIC, Attribute::IN_CLASSLIKE);
-    fd->fullPackageName = decl.fullPackageName;
-    fd->funcBody->funcDecl = fd.get();
-    fd->funcBody->parentClassLike = &decl;
-    fd->outerDecl = &decl;
-
-    decl.body->decls.emplace_back(std::move(fd));
-}
-
 bool IsDeclAppropriateForSyntheticClassGeneration(const Node& node)
 {
     return IsMirror(node) && (node.IsInterfaceDecl() || node.IsAbstractClass());
