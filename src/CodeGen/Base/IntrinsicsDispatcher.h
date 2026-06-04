@@ -100,6 +100,7 @@ const std::unordered_set<CHIR::IntrinsicKind> BUILTIN_FUNC_SET = {
     CHIR::IntrinsicKind::RAW_ARRAY_REFEQ,
 #endif
     CHIR::IntrinsicKind::OBJECT_ZERO_VALUE,
+    CHIR::IntrinsicKind::GET_PAYLOAD,
     CHIR::IntrinsicKind::ARRAY_ACQUIRE_RAW_DATA,
     CHIR::IntrinsicKind::ARRAY_RELEASE_RAW_DATA,
     CHIR::IntrinsicKind::CPOINTER_GET_POINTER_ADDRESS,

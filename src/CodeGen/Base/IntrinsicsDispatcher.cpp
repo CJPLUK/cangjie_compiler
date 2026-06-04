@@ -560,6 +560,17 @@ llvm::Value* BitCast(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsi
     return irBuilder.CreateBitCast(fromVal, resTy->GetLLVMType());
 }
 
+llvm::Value* GetPayload(IRBuilder2& irBuilder, CGValue& externValue)
+{
+    CJC_ASSERT(externValue.GetCGType()->IsPointerType());
+    // get the field 0 of the externValue
+    auto val = irBuilder.CreateGEP(externValue, {0U});
+    if (externValue.GetRawValue()->getType()->getPointerAddressSpace() == 1U) {
+        irBuilder.GetCGModule().GetCGContext().SetBasePtr(val.GetRawValue(), externValue.GetRawValue());
+    }
+    return irBuilder.CreateLoad(val);
+}
+
 llvm::Value* GenerateBuiltinCall(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
 {
     auto parameters = HandleSyscallIntrinsicArguments(irBuilder, intrinsic.GetOperands());
@@ -574,6 +585,9 @@ llvm::Value* GenerateBuiltinCall(IRBuilder2& irBuilder, const CHIRIntrinsicWrapp
             return irBuilder.CreateICmpEQ(**parameters[0], **parameters[1]);
         case CHIR::IntrinsicKind::OBJECT_ZERO_VALUE:
             return irBuilder.CallIntrinsicForUninitialized(*intrinsic.GetResult()->GetType());
+        case CHIR::IntrinsicKind::GET_PAYLOAD:
+            CJC_ASSERT(intrinsic.GetNumOfOperands() == 1);
+            return GetPayload(irBuilder, *parameters[0]);
         case CHIR::IntrinsicKind::SIZE_OF: {
             auto typeArgs = intrinsic.GetInstantiatedTypeArgs();
             return irBuilder.GetSize_Native(*typeArgs[0]);
