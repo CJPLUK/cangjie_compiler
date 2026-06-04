@@ -8,6 +8,9 @@ ERROR(sema_diag_begin, "")
 
 // General
 ERROR(sema_invalid_node_after_check, "semantic error")
+ERROR(sema_invalid_forced_cast_expr,
+    "invalid interoperation forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of "
+    "'Extern' type; use 'as' for ordinary type conversions")
 ERROR(sema_unable_to_infer_decl, "unable to infer declaration type, please add type annotation")
 ERROR(sema_mismatched_types, "mismatched types", "expected '%s', found '%s'")
 ERROR(sema_mismatched_types_multiple_assign, "mismatched types", "the expression has type '%s'")

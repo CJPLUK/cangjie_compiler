@@ -339,12 +339,15 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr&
         }
         return ae.desugarExpr->ty;
     }
+    CJC_ASSERT(ae.leftValue && ae.rightExpr);
+    if (TryDesugarExternIndexUpdate(ctx, ae)) {
+        return ae.ty;
+    }
     std::vector<Diagnostic> diagsForOverload;
     // Check operator overloading for index accessing or compound assignment.
     if (auto ret = InferAssignExprCheckCaseOverloading(ctx, ae, diagsForOverload)) {
         return *ret;
     }
-    CJC_ASSERT(ae.leftValue && ae.rightExpr);
     ae.ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     if (ae.leftValue->astKind == ASTKind::WILDCARD_EXPR) {
         if (Ty::IsTyCorrect(Synthesize(ctx, ae.rightExpr.get()))) {
@@ -356,6 +359,9 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr&
         return ae.ty;
     }
     auto lTy = Synthesize(ctx, ae.leftValue.get());
+    if (TryDesugarExternMemberUpdate(ctx, ae)) {
+        return ae.ty;
+    }
     if (lTy->IsInvalid()) {
         ae.ty = TypeManager::GetInvalidTy();
         return TypeManager::GetInvalidTy();

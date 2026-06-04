@@ -2004,6 +2004,40 @@ void LexerImpl::Reset()
     }
 }
 
+// Stack-based reset points (independent of the single-slot SetResetPoint/Reset),
+// so nested speculative parses do not clobber an enclosing point. ParserScope pairs
+// Push (ctor) with Drop (dtor).
+void LexerImpl::PushResetPoint()
+{
+    resetPoints.push_back(ResetPoint{
+        pCurrent, pNext, lookAheadCache, static_cast<unsigned>(lineOffsetsFromBase.size()), curToken});
+}
+
+void LexerImpl::RestoreResetPoint()
+{
+    if (resetPoints.empty()) {
+        return;
+    }
+    const auto& resetPoint = resetPoints.back();
+    pCurrent = resetPoint.current;
+    pNext = resetPoint.next;
+    lookAheadCache = resetPoint.lookAheadCache;
+    curToken = resetPoint.tokenIndex;
+
+    unsigned curLineOffsetsFromBase = static_cast<unsigned>(lineOffsetsFromBase.size());
+    while (curLineOffsetsFromBase > resetPoint.lineOffsetsSize && !lineOffsetsFromBase.empty()) {
+        lineOffsetsFromBase.pop_back();
+        --curLineOffsetsFromBase;
+    }
+}
+
+void LexerImpl::DropResetPoint()
+{
+    if (!resetPoints.empty()) {
+        resetPoints.pop_back();
+    }
+}
+
 Token LexerImpl::Next()
 {
     Token token{TokenKind::SENTINEL, "", Position(0, 1, 1), Position{0, 1, 1}};

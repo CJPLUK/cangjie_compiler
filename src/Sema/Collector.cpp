@@ -976,6 +976,25 @@ void Collector::BuildSymbolTable(ASTContext& ctx, Ptr<Node> node, bool buildTrie
             BuildSymbolTable(ctx, pe->expr.get(), buildTrie);
             break;
         }
+        case ASTKind::AMBIGUOUS_FORCED_CAST_EXPR: {
+            auto afce = StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(node);
+            // Record the enclosing scope on the AFC itself. It is a transient parse node, but
+            // its Sema desugaring copies scope info onto compiler-created references (e.g. the
+            // runtime type of a forced cast); without a scope those references cannot be
+            // resolved when the expression is re-checked (e.g. inside a call-argument lambda).
+            afce->scopeName = ctx.currentScopeName;
+            afce->scopeLevel = ctx.currentScopeLevel;
+            if (afce->type) {
+                BuildSymbolTable(ctx, afce->type.get(), buildTrie);
+            }
+            if (afce->leftExpr) {
+                BuildSymbolTable(ctx, afce->leftExpr.get(), buildTrie);
+            }
+            if (afce->rightExpr) {
+                BuildSymbolTable(ctx, afce->rightExpr.get(), buildTrie);
+            }
+            break;
+        }
         case ASTKind::QUOTE_EXPR: {
             auto qe = StaticAs<ASTKind::QUOTE_EXPR>(node);
             CollectQuoteExpr(ctx, *qe, buildTrie);

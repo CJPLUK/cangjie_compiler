@@ -675,6 +675,13 @@ enum class Attribute {
      */
     CJ_MIRROR_OBJC_INTERFACE_FWD,
 
+    /**
+     * Mark whether the node is generated while desugaring Extern operations.
+     * W: Sema
+     * R: AST recovery
+     */
+    EXTERN_DESUGAR,
+
     AST_ATTR_END,
 };
 

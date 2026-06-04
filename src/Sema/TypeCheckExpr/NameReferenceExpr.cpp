@@ -546,6 +546,9 @@ void TypeChecker::TypeCheckerImpl::InferMemberAccess(ASTContext& ctx, MemberAcce
     }
     SetIsNotAlone(*ma.baseExpr);
     auto targetOfBase = GetBaseDeclInMemberAccess(ctx, ma);
+    if (ma.baseExpr && Ty::IsTyCorrect(ma.baseExpr->ty) && TryDesugarExternMemberAccess(ctx, ma)) {
+        return;
+    }
     TryInitializeBaseSum(ctx, ma);
     // baseExpr is Synthesized by GetBaseDeclInMemberAccess. Refactor later.
     // Whether current is access member by type alias of primitive types.

@@ -514,6 +514,11 @@ struct ASTHasherImpl {
         HashExpr<whatTypeToHash>(pe);
         SUPERHash<whatTypeToHash>(pe.expr);
     }
+    template <int whatTypeToHash> void HashAmbiguousForcedCastExpr(const AmbiguousForcedCastExpr& afce)
+    {
+        HashExpr<whatTypeToHash>(afce);
+        SUPERHash<whatTypeToHash>(afce.type, afce.leftExpr, afce.rightExpr);
+    }
     template <int whatTypeToHash> void HashPointerExpr(const PointerExpr& pe)
     {
         HashExpr<whatTypeToHash>(pe);

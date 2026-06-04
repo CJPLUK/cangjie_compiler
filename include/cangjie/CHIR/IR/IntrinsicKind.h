@@ -80,6 +80,9 @@ static const std::string CPOINTER_ADD_NAME = "addPointer";
 static const std::string CSTRING_CONVERT_CSTR_TO_PTR_NAME = "convertCStr2Ptr";
 static const std::string BIT_CAST_NAME = "bitCast";
 
+// Extern getPayload
+static const std::string GET_PAYLOAD_NAME = "getPayload";
+
 /*
  * Used for the mock framework purpuses, to match concrete types of type parameters to the defined stubs
  * The intrinsic doesn't have a declaration and for its call,

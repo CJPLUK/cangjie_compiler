@@ -838,6 +838,10 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::Synthesize(ASTContext& ctx, Ptr<Node> node
             node->ty = SynParenExpr(*curCtx, *StaticAs<ASTKind::PAREN_EXPR>(node));
             break;
         }
+        case ASTKind::AMBIGUOUS_FORCED_CAST_EXPR: {
+            node->ty = SynAmbiguousForcedCastExpr(*curCtx, *StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(node));
+            break;
+        }
         case ASTKind::LAMBDA_EXPR: {
             node->ty = SynLamExpr(*curCtx, *StaticAs<ASTKind::LAMBDA_EXPR>(node));
             break;
@@ -1107,7 +1111,12 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
 
     bool chkRet = false;
     auto realTarget = typeManager.TryGreedySubst(target);
-    if (realTarget->IsPlaceholder() && !AcceptPlaceholderTarget(*node)) {
+
+    // Check if the type of the actual target is valid, and is Extern. If not, externification is unnecessary
+    if (auto nodeExpr = DynamicCast<Expr*>(node.get());
+        nodeExpr && node->astKind != ASTKind::BLOCK && TypeIsExtern(*realTarget)) {
+        chkRet = CoerceToExtern(ctx, *realTarget, *nodeExpr);
+    } else if (realTarget->IsPlaceholder() && !AcceptPlaceholderTarget(*node)) {
         auto& cst = typeManager.constraints[RawStaticCast<GenericsTy*>(realTarget)];
         Ptr<Ty> lub = nullptr;
         if (!cst.ubs.empty()) {
@@ -1175,6 +1184,11 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
             }
             case ASTKind::PAREN_EXPR: {
                 chkRet = ChkParenExpr(*curCtx, *realTarget, *StaticAs<ASTKind::PAREN_EXPR>(node));
+                break;
+            }
+            case ASTKind::AMBIGUOUS_FORCED_CAST_EXPR: {
+                chkRet = ChkAmbiguousForcedCastExpr(
+                    *curCtx, *realTarget, *StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(node));
                 break;
             }
             case ASTKind::BINARY_EXPR: {

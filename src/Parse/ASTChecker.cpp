@@ -563,6 +563,13 @@ void ASTChecker::CheckParenExpr(Ptr<Node> node)
     AST_NULLPTR_CHECK(node, pe->expr);
     ZERO_POSITION_CHECK(node, pe->rightParenPos);
 }
+void ASTChecker::CheckAmbiguousForcedCastExpr(Ptr<Node> node)
+{
+    auto afce = StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(node);
+    // `type` and `leftExpr` are individually optional (a parse may fail), but the
+    // operand is always present and at least one of type/leftExpr must exist.
+    AST_NULLPTR_CHECK(node, afce->rightExpr);
+}
 void ASTChecker::CheckPointerExpr(Ptr<Node> node)
 {
     auto pe = StaticAs<ASTKind::POINTER_EXPR>(node);

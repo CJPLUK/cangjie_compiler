@@ -750,6 +750,24 @@ OwnedPtr<ParenExpr> ASTCloner::CloneParenExpr(const ParenExpr& pe, const VisitFu
     return expr;
 }
 
+OwnedPtr<AmbiguousForcedCastExpr> ASTCloner::CloneAmbiguousForcedCastExpr(
+    const AmbiguousForcedCastExpr& afce, const VisitFunc& visitor)
+{
+    auto expr = MakeOwned<AmbiguousForcedCastExpr>();
+    if (afce.type) {
+        expr->type = CloneType(afce.type.get(), visitor);
+    }
+    if (afce.leftExpr) {
+        expr->leftExpr = CloneExpr(afce.leftExpr.get(), visitor);
+    }
+    if (afce.rightExpr) {
+        expr->rightExpr = CloneExpr(afce.rightExpr.get(), visitor);
+    }
+    expr->leftParenPos = afce.leftParenPos;
+    expr->rightParenPos = afce.rightParenPos;
+    return expr;
+}
+
 OwnedPtr<LambdaExpr> ASTCloner::CloneLambdaExpr(const LambdaExpr& le, const VisitFunc& visitor)
 {
     auto expr = MakeOwned<LambdaExpr>(CloneNode(le.funcBody.get(), visitor));
@@ -1053,6 +1071,9 @@ template <typename ExprT> OwnedPtr<ExprT> ASTCloner::CloneExpr(Ptr<ExprT> expr, 
         [&visitor](const MemberAccess& ma) { return OwnedPtr<Expr>(CloneMemberAccess(ma, visitor)); },
         [&visitor](const CallExpr& ce) { return OwnedPtr<Expr>(CloneCallExpr(ce, visitor)); },
         [&visitor](const ParenExpr& pe) { return OwnedPtr<Expr>(CloneParenExpr(pe, visitor)); },
+        [&visitor](const AmbiguousForcedCastExpr& afce) {
+            return OwnedPtr<Expr>(CloneAmbiguousForcedCastExpr(afce, visitor));
+        },
         [&visitor](const LambdaExpr& le) { return OwnedPtr<Expr>(CloneLambdaExpr(le, visitor)); },
         [&visitor](const LitConstExpr& lce) { return OwnedPtr<Expr>(CloneLitConstExpr(lce, visitor)); },
         [&visitor](const ArrayLit& al) { return OwnedPtr<Expr>(CloneArrayLit(al, visitor)); },

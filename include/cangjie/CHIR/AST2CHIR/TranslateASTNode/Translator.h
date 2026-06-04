@@ -797,6 +797,7 @@ private:
     Ptr<Value> Visit(const AST::MatchExpr& matchExpr);
     Ptr<Value> Visit(const AST::MemberAccess& member);
     Ptr<Value> Visit(const AST::ParenExpr& expr);
+    Ptr<Value> Visit(const AST::AmbiguousForcedCastExpr& expr);
     Ptr<Value> Visit(const AST::PointerExpr& expr);
     Ptr<Value> Visit(const AST::RefExpr& refExpr);
     Ptr<Value> Visit(const AST::ReturnExpr& expr);

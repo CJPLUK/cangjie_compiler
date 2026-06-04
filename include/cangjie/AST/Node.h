@@ -2562,6 +2562,27 @@ struct ParenExpr : Expr {
     void Clear() noexcept override;
 };
 
+/** How the operand is attached after `(U)` in an AmbiguousForcedCastExpr. */
+/**
+ * A `(U)X` site that is ambiguous between a forced cast and an ordinary call.
+ * `type`/`leftExpr` are `U` parsed as a type / as an expression (either may be null);
+ * `rightExpr` is the operand, parsed once and shared. Sema picks the forced cast when
+ * `type` is a type and the operand is `Extern<R>`, else the ordinary reading via
+ * `leftExpr`, and fills the inherited `desugarExpr`.
+ */
+struct AmbiguousForcedCastExpr : Expr {
+    OwnedPtr<Type> type;      /**< `U` parsed as a type (null if not a valid type). */
+    OwnedPtr<Expr> leftExpr;  /**< `U` parsed as an expression (null if not a valid expr). */
+    OwnedPtr<Expr> rightExpr; /**< Operand, shared by both readings. */
+    Position leftParenPos;    /**< Position of '('. */
+    Position rightParenPos;   /**< Position of ')'. */
+    AmbiguousForcedCastExpr() : Expr(ASTKind::AMBIGUOUS_FORCED_CAST_EXPR)
+    {
+    }
+    std::string ToString() const override;
+    void Clear() noexcept override;
+};
+
 /**
  * A lambdaExpr node represents a lambda expression with '=>'.
  */

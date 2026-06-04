@@ -555,6 +555,20 @@ void ParenExpr::Clear() noexcept
     }
 }
 
+void AmbiguousForcedCastExpr::Clear() noexcept
+{
+    Expr::Clear();
+    if (type) {
+        type->Clear();
+    }
+    if (leftExpr) {
+        leftExpr->Clear();
+    }
+    if (rightExpr) {
+        rightExpr->Clear();
+    }
+}
+
 bool RefType::IsGenericThisType() const
 {
     if (auto cd = DynamicCast<ClassDecl*>(ref.target);
@@ -1305,6 +1319,24 @@ bool PropDecl::IsOpen() const noexcept
         return true;
     }
     return !TestAttr(AST::Attribute::IMPORTED) && getters.empty() && setters.empty();
+}
+
+std::string AmbiguousForcedCastExpr::ToString() const
+{
+    std::stringstream ss;
+    Position curSpanBegin = leftParenPos;
+    ss << NextSpan("(", curSpanBegin, leftParenPos, 1);
+    curSpanBegin = leftParenPos + Position{0, 0, 1};
+    if (type != nullptr) {
+        ss << NextSpan(type->ToString(), curSpanBegin, type->end);
+        curSpanBegin = type->end;
+    }
+    ss << NextSpan(")", curSpanBegin, rightParenPos, 1);
+    curSpanBegin = rightParenPos + Position{0, 0, 1};
+    if (rightExpr != nullptr) {
+        ss << NextSpan(rightExpr->ToString(), curSpanBegin, rightExpr->end);
+    }
+    return ss.str();
 }
 
 } // namespace Cangjie

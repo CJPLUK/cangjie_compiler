@@ -755,6 +755,13 @@ private:
     Ptr<AST::Ty> SynBuiltinUnaryExpr(ASTContext& ctx, AST::UnaryExpr& ue);
     Ptr<AST::Ty> SynParenExpr(ASTContext& ctx, AST::ParenExpr& pe);
     bool ChkParenExpr(ASTContext& ctx, AST::Ty& target, AST::ParenExpr& pe);
+    Ptr<AST::Ty> SynAmbiguousForcedCastExpr(ASTContext& ctx, AST::AmbiguousForcedCastExpr& afce);
+    bool ChkAmbiguousForcedCastExpr(ASTContext& ctx, AST::Ty& target, AST::AmbiguousForcedCastExpr& afce);
+    OwnedPtr<AST::CallExpr> BuildForcedCastCall(
+        AST::AmbiguousForcedCastExpr& afce, Ptr<AST::Ty> targetTy, Ptr<AST::Ty> operandTy);
+    Ptr<AST::Ty> DesugarAmbiguousOrdinaryCall(
+        ASTContext& ctx, AST::AmbiguousForcedCastExpr& afce, bool typeValid);
+    void PreCheckAmbiguousForcedCastType(ASTContext& ctx, AST::AmbiguousForcedCastExpr& afce, unsigned walkerID);
     Ptr<AST::Ty> SynAssignExpr(ASTContext& ctx, AST::AssignExpr& ae);
     Ptr<AST::Ty> SynMultipleAssignExpr(ASTContext& ctx, AST::AssignExpr& ae);
     bool ChkAssignExpr(ASTContext& ctx, AST::Ty& target, AST::AssignExpr& ae);
@@ -1709,6 +1716,70 @@ private:
     friend class InstCtxScope;
     bool ChkIfAvailableExpr(ASTContext& ctx, AST::Ty& ty, AST::IfAvailableExpr& ie);
     Ptr<AST::Ty> SynIfAvailableExpr(ASTContext& ctx, AST::IfAvailableExpr& iae);
+
+
+    /**
+     * @brief Coerce the type of @p nodeExpr to @p target if possible.
+     * Assumption: type of @p nodeExpr is Extern<T>
+     */
+    bool CoerceToExtern(ASTContext& ctx, AST::Ty& target, AST::Expr& nodeExpr);
+    /**
+     * @brief Probe @p expr, interpreted as a value, for an `Extern<T>` type. If it has not already
+     * been synthesized to a correct extern type, synthesize it with diagnostics suppressed; on a
+     * non-extern result the probe is discarded (its type-check cache is cleared) so the regular,
+     * non-extern path can run cleanly. Returns the `Extern<T>` type, or nullptr if @p expr is not
+     * `Extern<T>`.
+     */
+    Ptr<AST::Ty> ProbeExternBaseTy(ASTContext& ctx, AST::Expr& expr);
+    /** @brief Desugar `e.foo = v` (for `e: Extern<T>`) into `T.memberUpdate(e, "foo", v)`. */
+    bool TryDesugarExternMemberUpdate(ASTContext& ctx, AST::AssignExpr& ae);
+    /** @brief Desugar `e[idx] = v` (for `e: Extern<T>`) into `T.indexedUpdate(e, idx, v)`. */
+    bool TryDesugarExternIndexUpdate(ASTContext& ctx, AST::AssignExpr& ae);
+    /** @brief Desugar a read `e.foo` (for `e: Extern<T>`) into `T.memberAccess(e, "foo")`. */
+    bool TryDesugarExternMemberAccess(ASTContext& ctx, AST::MemberAccess& ma);
+    /** @brief Desugar a read `e[idx]` (for `e: Extern<T>`) into `T.indexedAccess(e, idx)`. */
+    bool TryDesugarExternIndexAccess(AST::SubscriptExpr& se);
+    /** @brief Desugar a call `e(args...)` (for `e: Extern<T>`) into `T.functionCall(e, [args...])`. */
+    bool TryDesugarFunctionCall(ASTContext& ctx, AST::CallExpr& ce);
+    /** @brief Whether @p ty is the `Extern<T>` struct type (with exactly one type argument). */
+    bool TypeIsExtern(AST::Ty& ty);
+    /** @brief Look up the runtime member function named @p name on the core `Runtime` interface. */
+    Ptr<AST::FuncDecl> GetRuntimeFuncDecl(const std::string& name);
+
+    /**
+     * @brief Resolved runtime information for an `Extern<T>` type, shared by all extern desugarings.
+     * @c runtimeTy is the `T` in `Extern<T>`; @c runtimeDecl is the declaration of @c runtimeTy;
+     * @c isGeneric is true when @c runtimeTy is a generic type parameter (i.e. `T` is itself generic).
+     */
+    struct ExternRuntimeInfo {
+        Ptr<AST::Ty> runtimeTy = nullptr;
+        Ptr<AST::Decl> runtimeDecl = nullptr;
+        bool isGeneric = false;
+    };
+    /** @brief Extract the runtime `T` of an `Extern<T>` type and resolve its declaration. */
+    ExternRuntimeInfo ResolveExternRuntime(AST::Ty& externTy);
+    /** @brief Create a reference to the runtime type `T`, tagged as compiler-added extern desugar. */
+    OwnedPtr<AST::RefExpr> CreateExternRuntimeRef(const AST::Node& srcNode, const ExternRuntimeInfo& info);
+    /**
+     * @brief Build the `T.<runtimeFuncName>` member access used as the callee of a runtime desugaring
+     * (e.g. `memberAccess`, `memberUpdate`, `indexedAccess`, `indexedUpdate`, `functionCall`).
+     * @c outDecl receives the resolved runtime @c FuncDecl.
+     */
+    OwnedPtr<AST::MemberAccess> CreateRuntimeMemberAccess(
+        const AST::Node& srcNode, const ExternRuntimeInfo& info, const std::string& runtimeFuncName,
+        Ptr<AST::FuncDecl>& outDecl);
+    /** @brief Wrap @p expr in a @c FuncArg tagged as extern desugar; defaults @p ty to the expr's type. */
+    OwnedPtr<AST::FuncArg> CreateExternDesugarArg(OwnedPtr<AST::Expr> expr, Ptr<AST::Ty> ty = nullptr);
+    /** @brief Build the runtime @c CallExpr `T.<member>(args)` from a member access produced above. */
+    OwnedPtr<AST::CallExpr> CreateRuntimeCall(const AST::Expr& srcNode, const ExternRuntimeInfo& info,
+        OwnedPtr<AST::MemberAccess> member, AST::FuncDecl& decl, std::vector<OwnedPtr<AST::FuncArg>> args,
+        AST::Ty& retTy);
+    /**
+     * @brief Build a single runtime index read `T.indexedAccess(base, index)` of type @p ty. Used to
+     * chain the read part of both `e[i...]` and `e[i...] = v` desugarings.
+     */
+    OwnedPtr<AST::CallExpr> CreateRuntimeIndexAccess(const AST::Expr& srcNode, const ExternRuntimeInfo& info,
+        OwnedPtr<AST::Expr> baseExpr, AST::Expr& indexExpr, AST::Ty& ty);
 
     /** Members */
     Promotion promotion;
