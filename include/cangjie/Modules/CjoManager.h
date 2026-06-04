@@ -86,6 +86,15 @@ public:
     std::string GetPackageNameByImport(const AST::ImportSpec& importSpec) const;
 
     bool IsImportPackage(const AST::ImportSpec& importSpec) const;
+    /**
+     * @brief Remove import-to-package mappings for the given import specs.
+     * @param imports Import specs to remove from importedPackageNameMap.
+     *
+     * Used when a source file is replaced during macro debug, before re-resolving its imports.
+     * Freed ImportSpec pointers may be reused; stale entries would make GetPackageNameByImport
+     * return an incorrect package name.
+     */
+    void RemoveImportedPackageNames(const std::vector<OwnedPtr<AST::ImportSpec>>& imports) const;
 
     bool IsOnlyUsedByMacro(const std::string& fullPackageName) const;
     void SetOnlyUsedByMacro(const std::string& fullPackageName, bool onlyUsedByMacro) const;

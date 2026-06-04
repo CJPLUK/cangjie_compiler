@@ -72,6 +72,12 @@ public:
     {
         importedPackageNameMap.emplace(importSpec, pkgNamePair);
     }
+    void RemoveImportedPackageNames(const std::vector<OwnedPtr<AST::ImportSpec>>& imports)
+    {
+        for (auto& import : imports) {
+            (void)importedPackageNameMap.erase(import.get());
+        }
+    }
     std::string GetPackageNameByImport(const AST::ImportSpec& importSpec) const
     {
         auto found = importedPackageNameMap.find(&importSpec);

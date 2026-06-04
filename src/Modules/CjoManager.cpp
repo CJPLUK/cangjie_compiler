@@ -645,6 +645,11 @@ bool CjoManager::IsImportPackage(const AST::ImportSpec& importSpec) const
     return impl->IsImportPackage(importSpec);
 }
 
+void CjoManager::RemoveImportedPackageNames(const std::vector<OwnedPtr<AST::ImportSpec>>& imports) const
+{
+    impl->RemoveImportedPackageNames(imports);
+}
+
 std::vector<Ptr<AST::PackageDecl>> CjoManager::GetAllPackageDecls(bool includeMacroPkg) const
 {
     std::vector<Ptr<AST::PackageDecl>> ret;
