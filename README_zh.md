@@ -73,7 +73,6 @@ llvm 其他工具链以及更详细的后端工具说明，可以参考[llvm 命
 │   ├── Macro                   # 宏展开
 │   ├── main.cpp                # 编译器入口
 │   ├── Mangle                  # 符号改名
-│   ├── MetaTransformation      # 元编程编译器插件
 │   ├── Modules                 # 包管理模块
 │   ├── Option                  # 编译器选项控制
 │   ├── Parse                   # 语法分析

@@ -70,9 +70,6 @@ if(NOT CANGJIE_BUILD_CJC AND CANGJIE_BUILD_STD_SUPPORT)
     add_subdirectory(Utils)
     add_subdirectory(Basic)
     add_subdirectory(Option)
-    if (CANGJIE_CODEGEN_CJNATIVE_BACKEND)
-        add_subdirectory(MetaTransformation)
-    endif()
 
     set(AST_FFI_OBJECTS
         $<TARGET_OBJECTS:CangjieASTCommon>
@@ -109,10 +106,6 @@ set(CANGJIE_SRC_COMMON_OBJECTS_LIST
     $<TARGET_OBJECTS:CangjieProfileUtils>
     $<TARGET_OBJECTS:CangjieBasic>
     $<TARGET_OBJECTS:CangjieMangle>)
-
-if (CANGJIE_CODEGEN_CJNATIVE_BACKEND)
-    set(CANGJIE_SRC_COMMON_OBJECTS_LIST ${CANGJIE_SRC_COMMON_OBJECTS_LIST} $<TARGET_OBJECTS:CangjieMetaTransformation>)
-endif()
 
 if (CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     list(APPEND CANGJIE_SRC_COMMON_OBJECTS_LIST $<TARGET_OBJECTS:CangjieCHIRBase>)
@@ -256,10 +249,6 @@ set(FRONTEND_SRC_OBJECTS
     $<TARGET_OBJECTS:CangjieBasic>
     $<TARGET_OBJECTS:CangjieMangle>
     $<TARGET_OBJECTS:CangjieTempFilesUtil>)
-
-if (CANGJIE_CODEGEN_CJNATIVE_BACKEND)
-    set(FRONTEND_SRC_OBJECTS ${FRONTEND_SRC_OBJECTS} $<TARGET_OBJECTS:CangjieMetaTransformation>)
-endif()
 
 if (CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     list(APPEND FRONTEND_SRC_OBJECTS $<TARGET_OBJECTS:CangjieCHIRBase>)
@@ -411,9 +400,6 @@ add_subdirectory(Utils)
 add_subdirectory(Basic)
 add_subdirectory(Option)
 add_subdirectory(Mangle)
-if (CANGJIE_CODEGEN_CJNATIVE_BACKEND)
-    add_subdirectory(MetaTransformation)
-endif()
 
 if (CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     add_subdirectory(CHIR)

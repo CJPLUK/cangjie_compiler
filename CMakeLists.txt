@@ -357,7 +357,6 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     if(WIN32 AND CANGJIE_BUILD_CJDB)
         install(TARGETS boundscheck RUNTIME DESTINATION third_party/llvm/bin)
     endif()
-    install(FILES include/cangjie/MetaTransformation/MetaTransform.h DESTINATION include/)
 endif()
 
 add_subdirectory(third_party)

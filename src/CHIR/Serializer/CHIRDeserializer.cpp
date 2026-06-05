@@ -73,9 +73,38 @@ bool CHIRDeserializer::Deserialize(const std::string& fileName, Cangjie::CHIR::C
     return true;
 }
 
+bool CHIRDeserializer::Deserialize(uint8_t* data, int64_t size, CHIRBuilder& chirBuilder)
+{
+    bool succeed = true;
+#ifndef CANGJIE_ENABLE_GCOV
+    try {
+#endif
+        // Disable max depth and max tables verification.
+        flatbuffers::Verifier::Options options;
+        options.max_depth = std::numeric_limits<::flatbuffers::uoffset_t>::max();
+        options.max_tables = std::numeric_limits<::flatbuffers::uoffset_t>::max();
+        flatbuffers::Verifier verifier(data, static_cast<size_t>(size), options);
+        if (!verifier.VerifyBuffer<PackageFormat::CHIRPackage>()) {
+            printf("validation of 'CHIRPackage' failed\n");
+            return false;
+        }
+        const PackageFormat::CHIRPackage* package = PackageFormat::GetCHIRPackage(data);
+        CHIRDeserializerImpl deserializer(chirBuilder, false);
+        deserializer.Run(package);
+#ifndef CANGJIE_ENABLE_GCOV
+    } catch (...) {
+        succeed = false;
+    }
+#endif
+    return succeed;
+}
+
 template <typename T, typename FBT>
 std::vector<T> CHIRDeserializer::CHIRDeserializerImpl::Create(const flatbuffers::Vector<FBT>* vec)
 {
+    if (vec == nullptr) {
+        return {};
+    }
     std::vector<T> retval;
     for (auto obj : *vec) {
         retval.emplace_back(Create<T>(obj));
@@ -266,6 +295,9 @@ VTableInDef CHIRDeserializer::CHIRDeserializerImpl::Create(
     const flatbuffers::Vector<flatbuffers::Offset<PackageFormat::VTableInType>>* obj)
 {
     VTableInDef vtableInDef;
+    if (obj == nullptr) {
+        return vtableInDef;
+    }
     for (auto item : *obj) {
         auto ty = GetType<ClassType>(item->srcParentType());
         std::vector<VirtualMethodInfo> info = Create<VirtualMethodInfo>(item->virtualMethods());
@@ -1541,7 +1573,7 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
         return;
     }
     ConfigCustomTypeDef(buffer->base(), obj);
-    if (buffer->annotationTargets() != nullptr) {
+    if (buffer->isAnnotation()) {
         auto targets = GetValue<GlobalVar>(buffer->annotationTargets());
         obj.SetAnnotationTargets(std::move(targets));
     }
@@ -2034,8 +2066,11 @@ void CHIRDeserializer::CHIRDeserializerImpl::Run(const PackageFormat::CHIRPackag
     }
 
     // 7. fill in Package's information
-    builder.GetCurPackage()->SetPackageInitFunc(GetValue<Function>(pool->packageInitFunc()));
-    auto* reInitFunc = GetValue<Function>(pool->packageLiteralInitFunc());
+    auto initFunc = GetValue<Function>(pool->packageInitFunc());
+    CJC_ASSERT(initFunc != nullptr);
+    builder.GetCurPackage()->SetPackageInitFunc(initFunc);
+
+    auto reInitFunc = GetValue<Function>(pool->packageLiteralInitFunc());
     CJC_ASSERT(reInitFunc != nullptr);
     builder.GetCurPackage()->SetPackageLiteralInitFunc(reInitFunc);
 }

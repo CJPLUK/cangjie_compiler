@@ -34,6 +34,7 @@
 #include "cangjie/CHIR/Serializer/CHIRSerializer.h"
 #include "cangjie/CHIR/Transformation/BoxRecursionValueType.h"
 #include "cangjie/CHIR/Transformation/ClosureConversion.h"
+#include "cangjie/CHIR/Transformation/ExecutePlugin.h"
 #include "cangjie/CHIR/Transformation/FlatForInExpr.h"
 #include "cangjie/CHIR/Transformation/GenerateVTable/GenerateVTable.h"
 #include "cangjie/CHIR/Transformation/MarkClassHasInited.h"
@@ -47,9 +48,6 @@
 #include "cangjie/Driver/TempFileManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include <unordered_set>
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-#include "cangjie/MetaTransformation/MetaTransform.h"
-#endif
 #include "cangjie/Utils/ProfileRecorder.h"
 
 namespace Cangjie::CHIR {
@@ -1203,31 +1201,39 @@ bool ToCHIR::Run()
     return true;
 }
 
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 bool ToCHIR::PerformPlugin(CHIR::Package& package)
 {
+    if (opts.pluginPaths.empty()) {
+        return true;
+    }
+    Utils::ProfileRecorder recorder("CHIR", "PerformPlugin");
     bool succeed = true;
-    bool hasPluginForCHIR = false;
 #ifndef CANGJIE_ENABLE_GCOV
     try {
 #endif
-        Utils::ProfileRecorder recorder("CHIR", "Plugin Execution");
-        CHIRPluginManager chirPluginManager = ci.metaTransformPluginBuilder.BuildCHIRPluginManager(builder);
-        chirPluginManager.ForEachMetaTransformConcept([&package, &hasPluginForCHIR](MetaTransformConcept& mtc) {
-            if (!mtc.IsForCHIR()) {
-                return;
-            }
-            hasPluginForCHIR = true;
-            if (mtc.IsForFunc()) {
-                for (auto func : package.GetGlobalFuncsWithBody()) {
-                    static_cast<MetaTransform<CHIR::Function>*>(&mtc)->Run(*func);
-                }
-            } else if (mtc.IsForPackage()) {
-                static_cast<MetaTransform<CHIR::Package>*>(&mtc)->Run(package);
+        ExecutePlugin executePlugin(builder);
+        // 1. serialize package, get memory pointer and size
+        if (!executePlugin.SerializePackage(package)) {
+            succeed = false;
+        }
+        // 2. execute all plugins, in fact, all plugins have been registered before, here we just need to
+        // get `execute` function from any plugin, that's why we only pass the first plugin path not all plugins paths
+        if (succeed && !executePlugin.Execute(opts.pluginPaths[0])) {
+            succeed = false;
+        }
+        // 3. deserialize plugin result, get new package of cpp
+        if (succeed) {
+            if (auto newPackage = executePlugin.DeserializePluginResult(
+                srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, implicitFuncs, maybeUnreachable)) {
+                chirPkg = newPackage;
             } else {
-                CJC_ASSERT(false && "Should not reach here.");
+                succeed = false;
             }
-        });
+        }
+        // 4. free cached data, serialize and deserialize data
+        if (succeed && !executePlugin.FreeCachedData()) {
+            succeed = false;
+        }
 #ifndef CANGJIE_ENABLE_GCOV
     } catch (...) {
         succeed = false;
@@ -1235,12 +1241,11 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
 #endif
     if (!succeed) {
         diag.DiagnoseRefactor(DiagKindRefactor::plugin_throws_exception, DEFAULT_POSITION);
-    } else if (hasPluginForCHIR && builder.IsEnableIRCheckerAfterPlugin()) {
+    } else {
         DumpCHIRToFile("PLUGIN");
     }
     return succeed;
 }
-#endif
 
 void ToCHIR::Canonicalization()
 {

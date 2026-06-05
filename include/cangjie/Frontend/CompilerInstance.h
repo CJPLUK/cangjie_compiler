@@ -26,9 +26,6 @@
 #include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/Frontend/CompilerInvocation.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-#include "cangjie/MetaTransformation/MetaTransform.h"
-#endif
 #include "cangjie/Modules/ImportManager.h"
 
 namespace Cangjie {
@@ -146,9 +143,8 @@ public:
      * Perform compile to some @p stage.
      */
     virtual bool Compile(CompileStage stage = CompileStage::CHIR);
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+
     bool PerformPluginLoad();
-#endif
 
     /**
      * Perform parse.
@@ -336,33 +332,6 @@ public:
 
     bool UpdateAndWriteCachedInfoToDisk();
 
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    /**
-     * Record the handle for compiler plugin
-     */
-    void AddPluginHandle(HANDLE handle)
-    {
-        (void)pluginHandles.emplace_back(handle);
-    }
-
-    /**
-     * Unload the handles for all compiler plugins
-     */
-    bool UnloadPluginHandle()
-    {
-        metaTransformPluginBuilder = {};
-        // plugins should be unloaded after metaTransformPluginBuilder deconstruction.
-        for (auto& handle : pluginHandles) {
-            if (InvokeRuntime::CloseSymbolTable(handle) != 0) {
-                Errorln("close plugin dynamic library failed.");
-                return false;
-            }
-        }
-        pluginHandles.clear();
-        return true;
-    }
-#endif
-
     /**
      * Infomation written to cached file and needed by incremental compiling
      */
@@ -380,9 +349,6 @@ public:
         VarInitDepMap varInitDepMap;
     };
     CHIRInfo chirInfo;
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    MetaTransformPluginBuilder metaTransformPluginBuilder;
-#endif
     /**
      * CompilerInvocation, storing anything external the Instance needs.
      */

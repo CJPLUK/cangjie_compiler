@@ -19,7 +19,7 @@
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/Utils/ICEUtil.h"
 #include "flatbuffers/PackageFormat_generated.h"
-#include "flatbuffers/buffer.h"
+#include "flatbuffers/detached_buffer.h"
 
 #include <algorithm>
 #include <set>
@@ -35,6 +35,14 @@ void CHIRSerializer::Serialize(const Package& package, const std::string filenam
     serializer.Initialize();
     serializer.Dispatch();
     serializer.Save(filename, phase);
+}
+
+flatbuffers::DetachedBuffer CHIRSerializer::Serialize(const Package& package)
+{
+    CHIRSerializerImpl serializer(package);
+    serializer.Initialize();
+    serializer.Dispatch();
+    return serializer.ConvertToMemoryData();
 }
 
 // ========================== ID Fetchers ==============================
@@ -1554,4 +1562,17 @@ void CHIRSerializer::CHIRSerializerImpl::Initialize()
         allValue.emplace_back(0);
         valueKind.emplace_back(0);
     }
+}
+
+flatbuffers::DetachedBuffer CHIRSerializer::CHIRSerializerImpl::ConvertToMemoryData()
+{
+    auto accesslevel = package.GetPackageAccessLevel();
+    auto packageName = package.GetName();
+    auto serializedPackage = PackageFormat::CreateCHIRPackageDirect(builder, packageName.c_str(), "",
+        PackageFormat::PackageAccessLevel(accesslevel), &typeKind, &allType, &valueKind, &allValue, &exprKind,
+        &allExpression, &defKind, &allCustomTypeDef, packageInitFunc, PackageFormat::Phase::Phase_RAW,
+        packageLiteralInitFunc);
+
+    builder.Finish(serializedPackage);
+    return builder.Release();
 }

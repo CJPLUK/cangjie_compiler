@@ -255,21 +255,6 @@ std::unordered_set<GenericType*> CHIRBuilder::GetAllGenericTypes() const
     return result;
 }
 
-void CHIRBuilder::EnableIRCheckerAfterPlugin()
-{
-    enableIRCheckerAfterPlugin = true;
-}
-
-void CHIRBuilder::DisableIRCheckerAfterPlugin()
-{
-    enableIRCheckerAfterPlugin = false;
-}
-
-bool CHIRBuilder::IsEnableIRCheckerAfterPlugin() const
-{
-    return enableIRCheckerAfterPlugin;
-}
-
 void CHIRBuilder::StoreAllocatedPtrInFuncOrLambda(BlockGroup& bg, Base* ptr)
 {
     auto it = allocatedPtrInFuncOrLambda.find(&bg);
