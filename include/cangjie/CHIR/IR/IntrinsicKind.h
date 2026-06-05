@@ -114,6 +114,7 @@ static const std::string OBJECT_REFEQ_NAME = "intrinsicRefEq";
 static const std::string RAW_ARRAY_REFEQ_NAME = "intrinsicRefEqRawArray"; // cjnative only
 static const std::string FUNC_REFEQ_NAME = "intrinsicRefEqFunc"; // cjnative only
 static const std::string OBJECT_ZERO_VALUE_NAME = "zeroValue";
+static const std::string GET_PAYLOAD_NAME = "getPayload";
 
 static const std::string IS_THREAD_OBJECT_INITED_NAME = "isThreadObjectInited";
 static const std::string GET_THREAD_OBJECT_NAME = "getThreadObject";
@@ -620,6 +621,8 @@ enum IntrinsicKind : uint16_t {
 
     // cjnative only
     EXCLUSIVE_SCOPE,
+
+    GET_PAYLOAD,
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
@@ -678,6 +681,7 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {RAW_ARRAY_REFEQ_NAME, RAW_ARRAY_REFEQ},
 
     {OBJECT_ZERO_VALUE_NAME, OBJECT_ZERO_VALUE},
+    {GET_PAYLOAD_NAME, GET_PAYLOAD},
 
     {SOURCE_FILE_NAME, SOURCE_FILE},
     {SOURCE_LINE_NAME, SOURCE_LINE},

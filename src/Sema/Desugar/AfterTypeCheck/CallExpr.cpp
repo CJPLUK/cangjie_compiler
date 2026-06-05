@@ -11,6 +11,7 @@
 
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/CHIR/IR/IntrinsicKind.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -67,6 +68,19 @@ void DesugarComparableIntrinsic(AST::CallExpr& expr, TokenKind op)
     expr.desugarExpr = std::move(binExpr);
 }
 
+namespace {
+const std::string EXTERN_PAYLOAD_FIELD_NAME = "payload";
+}
+
+void DesugarGetPayloadIntrinsic(AST::CallExpr& expr)
+{
+    CJC_ASSERT(expr.desugarExpr == nullptr && expr.args.size() == 1);
+    auto payloadExpr = CreateMemberAccess(std::move(expr.args[0]->expr), EXTERN_PAYLOAD_FIELD_NAME);
+    payloadExpr->SetTy(expr.GetTy());
+    CopyBasicInfo(&expr, payloadExpr.get());
+    expr.desugarExpr = std::move(payloadExpr);
+}
+
 void DesugarIntrinsicCallExpr(AST::CallExpr& expr)
 {
     // Check whether the call is an intrinsic function call.
@@ -89,6 +103,13 @@ void DesugarIntrinsicCallExpr(AST::CallExpr& expr)
     
     // Find tokenkind type of the intrinsic function by package name and function name of the intrinsic function.
     std::string identfifier = target->identifier;
+    auto coreIntrinsicIt = CHIR::coreIntrinsicMap.find(identfifier);
+    if (coreIntrinsicIt != CHIR::coreIntrinsicMap.end() &&
+        coreIntrinsicIt->second == CHIR::IntrinsicKind::GET_PAYLOAD) {
+        DesugarGetPayloadIntrinsic(expr);
+        return;
+    }
+
     TokenKind op = TokenKind::ILLEGAL;
     auto it = semaPackageMap.find(packageName);
     if (it == semaPackageMap.end() || it->second.find(identfifier) == it->second.end()) {
