@@ -23,6 +23,7 @@
 #include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/TypeAnalysis.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
+#include "cangjie/CHIR/Transformation/MetaTransform.h"
 #include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/Frontend/CompilerInvocation.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
@@ -145,6 +146,9 @@ public:
     virtual bool Compile(CompileStage stage = CompileStage::CHIR);
 
     bool PerformPluginLoad();
+
+    bool RegisterCppPlugin();
+    bool RegisterCjPlugin();
 
     /**
      * Perform parse.
@@ -349,6 +353,8 @@ public:
         VarInitDepMap varInitDepMap;
     };
     CHIRInfo chirInfo;
+    CHIR::MetaTransformPluginBuilder metaTransformPluginBuilder;
+    std::vector<void*> pluginHandles;
     /**
      * CompilerInvocation, storing anything external the Instance needs.
      */
@@ -584,10 +590,6 @@ private:
     virtual void UpdateCachedInfo();
     bool WriteCachedInfo();
     bool ShouldWriteCacheFile() const;
-
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    std::vector<HANDLE> pluginHandles;
-#endif
 };
 } // namespace Cangjie
 #endif // CANGJIE_FRONTEND_COMPILERINSTANCE_H

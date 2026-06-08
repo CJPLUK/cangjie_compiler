@@ -348,6 +348,8 @@ inline std::string HashString64(const std::string& str)
 }
 
 void FreeIdleMemoryToOS();
+
+void ThrowNullPointerException();
 } // namespace Utils
 } // namespace Cangjie
 #endif // CANGJIE_UTILS_UTILS_H

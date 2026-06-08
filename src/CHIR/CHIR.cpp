@@ -38,6 +38,7 @@
 #include "cangjie/CHIR/Transformation/FlatForInExpr.h"
 #include "cangjie/CHIR/Transformation/GenerateVTable/GenerateVTable.h"
 #include "cangjie/CHIR/Transformation/MarkClassHasInited.h"
+#include "cangjie/CHIR/Transformation/MetaTransform.h"
 #include "cangjie/CHIR/Transformation/NoSideEffectMarker.h"
 #include "cangjie/CHIR/Transformation/ReplaceSrcCodeImportedVal.h"
 #include "cangjie/CHIR/Transformation/SanitizerCoverage.h"
@@ -1073,7 +1074,7 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     /// ===============   Meta Transformation for CHIR  ===============
-    if (!PerformPlugin(*chirPkg)) {
+    if (!PerformPlugin()) {
         return false;
     }
 #endif
@@ -1138,7 +1139,7 @@ bool ToCHIR::Run()
         return true;
     }
     // 3. run plugin for CHIR
-    if (!PerformPlugin(*chirPkg)) {
+    if (!PerformPlugin()) {
         return false;
     }
     // 4. Canonicalization, after this pass, the CHIR is ready for analysis and optimization.
@@ -1201,7 +1202,56 @@ bool ToCHIR::Run()
     return true;
 }
 
-bool ToCHIR::PerformPlugin(CHIR::Package& package)
+bool ToCHIR::ExecuteCppPlugins()
+{
+    CHIRPluginManager chirPluginManager = ci.metaTransformPluginBuilder.BuildCHIRPluginManager(builder);
+    chirPluginManager.ForEachMetaTransformConcept([this](MetaTransformConcept& mtc) {
+        if (!mtc.IsForCHIR()) {
+            return;
+        }
+        if (mtc.IsForFunc()) {
+            for (auto func : chirPkg->GetGlobalFuncsWithBody()) {
+                static_cast<MetaTransform<CHIR::Function>*>(&mtc)->Run(*func);
+            }
+        } else if (mtc.IsForPackage()) {
+            static_cast<MetaTransform<CHIR::Package>*>(&mtc)->Run(*chirPkg);
+        } else {
+            CJC_ASSERT(false && "Should not reach here.");
+        }
+    });
+    return true;
+}
+
+bool ToCHIR::ExecuteCjPlugins()
+{
+    bool succeed = true;
+    ExecutePlugin executePlugin(builder);
+    // 1. serialize package, get memory pointer and size
+    if (!executePlugin.SerializePackage(*chirPkg)) {
+        succeed = false;
+    }
+    // 2. execute all plugins, in fact, all plugins have been registered before, here we just need to
+    // get `execute` function from any plugin, that's why we only pass the first plugin path not all plugins paths
+    if (succeed && !executePlugin.Execute(opts.pluginPaths[0])) {
+        succeed = false;
+    }
+    // 3. deserialize plugin result, get new package of cpp
+    if (succeed) {
+        if (auto newPackage = executePlugin.DeserializePluginResult(
+            srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, implicitFuncs, maybeUnreachable)) {
+            chirPkg = newPackage;
+        } else {
+            succeed = false;
+        }
+    }
+    // 4. free cached data, serialize and deserialize data
+    if (succeed && !executePlugin.FreeCachedData()) {
+        succeed = false;
+    }
+    return succeed;
+}
+
+bool ToCHIR::PerformPlugin()
 {
     if (opts.pluginPaths.empty()) {
         return true;
@@ -1211,28 +1261,10 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
 #ifndef CANGJIE_ENABLE_GCOV
     try {
 #endif
-        ExecutePlugin executePlugin(builder);
-        // 1. serialize package, get memory pointer and size
-        if (!executePlugin.SerializePackage(package)) {
-            succeed = false;
-        }
-        // 2. execute all plugins, in fact, all plugins have been registered before, here we just need to
-        // get `execute` function from any plugin, that's why we only pass the first plugin path not all plugins paths
-        if (succeed && !executePlugin.Execute(opts.pluginPaths[0])) {
-            succeed = false;
-        }
-        // 3. deserialize plugin result, get new package of cpp
-        if (succeed) {
-            if (auto newPackage = executePlugin.DeserializePluginResult(
-                srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, implicitFuncs, maybeUnreachable)) {
-                chirPkg = newPackage;
-            } else {
-                succeed = false;
-            }
-        }
-        // 4. free cached data, serialize and deserialize data
-        if (succeed && !executePlugin.FreeCachedData()) {
-            succeed = false;
+        if (ci.metaTransformPluginBuilder.IsCppPlugin()) {
+            succeed = ExecuteCppPlugins();
+        } else {
+            succeed = ExecuteCjPlugins();
         }
 #ifndef CANGJIE_ENABLE_GCOV
     } catch (...) {

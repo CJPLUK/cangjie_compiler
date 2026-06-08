@@ -70,6 +70,20 @@ int InvokeRuntime::CloseSymbolTable(HANDLE handle)
     return retCode;
 }
 
+HANDLE InvokeRuntime::OpenSymbolTableSafely(const std::string& path)
+{
+    HANDLE handle = nullptr;
+#ifdef _WIN32
+    handle = InvokeRuntime::OpenSymbolTable(path);
+#elif defined(__linux__) || defined(__APPLE__)
+    handle = InvokeRuntime::OpenSymbolTable(path, RTLD_NOW | RTLD_LOCAL);
+#endif
+    if (handle != nullptr) {
+        SetOpenedLibHandles(handle);
+    }
+    return handle;
+}
+
 RuntimeInit& RuntimeInit::GetInstance()
 {
     static RuntimeInit runtimeInit;

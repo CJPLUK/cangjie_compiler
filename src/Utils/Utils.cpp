@@ -248,4 +248,13 @@ void FreeIdleMemoryToOS()
     }
 #endif
 }
+
+void ThrowNullPointerException()
+{
+#ifndef CANGJIE_ENABLE_GCOV
+    throw NullPointerException();
+#else
+    CJC_ABORT();
+#endif
+}
 } // namespace
