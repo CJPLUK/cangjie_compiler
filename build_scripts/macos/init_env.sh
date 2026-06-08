@@ -13,6 +13,7 @@ if test "0$cjbuildenv" -ne "01"; then
       --skip-hyperlang) SKIP_HYPERLANG=1; shift ;;
       --skip-lsp) SKIP_LSP=1; shift ;;
       --skip-bundle) SKIP_BUNDLE=1; shift ;;
+      --bundle-link-dest) BUNDLE_LINK_DEST=1; shift ;;
       --compiler-target=*) COMPILER_TARGET=${1#*=}; shift ;;
       --runtime-target=*) RUNTIME_TARGET=${1#*=}; shift ;;
       --stdlib-target=*) STDLIB_TARGET=${1#*=}; shift ;;
@@ -35,6 +36,7 @@ if test "0$cjbuildenv" -ne "01"; then
   : "${SKIP_HYPERLANG:=0}"
   : "${SKIP_LSP:=0}"
   : "${SKIP_BUNDLE:=0}"
+  : "${BUNDLE_LINK_DEST:=0}"
   # Per-component build targets default independently to release.
   : "${COMPILER_TARGET:=release}"
   : "${RUNTIME_TARGET:=release}"
@@ -55,6 +57,7 @@ if test "0$cjbuildenv" -ne "01"; then
   export SKIP_HYPERLANG
   export SKIP_LSP
   export SKIP_BUNDLE
+  export BUNDLE_LINK_DEST
   export COMPILER_TARGET
   export RUNTIME_TARGET
   export STDLIB_TARGET

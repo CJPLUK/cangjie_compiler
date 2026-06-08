@@ -1,12 +1,20 @@
 #!/bin/bash
 HOOKDIR=$(dirname "$0")
 
-echo $SHELL
-echo wordir: $(pwd)
-echo git dir: $(git rev-parse --git-dir)
-echo git common dir: $(git rev-parse --git-common-dir)
-
 git submodule status \
-| sed -n -e 's/^\+/WARNING A SUBMODULE WAS ALREADY INITIALISED: /w/dev/stderr' \
-         -e 's/^-\S*\s*//p' \
+| sed -n -e 's/^\+/WARNING A SUBMODULE WAS ALREADY INITIALISED BUT TO A DIFFERENT COMMIT (consider `git submodule update`): /w/dev/stderr' \
+         -e 's/^-[0-9a-z]\{40\} //p' \
 | xargs -P 8 -n 1 bash $HOOKDIR/init-submod.sh
+
+# Add relevant remotes to the submodules
+
+git -C cangjie_compiler remote add cjpluk-ssh git@github.com:CJPLUK/cangjie_compiler.git &> /dev/null
+git -C cangjie_runtime remote add cjpluk-ssh git@github.com:CJPLUK/cangjie_runtime.git &> /dev/null
+git -C cangjie_stdx remote add cjpluk-ssh git@github.com:CJPLUK/cangjie_stdx.git &> /dev/null
+# git -C cangjie_tools remote add cjpluk-ssh # no repo on cjpluk github org
+
+git -C cangjie_compiler remote add gitcode https://gitcode.com/Cangjie/cangjie_compiler.git &> /dev/null
+git -C cangjie_runtime remote add gitcode https://gitcode.com/Cangjie/cangjie_runtime.git &> /dev/null
+git -C cangjie_stdx remote add gitcode https://gitcode.com/Cangjie/cangjie_stdx.git &> /dev/null
+git -C cangjie_tools remote add gitcode https://gitcode.com/Cangjie/cangjie_tools.git &> /dev/null
+
