@@ -18,3 +18,15 @@ git -C cangjie_runtime remote add gitcode https://gitcode.com/Cangjie/cangjie_ru
 git -C cangjie_stdx remote add gitcode https://gitcode.com/Cangjie/cangjie_stdx.git &> /dev/null
 git -C cangjie_tools remote add gitcode https://gitcode.com/Cangjie/cangjie_tools.git &> /dev/null
 
+
+if [ "-$3" = "-1" ]; then
+  git branch | sed -n 's;\* \([^(].*\);\1;p' | if read branchname; then # (branchnames cannot start with '(')
+    for submod in cangjie_compiler cangjie_runtime cangjie_stdx; do
+      git submodule status $submod | sed -e '/^[+-]/d' | read unused && (
+        unset $(git rev-parse --local-env-vars);
+        echo "Adding branch '$branchname' to $submod (if not present)"
+        git -C $submod switch -q -c $branchname 2>&1 | sed '/fatal: a branch named .* already exists/d'
+      )
+    done
+  fi
+fi
