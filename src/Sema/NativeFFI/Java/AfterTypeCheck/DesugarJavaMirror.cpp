@@ -235,6 +235,8 @@ void JavaDesugarManager::InsertAbstractJavaRefGetter(ClassLikeDecl& decl)
     fd->funcBody->funcDecl = fd.get();
     fd->fullPackageName = decl.fullPackageName;
     fd->outerDecl = Ptr(&decl);
+    // Every AST decl must carry a curFile (see CHIR AST2CHIR::CreateFuncSignatureAndSetGlobalCache).
+    fd->curFile = decl.curFile;
 
     if (auto iDecl = As<ASTKind::INTERFACE_DECL>(&decl)) {
         iDecl->body->decls.emplace_back(std::move(fd));

@@ -1721,6 +1721,10 @@ OwnedPtr<FuncDecl> InteropLibBridge::CreateDeletingGlobalRefFinalizer(ClassDecl&
     fd->funcBody->funcDecl = fd.get();
     fd->fullPackageName = decl.fullPackageName;
     fd->outerDecl = Ptr(&decl);
+    // The generated finalizer must be attached to a file, otherwise downstream passes (e.g. CHIR
+    // AST2CHIR::CreateFuncSignatureAndSetGlobalCache) dereference a null `curFile`. `decl.curFile`
+    // is guaranteed non-null here since the finalizer body was built from it above.
+    fd->curFile = curFile;
     return fd;
 }
 
