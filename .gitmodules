@@ -27,3 +27,9 @@
 [submodule "third_party/sqlite3"]
 	path = third_party/sqlite3
 	url = https://gitcode.com/openharmony/third_party_sqlite.git
+[submodule "cangjie_test"]
+	path = cangjie_test
+	url = https://github.com/CJPLUK/cangjie_test.git
+[submodule "cangjie_test_framework"]
+	path = cangjie_test_framework
+	url = https://gitcode.com/Cangjie/cangjie_test_framework.git
