@@ -7,7 +7,8 @@ gitcommondir=$(git rev-parse --git-common-dir)
 existingsubmodules()
 {
     # $1 is relative path of submodule
-    (echo $gitcommondir; ls $gitcommondir/worktrees) \
+    echo $gitcommondir $gitcommondir/worktrees/* \
+    | xargs -n 1 echo \
     | sed -e "s;\$;/modules/$1/;" \
     | while read possiblyexisting
         do [ -d $possiblyexisting ] && (
