@@ -166,7 +166,7 @@ void DesugarJArray::InsertConstructorBody(FuncDecl& constr) const
     auto jniEnvCall = ilib.CreateGetJniEnvCall(constr.curFile);
     auto jniEnvPtrDecl = ilib.GetJniEnvPtrDecl();
 
-    if (!jniEnvCall || !jniEnvCall) {
+    if (!jniEnvCall || !jniEnvPtrDecl) {
         constr.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
