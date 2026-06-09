@@ -33,14 +33,7 @@ bool ExecutePlugin::SerializePackage(const Package& package)
 
 bool ExecutePlugin::Execute(const std::string& pluginPath)
 {
-#ifdef _WIN32
-    handle = InvokeRuntime::OpenSymbolTable(pluginPath);
-#elif defined(__linux__) || defined(__APPLE__)
-    handle = InvokeRuntime::OpenSymbolTable(pluginPath, RTLD_NOW | RTLD_LOCAL);
-#else
-    CJC_ABORT();
-    return false;
-#endif
+    handle = InvokeRuntime::OpenSymbolTableSafely(pluginPath);
     if (handle == nullptr) {
         return false;
     }
