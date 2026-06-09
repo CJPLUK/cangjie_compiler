@@ -77,5 +77,6 @@
     {"std.math.numeric", "co"},
     {"std.math.native", "cp"},
     {"std.math.numeric.native", "cq"},
+    {"std.concurrent", "cr"},
 }
 #endif
