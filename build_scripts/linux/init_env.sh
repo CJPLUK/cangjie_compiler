@@ -42,8 +42,8 @@ if test "0$cjbuildenv" -ne "01"; then
   export SKIP_BUNDLE
   export TARGET
   
-  : "${CANGJIE_VERSION:=unofficial}"
-  : "${SDK_NAME:=stdx}"
+  : "${CANGJIE_VERSION:=0.0.1-dev}"
+  : "${SDK_NAME:=unofficial}"
   export CANGJIE_VERSION
   export SDK_NAME
   export WORKSPACE=$(realpath $(dirname $0)/../..)

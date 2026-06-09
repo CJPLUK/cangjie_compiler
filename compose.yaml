@@ -9,8 +9,8 @@ services:
         - GID=${FIXGID}
     working_dir: /workspace
     environment:
-      CANGJIE_VERSION: ${CANGJIE_VERSION:-unofficial}
-      SDK_NAME: ${SDK_NAME:-stdx}
+      CANGJIE_VERSION: ${CANGJIE_VERSION:-0.0.1-dev}
+      SDK_NAME: ${SDK_NAME:-unofficial}
       ARCH: x86_64
       OPENSSL_ROOT_DIR: /opt/buildtools/openssl-3.0.9
       CMAKE_PREFIX_PATH: /opt/buildtools/openssl-3.0.9
@@ -28,8 +28,8 @@ services:
         - GID=${FIXGID}
     working_dir: /workspace
     environment:
-      CANGJIE_VERSION: ${CANGJIE_VERSION:-unofficial}
-      SDK_NAME: ${SDK_NAME:-stdx}
+      CANGJIE_VERSION: ${CANGJIE_VERSION:-0.0.1-dev}
+      SDK_NAME: ${SDK_NAME:-unofficial}
       ARCH: aarch64
       OPENSSL_ROOT_DIR: /opt/buildtools/openssl-3.0.9
       CMAKE_PREFIX_PATH: /opt/buildtools/openssl-3.0.9
@@ -47,8 +47,8 @@ services:
         - GID=${FIXGID}
     working_dir: /workspace
     environment:
-      CANGJIE_VERSION: ${CANGJIE_VERSION:-unofficial}
-      SDK_NAME: ${SDK_NAME:-stdx}
+      CANGJIE_VERSION: ${CANGJIE_VERSION:-0.0.1-dev}
+      SDK_NAME: ${SDK_NAME:-unofficial}
       ARCH: x86_64
       OPENSSL_ROOT_DIR: /opt/buildtools/openssl-3.0.9
       CMAKE_PREFIX_PATH: /opt/buildtools/openssl-3.0.9
@@ -73,8 +73,8 @@ services:
     stdin_open: true
     environment:
       HOME: /home/dev
-      CANGJIE_VERSION: ${CANGJIE_VERSION:-unofficial}
-      SDK_NAME: ${SDK_NAME:-stdx}
+      CANGJIE_VERSION: ${CANGJIE_VERSION:-0.0.1-dev}
+      SDK_NAME: ${SDK_NAME:-unofficial}
       ARCH: x86_64
       OPENSSL_ROOT_DIR: /opt/buildtools/openssl-3.0.9
       CMAKE_PREFIX_PATH: /opt/buildtools/openssl-3.0.9
