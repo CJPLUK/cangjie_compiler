@@ -203,19 +203,7 @@ main() {
 TEST_F(TypeCheckerTest, ForcedCastDirectDesugarsToFromExtern)
 {
     std::string code = R"(
-public interface Runtime<T> where T <: Runtime<T> {
-    static func memberAccess(e: Extern<T>, field: String): Extern<T>
-    static func indexAccess(e: Extern<T>, arg: Any): Extern<T>
-    static func memberUpdate(e: Extern<T>, field: String, value: Any): Unit
-    static func indexUpdate(e: Extern<T>, field: Any, value: Any): Unit
-    static func functionCall(e: Extern<T>, args: Array<Any>): Extern<T>
-    static func fromExtern<R>(h: Extern<T>): R
-    static func toExtern<R>(v: R): Extern<T>
-}
-
-public struct Extern<T> where T <: Runtime<T> {
-    Extern(public let content: Any) {}
-}
+import std.interop.*
 
 public class foo {}
 public class DummyRuntime <: Runtime<DummyRuntime> {
@@ -280,19 +268,7 @@ main() {
 TEST_F(TypeCheckerTest, ForcedCastGenericTargetDesugarsToFromExtern)
 {
     std::string code = R"(
-public interface Runtime<T> where T <: Runtime<T> {
-    static func memberAccess(e: Extern<T>, field: String): Extern<T>
-    static func indexAccess(e: Extern<T>, arg: Any): Extern<T>
-    static func memberUpdate(e: Extern<T>, field: String, value: Any): Unit
-    static func indexUpdate(e: Extern<T>, field: Any, value: Any): Unit
-    static func functionCall(e: Extern<T>, args: Array<Any>): Extern<T>
-    static func fromExtern<R>(h: Extern<T>): R
-    static func toExtern<R>(v: R): Extern<T>
-}
-
-public struct Extern<T> where T <: Runtime<T> {
-    Extern(public let content: Any) {}
-}
+import std.interop.*
 
 public class Box<T> {}
 public class DummyRuntime <: Runtime<DummyRuntime> {
@@ -375,8 +351,50 @@ main() {
         if (message.find("invalid interoperation forced cast") != std::string::npos) {
             foundForcedCastDiag = true;
             EXPECT_NE(message.find("'(U)e' requires 'U' to be a type"), std::string::npos);
-            EXPECT_NE(message.find("'Extern' type"), std::string::npos);
+            EXPECT_NE(message.find("'std.interop.Extern' type"), std::string::npos);
             EXPECT_NE(message.find("use 'as' for ordinary type conversions"), std::string::npos);
+        }
+    }
+    EXPECT_TRUE(foundForcedCastDiag);
+}
+
+TEST_F(TypeCheckerTest, ForcedCastRejectsUserDefinedExternWithSameName)
+{
+    std::string code = R"(
+public interface Runtime<T> where T <: Runtime<T> {
+    static func fromExtern<R>(h: Extern<T>): R
+}
+
+public struct Extern<T> where T <: Runtime<T> {
+    Extern(public let content: Any) {}
+}
+
+public class foo {}
+public class DummyRuntime <: Runtime<DummyRuntime> {
+    public static func fromExtern<R>(h: Extern<DummyRuntime>): R {
+        throw Exception()
+    }
+}
+
+func makeExtern(): Extern<DummyRuntime> {
+    return Extern<DummyRuntime>(0)
+}
+
+main() {
+    let externValue = makeExtern()
+    let value: foo = (foo)externValue
+}
+)";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    EXPECT_FALSE(instance->Compile(CompileStage::SEMA));
+
+    auto diags = diag.GetCategoryDiagnostic(DiagCategory::SEMA);
+    bool foundForcedCastDiag = false;
+    for (auto& d : diags) {
+        if (d.GetErrorMessage().find("'std.interop.Extern' type") != std::string::npos) {
+            foundForcedCastDiag = true;
         }
     }
     EXPECT_TRUE(foundForcedCastDiag);
@@ -466,19 +484,7 @@ main() {
 TEST_F(TypeCheckerTest, ForcedCastAmbiguousExprSelectsForcedCast)
 {
     std::string code = R"(
-public interface Runtime<T> where T <: Runtime<T> {
-    static func memberAccess(e: Extern<T>, field: String): Extern<T>
-    static func indexAccess(e: Extern<T>, arg: Any): Extern<T>
-    static func memberUpdate(e: Extern<T>, field: String, value: Any): Unit
-    static func indexUpdate(e: Extern<T>, field: Any, value: Any): Unit
-    static func functionCall(e: Extern<T>, args: Array<Any>): Extern<T>
-    static func fromExtern<R>(h: Extern<T>): R
-    static func toExtern<R>(v: R): Extern<T>
-}
-
-public struct Extern<T> where T <: Runtime<T> {
-    Extern(public let content: Any) {}
-}
+import std.interop.*
 
 public class foo {}
 public class DummyRuntime <: Runtime<DummyRuntime> {

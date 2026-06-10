@@ -51,8 +51,8 @@ ERROR(sema_trailing_lambda_cannot_used_for_non_function, "trailing lambda cannot
 // Expression
 ERROR(sema_unable_to_infer_expr, "unable to infer the type of this expression, please add type annotation")
 ERROR(sema_invalid_forced_cast_expr,
-    "invalid interoperation forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of 'Extern' type; "
-    "use 'as' for ordinary type conversions")
+    "invalid interoperation forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of "
+    "'std.interop.Extern' type; use 'as' for ordinary type conversions")
 ERROR(sema_exceed_num_value_range, "the number '%s' exceeds the value range of type '%s'")
 ERROR(sema_exceed_float_literal_range, "the number '%s' exceeds the value range of floating-point literal")
 WARNING(sema_float_literal_too_large, UNGROUPED,
