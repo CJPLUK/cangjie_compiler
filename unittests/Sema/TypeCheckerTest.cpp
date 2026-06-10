@@ -477,7 +477,10 @@ main() {
     ASSERT_NE(valueDecl->initializer->desugarExpr, nullptr);
     auto* binaryExpr = DynamicCast<BinaryExpr*>(valueDecl->initializer->desugarExpr.get());
     ASSERT_NE(binaryExpr, nullptr);
-    EXPECT_EQ(binaryExpr->op, TokenKind::MUL);
+    EXPECT_EQ(binaryExpr->op, TokenKind::SUB);
+    auto* rightExpr = DynamicCast<BinaryExpr*>(binaryExpr->rightExpr.get());
+    ASSERT_NE(rightExpr, nullptr);
+    EXPECT_EQ(rightExpr->op, TokenKind::MUL);
     EXPECT_EQ(binaryExpr->GetTy()->String(), "Int64");
 }
 
