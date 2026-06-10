@@ -828,6 +828,14 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<
             node->SetTy(SynParenExpr(newCtx, *StaticAs<ASTKind::PAREN_EXPR>(node)));
             break;
         }
+        case ASTKind::FORCED_CAST_EXPR: {
+            node->SetTy(SynForcedCastExpr(*curCtx, *StaticAs<ASTKind::FORCED_CAST_EXPR>(node)));
+            break;
+        }
+        case ASTKind::AMBIGUOUS_FORCED_CAST_EXPR: {
+            node->SetTy(SynAmbiguousForcedCastExpr(*curCtx, *StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(node)));
+            break;
+        }
         case ASTKind::LAMBDA_EXPR: {
             node->SetTy(SynLamExpr(*curCtx, *StaticAs<ASTKind::LAMBDA_EXPR>(node)));
             break;
@@ -1165,6 +1173,15 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
             }
             case ASTKind::PAREN_EXPR: {
                 chkRet = ChkParenExpr(*curCtx, *realTarget, *StaticAs<ASTKind::PAREN_EXPR>(node));
+                break;
+            }
+            case ASTKind::FORCED_CAST_EXPR: {
+                chkRet = ChkForcedCastExpr(*curCtx, *realTarget, *StaticAs<ASTKind::FORCED_CAST_EXPR>(node));
+                break;
+            }
+            case ASTKind::AMBIGUOUS_FORCED_CAST_EXPR: {
+                chkRet = ChkAmbiguousForcedCastExpr(
+                    *curCtx, *realTarget, *StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(node));
                 break;
             }
             case ASTKind::BINARY_EXPR: {
