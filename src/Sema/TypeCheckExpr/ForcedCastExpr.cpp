@@ -12,6 +12,7 @@
 #include "TypeCheckUtil.h"
 
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Utils/ConstantsUtils.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -78,7 +79,7 @@ bool IsExternOperandTy(Ptr<Ty> ty, Ptr<Ty>& runtimeTy)
         return false;
     }
     auto decl = Ty::GetDeclOfTy(ty);
-    if (!decl || decl->identifier.Val() != "Extern") {
+    if (!decl || decl->identifier.Val() != "Extern" || decl->fullPackageName != INTEROP_PACKAGE_NAME) {
         return false;
     }
     runtimeTy = ty->typeArgs.front();
