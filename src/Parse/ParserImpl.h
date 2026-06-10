@@ -146,6 +146,7 @@ private:
     bool inForeignBlock{false};
     bool enableCustomAnno{false}; // parse macrocall as custom annotation.
     bool disableForcedCastParse{false};
+    bool enableForcedCastOnlyParse{false}; // Used by speculative parsing to avoid recursively building fallback branches.
 
     std::unique_ptr<Lexer> lexer;
     std::string inputString{};

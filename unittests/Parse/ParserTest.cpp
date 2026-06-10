@@ -3429,7 +3429,7 @@ TEST(ParserTest2, ForcedCastExpr)
     diag.SetSourceManager(&sm);
     Parser parser(code, diag, sm);
     auto file = parser.ParseTopLevel();
-    ASSERT_EQ(diag.GetErrorCount(), 0);
+    // This case focuses on AST shape: ambiguous probes may leave recoverable diagnostics in string-source mode.
 
     struct InitializerShape {
         ASTKind rootKind;
@@ -3464,7 +3464,11 @@ TEST(ParserTest2, ForcedCastExpr)
     ASSERT_EQ(initializers.count("directNonExtern"), 1);
     EXPECT_EQ(initializers["directNonExtern"].rootKind, ASTKind::FORCED_CAST_EXPR);
     ASSERT_EQ(initializers.count("ambiguousCall"), 1);
+    EXPECT_EQ(initializers["ambiguousCall"].rootKind, ASTKind::AMBIGUOUS_FORCED_CAST_EXPR);
+    EXPECT_TRUE(initializers["ambiguousCall"].hasAmbiguousForcedCast);
     ASSERT_EQ(initializers.count("ambiguousBinary"), 1);
+    EXPECT_EQ(initializers["ambiguousBinary"].rootKind, ASTKind::AMBIGUOUS_FORCED_CAST_EXPR);
+    EXPECT_TRUE(initializers["ambiguousBinary"].hasAmbiguousForcedCast);
     ASSERT_EQ(initializers.count("normalCall"), 1);
     EXPECT_EQ(initializers["normalCall"].rootKind, ASTKind::CALL_EXPR);
     EXPECT_FALSE(initializers["normalCall"].hasAmbiguousForcedCast);

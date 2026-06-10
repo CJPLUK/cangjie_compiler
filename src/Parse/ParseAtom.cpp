@@ -13,6 +13,7 @@
 
 #include "ParserImpl.h"
 
+#include "../Sema/DiagSuppressor.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
@@ -1107,6 +1108,26 @@ OwnedPtr<AST::Expr> ParserImpl::ParseLeftParenExprInKind(ExprKind ek)
 
 OwnedPtr<AST::Expr> ParserImpl::ParseForcedCastExpr(ExprKind ek, const Position& leftParenPos)
 {
+    struct DiagnoseStatusGuard {
+        explicit DiagnoseStatusGuard(DiagnosticEngine& diag) : suppressor(diag)
+        {
+        }
+        ~DiagnoseStatusGuard()
+        {
+            (void)suppressor.GetSuppressedDiag();
+        }
+
+        DiagSuppressor suppressor;
+    };
+    auto hasSameSourcePosition = [](const Position& lhs, const Position& rhs) {
+        return lhs.line == rhs.line && lhs.column == rhs.column;
+    };
+    auto isBeforeSourcePosition = [](const Position& lhs, const Position& rhs) {
+        return lhs.line < rhs.line || (lhs.line == rhs.line && lhs.column < rhs.column);
+    };
+    auto isValidExpr = [](const OwnedPtr<Expr>& expr) {
+        return expr && expr->astKind != ASTKind::INVALID_EXPR;
+    };
     auto assignCurrentFile = [this](Ptr<Node> node) {
         if (!node || currentFile == nullptr) {
             return;
@@ -1117,70 +1138,146 @@ OwnedPtr<AST::Expr> ParserImpl::ParseForcedCastExpr(ExprKind ek, const Position&
         });
         walker.Walk();
     };
-    auto parseForcedCastCandidate = [this, ek]() -> std::tuple<OwnedPtr<Type>, Position, OwnedPtr<Expr>> {
+    auto parseForcedCastCandidate = [this, ek]() -> std::tuple<OwnedPtr<Type>, Position, OwnedPtr<Expr>, bool> {
         auto candidateTargetType = ParseType();
         if (!candidateTargetType || candidateTargetType->astKind == ASTKind::INVALID_TYPE || !Skip(TokenKind::RPAREN) ||
             newlineSkipped || !SeeingExpr()) {
-            return {nullptr, Position{}, nullptr};
+            return {nullptr, Position{}, nullptr, false};
         }
 
         auto rightParenPos = lastToken.Begin();
+        bool mayHaveConventionalFallback = SeeingExprOperator() || SeeingAny({TokenKind::LPAREN, TokenKind::LSQUARE,
+            TokenKind::DOT, TokenKind::LCURL});
         auto candidateOperandExpr = ParseBaseExpr(nullptr, ek);
         if (!candidateOperandExpr || candidateOperandExpr->astKind == ASTKind::INVALID_EXPR) {
-            return {nullptr, Position{}, nullptr};
+            return {nullptr, Position{}, nullptr, false};
         }
-        return {std::move(candidateTargetType), rightParenPos, std::move(candidateOperandExpr)};
+        return {std::move(candidateTargetType), rightParenPos, std::move(candidateOperandExpr),
+            mayHaveConventionalFallback};
+    };
+    auto makeForcedCastExpr = [&leftParenPos](OwnedPtr<Type> targetType, const Position& rightParenPos,
+                                  OwnedPtr<Expr> operandExpr) {
+        if (!targetType || !operandExpr) {
+            return OwnedPtr<ForcedCastExpr>{};
+        }
+        auto ret = MakeOwned<ForcedCastExpr>();
+        ret->leftParenPos = leftParenPos;
+        ret->targetType = std::move(targetType);
+        ret->expr = std::move(operandExpr);
+        ret->rightParenPos = rightParenPos;
+        ret->begin = leftParenPos;
+        ret->end = ret->expr->end;
+        return ret;
+    };
+    auto parseForcedCastBase = [&parseForcedCastCandidate, &makeForcedCastExpr]() {
+        auto forcedCastCandidate = parseForcedCastCandidate();
+        auto targetType = std::move(std::get<0>(forcedCastCandidate));
+        auto rightParenPos = std::get<1>(forcedCastCandidate);
+        auto operandExpr = std::move(std::get<2>(forcedCastCandidate));
+        return makeForcedCastExpr(std::move(targetType), rightParenPos, std::move(operandExpr));
     };
 
     ParserScope startScope(*this);
-    diag.Prepare();
-    auto [candidateTargetType, rightParenPos, candidateOperandExpr] = parseForcedCastCandidate();
+    std::tuple<OwnedPtr<Type>, Position, OwnedPtr<Expr>, bool> forcedCastCandidate;
+    {
+        DiagnoseStatusGuard guard(diag);
+        forcedCastCandidate = parseForcedCastCandidate();
+    }
+    auto candidateTargetType = std::move(std::get<0>(forcedCastCandidate));
+    auto rightParenPos = std::get<1>(forcedCastCandidate);
+    auto candidateOperandExpr = std::move(std::get<2>(forcedCastCandidate));
+    bool mayHaveConventionalFallback = std::get<3>(forcedCastCandidate);
     if (!candidateTargetType || !candidateOperandExpr) {
-        diag.ClearTransaction();
         startScope.ResetParserScope();
         return nullptr;
     }
-    diag.Commit();
 
-    auto forcedCastEnd = candidateOperandExpr->end;
+    auto initialForcedEnd = candidateOperandExpr->end;
+    if (enableForcedCastOnlyParse) {
+        return makeForcedCastExpr(std::move(candidateTargetType), rightParenPos, std::move(candidateOperandExpr));
+    }
+    if (!mayHaveConventionalFallback) {
+        return makeForcedCastExpr(std::move(candidateTargetType), rightParenPos, std::move(candidateOperandExpr));
+    }
 
-    OwnedPtr<Expr> fallbackExpr = nullptr;
     auto& source = sourceManager.GetSource(leftParenPos.fileID);
-    bool mayHaveConventionalFallback = !source.buffer.empty();
-    if (mayHaveConventionalFallback) {
+    if (!source.buffer.empty()) {
         auto startOffset = source.PosToOffset(leftParenPos);
-        auto endOffset = source.PosToOffset(forcedCastEnd);
-        auto content = source.buffer.substr(startOffset, endOffset - startOffset);
-        ParserImpl fallbackParser(content, diag, sourceManager, leftParenPos, false, false);
-        fallbackParser.currentFile = currentFile;
-        fallbackParser.disableForcedCastParse = true;
-        diag.Prepare();
-        fallbackExpr = fallbackParser.ParseExpr();
-        diag.ClearTransaction();
-        if (fallbackExpr) {
-            assignCurrentFile(fallbackExpr.get());
+        auto lineEndOffset = source.buffer.find('\n', startOffset);
+        auto content = lineEndOffset == std::string::npos ? source.buffer.substr(startOffset)
+                                                          : source.buffer.substr(startOffset, lineEndOffset - startOffset);
+        OwnedPtr<Expr> fallbackExprFromSource;
+        {
+            DiagnoseStatusGuard guard(diag);
+            ParserImpl fallbackParser(content, diag, sourceManager, leftParenPos, false, false);
+            fallbackParser.currentFile = currentFile;
+            fallbackParser.disableForcedCastParse = true;
+            fallbackExprFromSource = fallbackParser.ParseExpr();
+        }
+        if (isValidExpr(fallbackExprFromSource) && !isBeforeSourcePosition(fallbackExprFromSource->end, initialForcedEnd)) {
+            assignCurrentFile(fallbackExprFromSource.get());
+            OwnedPtr<Expr> forcedExprFromSource;
+            {
+                DiagnoseStatusGuard guard(diag);
+                ParserImpl forcedParser(content, diag, sourceManager, leftParenPos, false, false);
+                forcedParser.currentFile = currentFile;
+                forcedParser.enableForcedCastOnlyParse = true;
+                forcedExprFromSource = forcedParser.ParseExpr(ek);
+            }
+            assignCurrentFile(forcedExprFromSource.get());
+            if (isValidExpr(forcedExprFromSource) &&
+                hasSameSourcePosition(forcedExprFromSource->end, fallbackExprFromSource->end)) {
+                if (!hasSameSourcePosition(forcedExprFromSource->end, initialForcedEnd)) {
+                    startScope.ResetParserScope();
+                    auto oldEnableForcedCastOnlyParse = enableForcedCastOnlyParse;
+                    enableForcedCastOnlyParse = true;
+                    {
+                        DiagnoseStatusGuard guard(diag);
+                        (void)ParseExpr(Token{TokenKind::DOT}, parseForcedCastBase(), ek);
+                    }
+                    enableForcedCastOnlyParse = oldEnableForcedCastOnlyParse;
+                }
+                auto ret = MakeOwned<AmbiguousForcedCastExpr>();
+                ret->forcedExpr = std::move(forcedExprFromSource);
+                ret->fallbackExpr = std::move(fallbackExprFromSource);
+                ret->begin = leftParenPos;
+                ret->end = ret->forcedExpr ? ret->forcedExpr->end : ret->fallbackExpr->end;
+                assignCurrentFile(ret->forcedExpr.get());
+                assignCurrentFile(ret->fallbackExpr.get());
+                return ret;
+            }
         }
     }
-    auto hasSameSourcePosition = [](const Position& lhs, const Position& rhs) {
-        return lhs.line == rhs.line && lhs.column == rhs.column;
-    };
-    bool fallbackMatchesForcedCastRange = fallbackExpr && fallbackExpr->astKind != ASTKind::INVALID_EXPR &&
-        mayHaveConventionalFallback && hasSameSourcePosition(fallbackExpr->end, forcedCastEnd);
-    if (!fallbackMatchesForcedCastRange) {
+
+    startScope.ResetParserScope();
+    auto oldDisableForcedCastParse = disableForcedCastParse;
+    disableForcedCastParse = true;
+    OwnedPtr<Expr> fallbackExpr;
+    {
+        DiagnoseStatusGuard guard(diag);
+        auto fallbackBase = ParseConventionalLeftParenExprInKind(ek, leftParenPos);
+        newlineSkipped = false;
+        fallbackExpr = ParseExpr(Token{TokenKind::DOT}, std::move(fallbackBase), ek);
+    }
+    disableForcedCastParse = oldDisableForcedCastParse;
+    assignCurrentFile(fallbackExpr.get());
+    if (fallbackExpr && isBeforeSourcePosition(fallbackExpr->end, initialForcedEnd)) {
         fallbackExpr = nullptr;
     }
 
-    if (fallbackExpr) {
-        auto forcedExpr = MakeOwned<ForcedCastExpr>();
-        forcedExpr->leftParenPos = leftParenPos;
-        forcedExpr->targetType = std::move(candidateTargetType);
-        forcedExpr->expr = std::move(candidateOperandExpr);
-        forcedExpr->rightParenPos = rightParenPos;
-        forcedExpr->begin = leftParenPos;
-        forcedExpr->end = forcedExpr->expr->end;
-
+    if (!isValidExpr(fallbackExpr)) {
+        startScope.ResetParserScope();
+        OwnedPtr<ForcedCastExpr> forcedExpr;
+        {
+            DiagnoseStatusGuard guard(diag);
+            forcedExpr = parseForcedCastBase();
+        }
+        assignCurrentFile(forcedExpr.get());
+        return forcedExpr;
+    }
+    if (hasSameSourcePosition(fallbackExpr->end, initialForcedEnd)) {
         auto ret = MakeOwned<AmbiguousForcedCastExpr>();
-        ret->forcedExpr = std::move(forcedExpr);
+        ret->forcedExpr = makeForcedCastExpr(std::move(candidateTargetType), rightParenPos, std::move(candidateOperandExpr));
         ret->fallbackExpr = std::move(fallbackExpr);
         ret->begin = leftParenPos;
         ret->end = ret->forcedExpr ? ret->forcedExpr->end : ret->fallbackExpr->end;
@@ -1189,13 +1286,31 @@ OwnedPtr<AST::Expr> ParserImpl::ParseForcedCastExpr(ExprKind ek, const Position&
         return ret;
     }
 
-    auto ret = MakeOwned<ForcedCastExpr>();
-    ret->leftParenPos = leftParenPos;
-    ret->targetType = std::move(candidateTargetType);
-    ret->expr = std::move(candidateOperandExpr);
-    ret->rightParenPos = rightParenPos;
+    startScope.ResetParserScope();
+    auto oldEnableForcedCastOnlyParse = enableForcedCastOnlyParse;
+    enableForcedCastOnlyParse = true;
+    OwnedPtr<Expr> forcedExpr;
+    {
+        DiagnoseStatusGuard guard(diag);
+        forcedExpr = ParseExpr(Token{TokenKind::DOT}, parseForcedCastBase(), ek);
+    }
+    enableForcedCastOnlyParse = oldEnableForcedCastOnlyParse;
+    assignCurrentFile(forcedExpr.get());
+
+    bool canBuildAmbiguousExpr = isValidExpr(forcedExpr) && isValidExpr(fallbackExpr) &&
+        hasSameSourcePosition(forcedExpr->end, fallbackExpr->end);
+    if (!canBuildAmbiguousExpr) {
+        startScope.ResetParserScope();
+        return nullptr;
+    }
+
+    auto ret = MakeOwned<AmbiguousForcedCastExpr>();
+    ret->forcedExpr = std::move(forcedExpr);
+    ret->fallbackExpr = std::move(fallbackExpr);
     ret->begin = leftParenPos;
-    ret->end = ret->expr->end;
+    ret->end = ret->forcedExpr ? ret->forcedExpr->end : ret->fallbackExpr->end;
+    assignCurrentFile(ret->forcedExpr.get());
+    assignCurrentFile(ret->fallbackExpr.get());
     return ret;
 }
 
