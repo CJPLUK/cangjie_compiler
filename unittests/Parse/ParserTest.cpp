@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -64,7 +65,8 @@ TEST(ParserTest1, PositionTest)
     SourceManager sm;
     DiagnosticEngine diag;
     diag.SetSourceManager(&sm);
-    Parser parser(code, diag, sm);
+    auto fileID = sm.AppendSource("forced_cast_parser_test.cj", code);
+    Parser parser(fileID, code, diag, sm);
     OwnedPtr<File> file = parser.ParseTopLevel();
 
     std::vector<std::pair<int, int>> expectPosition;
@@ -340,7 +342,8 @@ a
     SourceManager sm;
     DiagnosticEngine diag;
     diag.SetSourceManager(&sm);
-    Parser parser(code, diag, sm);
+    auto fileID = sm.AddSource("forced_cast_parser_test.cj", code);
+    Parser parser(fileID, code, diag, sm);
     OwnedPtr<File> file = parser.ParseTopLevel();
 
     std::string expectPackages = "a.b.b";
@@ -674,7 +677,8 @@ TEST(ParserTest1, RecordDecl2)
     SourceManager sm;
     DiagnosticEngine diag;
     diag.SetSourceManager(&sm);
-    Parser parser(code, diag, sm);
+    auto fileID = sm.AppendSource("forced_cast_parser_test.cj", code);
+    Parser parser(fileID, code, diag, sm);
     auto file = parser.ParseTopLevel();
 
     std::vector<std::string> expectNames{"Rect1", "Rect2", "Empty"};
@@ -3404,6 +3408,72 @@ TEST(ParserTest2, QuoteTokens6_MultilineRawStringAndHash)
     EXPECT_EQ(tokens[0].kind, TokenKind::MULTILINE_RAW_STRING);
     EXPECT_EQ(tokens[0].Value(), "\nhello\n");
     EXPECT_EQ(tokens[1].kind, TokenKind::HASH);
+}
+
+TEST(ParserTest2, ForcedCastExpr)
+{
+    std::string code = R"(func test() {
+    let direct = (foo)externValue
+    let generic = (Box<Int64>)externValue
+    let directNonExtern = (foo)1
+    let ambiguousCall = (foo)(x)
+    let ambiguousBinary = (foo)-1 * 2
+    let normalCall = (foo + bar)(x)
+    let parenOnly = (foo)
+    let parenExpr = (foo + bar)
+    let unitValue = ()
+}
+)";
+    SourceManager sm;
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm);
+    auto file = parser.ParseTopLevel();
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+
+    struct InitializerShape {
+        ASTKind rootKind;
+        bool hasAmbiguousForcedCast{false};
+    };
+    std::unordered_map<std::string, InitializerShape> initializers;
+    ASSERT_EQ(file->decls.size(), 1);
+    auto funcDecl = DynamicCast<FuncDecl*>(file->decls[0].get());
+    ASSERT_NE(funcDecl, nullptr);
+    ASSERT_NE(funcDecl->funcBody, nullptr);
+    ASSERT_NE(funcDecl->funcBody->body, nullptr);
+    for (auto& node : funcDecl->funcBody->body->body) {
+        auto vd = DynamicCast<VarDecl*>(node.get());
+        if (vd && vd->initializer) {
+            InitializerShape shape{vd->initializer->astKind, false};
+            Walker walker(vd->initializer.get(), [&shape](Ptr<Node> node) {
+                if (node->astKind == ASTKind::AMBIGUOUS_FORCED_CAST_EXPR) {
+                    shape.hasAmbiguousForcedCast = true;
+                    return VisitAction::SKIP_CHILDREN;
+                }
+                return VisitAction::WALK_CHILDREN;
+            });
+            walker.Walk();
+            initializers.emplace(vd->identifier.Val(), shape);
+        }
+    }
+
+    ASSERT_EQ(initializers.count("direct"), 1);
+    EXPECT_EQ(initializers["direct"].rootKind, ASTKind::FORCED_CAST_EXPR);
+    ASSERT_EQ(initializers.count("generic"), 1);
+    EXPECT_EQ(initializers["generic"].rootKind, ASTKind::FORCED_CAST_EXPR);
+    ASSERT_EQ(initializers.count("directNonExtern"), 1);
+    EXPECT_EQ(initializers["directNonExtern"].rootKind, ASTKind::FORCED_CAST_EXPR);
+    ASSERT_EQ(initializers.count("ambiguousCall"), 1);
+    ASSERT_EQ(initializers.count("ambiguousBinary"), 1);
+    ASSERT_EQ(initializers.count("normalCall"), 1);
+    EXPECT_EQ(initializers["normalCall"].rootKind, ASTKind::CALL_EXPR);
+    EXPECT_FALSE(initializers["normalCall"].hasAmbiguousForcedCast);
+    ASSERT_EQ(initializers.count("parenOnly"), 1);
+    EXPECT_EQ(initializers["parenOnly"].rootKind, ASTKind::PAREN_EXPR);
+    ASSERT_EQ(initializers.count("parenExpr"), 1);
+    EXPECT_EQ(initializers["parenExpr"].rootKind, ASTKind::PAREN_EXPR);
+    ASSERT_EQ(initializers.count("unitValue"), 1);
+    EXPECT_EQ(initializers["unitValue"].rootKind, ASTKind::LIT_CONST_EXPR);
 }
 
 TEST(ParserTest2, UnicodeOver255Test)

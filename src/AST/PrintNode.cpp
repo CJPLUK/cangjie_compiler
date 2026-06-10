@@ -981,6 +981,28 @@ void PrintParenExpr(unsigned indent, const ParenExpr& parenExpr, std::ostream& s
     PrintIndent(stream, indent, "}");
 }
 
+void PrintForcedCastExpr(unsigned indent, const ForcedCastExpr& expr, std::ostream& stream = std::cout)
+{
+    PrintIndent(stream, indent, "ForcedCastExpr {");
+    PrintBasic(indent + ONE_INDENT, expr, stream);
+    PrintIndent(stream, indent + ONE_INDENT, "// TargetType:");
+    PrintNode(expr.targetType.get(), indent + TWO_INDENT, "", stream);
+    PrintIndent(stream, indent + ONE_INDENT, "// Expr:");
+    PrintNode(expr.expr.get(), indent + TWO_INDENT, "", stream);
+    PrintIndent(stream, indent, "}");
+}
+
+void PrintAmbiguousForcedCastExpr(unsigned indent, const AmbiguousForcedCastExpr& expr, std::ostream& stream = std::cout)
+{
+    PrintIndent(stream, indent, "AmbiguousForcedCastExpr {");
+    PrintBasic(indent + ONE_INDENT, expr, stream);
+    PrintIndent(stream, indent + ONE_INDENT, "// ForcedExpr:");
+    PrintNode(expr.forcedExpr.get(), indent + TWO_INDENT, "", stream);
+    PrintIndent(stream, indent + ONE_INDENT, "// FallbackExpr:");
+    PrintNode(expr.fallbackExpr.get(), indent + TWO_INDENT, "", stream);
+    PrintIndent(stream, indent, "}");
+}
+
 void PrintLambdaExpr(unsigned indent, const LambdaExpr& expr, std::ostream& stream = std::cout)
 {
     PrintIndent(stream, indent, "LambdaExpr {");
@@ -1547,6 +1569,8 @@ void PrintNode(Ptr<const Node> node, unsigned indent, const std::string& additio
         [&indent, &stream](const FuncArg& expr) { PrintFuncArg(indent, expr, stream); },
         [&indent, &stream](const CallExpr& expr) { PrintCallExpr(indent, expr, stream); },
         [&indent, &stream](const ParenExpr& parenExpr) { PrintParenExpr(indent, parenExpr, stream); },
+        [&indent, &stream](const ForcedCastExpr& expr) { PrintForcedCastExpr(indent, expr, stream); },
+        [&indent, &stream](const AmbiguousForcedCastExpr& expr) { PrintAmbiguousForcedCastExpr(indent, expr, stream); },
         [&indent, &stream](const LambdaExpr& expr) { PrintLambdaExpr(indent, expr, stream); },
         [&indent, &stream](const LitConstExpr& expr) { PrintLitConstExpr(indent, expr, stream); },
         [&indent, &stream](const InterpolationExpr& expr) { PrintInterpolationExpr(indent, expr, stream); },

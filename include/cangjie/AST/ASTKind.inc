@@ -56,6 +56,8 @@ ASTKIND(EXPR, "*expr", Expr, 432)                       // begin of subtypes of 
 ASTKIND(WILDCARD_EXPR, "wildcard_expr", WildcardExpr, 432)
 ASTKIND(CALL_EXPR, "call_expr", CallExpr, 592)
 ASTKIND(PAREN_EXPR, "paren_expr", ParenExpr, 480)
+ASTKIND(FORCED_CAST_EXPR, "forced_cast_expr", ForcedCastExpr, 496)
+ASTKIND(AMBIGUOUS_FORCED_CAST_EXPR, "ambiguous_forced_cast_expr", AmbiguousForcedCastExpr, 512)
 ASTKIND(MEMBER_ACCESS, "member_access_expr", MemberAccess, 768) // begin of subtypes of NameReferenceExpr.
 ASTKIND(REF_EXPR, "ref_expr", RefExpr, 672)                     // end of subtypes of NameReferenceExpr.
 ASTKIND(OPTIONAL_EXPR, "optional_expr", OptionalExpr, 464)

@@ -505,6 +505,25 @@ void ParenExpr::Clear() noexcept
     }
 }
 
+void ForcedCastExpr::Clear() noexcept
+{
+    Expr::Clear();
+    if (expr) {
+        expr->Clear();
+    }
+}
+
+void AmbiguousForcedCastExpr::Clear() noexcept
+{
+    Expr::Clear();
+    if (forcedExpr) {
+        forcedExpr->Clear();
+    }
+    if (fallbackExpr) {
+        fallbackExpr->Clear();
+    }
+}
+
 bool RefType::IsGenericThisType() const
 {
     if (auto cd = DynamicCast<ClassDecl*>(ref.target);
@@ -1419,6 +1438,25 @@ std::string ParenExpr::ToString() const
 {
     CJC_ASSERT(expr != nullptr);
     return "(" + expr->ToString() + ")";
+}
+
+std::string ForcedCastExpr::ToString() const
+{
+    CJC_ASSERT(targetType != nullptr);
+    CJC_ASSERT(expr != nullptr);
+    return "(" + targetType->ToString() + ")" + expr->ToString();
+}
+
+std::string AmbiguousForcedCastExpr::ToString() const
+{
+    if (desugarExpr) {
+        return desugarExpr->ToString();
+    }
+    if (fallbackExpr) {
+        return fallbackExpr->ToString();
+    }
+    CJC_ASSERT(forcedExpr != nullptr);
+    return forcedExpr->ToString();
 }
 
 std::string AsExpr::ToString() const

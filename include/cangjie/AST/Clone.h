@@ -93,6 +93,9 @@ private:
     static OwnedPtr<MemberAccess> CloneMemberAccess(const MemberAccess& ma, const VisitFunc& visitor);
     static OwnedPtr<CallExpr> CloneCallExpr(const CallExpr& ce, const VisitFunc& visitor);
     static OwnedPtr<ParenExpr> CloneParenExpr(const ParenExpr& pe, const VisitFunc& visitor);
+    static OwnedPtr<ForcedCastExpr> CloneForcedCastExpr(const ForcedCastExpr& fce, const VisitFunc& visitor);
+    static OwnedPtr<AmbiguousForcedCastExpr> CloneAmbiguousForcedCastExpr(
+        const AmbiguousForcedCastExpr& afce, const VisitFunc& visitor);
     static OwnedPtr<LambdaExpr> CloneLambdaExpr(const LambdaExpr& le, const VisitFunc& visitor);
     static OwnedPtr<LitConstExpr> CloneLitConstExpr(const LitConstExpr& lce, const VisitFunc& visitor);
     static OwnedPtr<ArrayLit> CloneArrayLit(const ArrayLit& al, const VisitFunc& visitor);

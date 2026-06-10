@@ -560,6 +560,22 @@ void ASTChecker::CheckParenExpr(Ptr<Node> node)
     AST_NULLPTR_CHECK(node, pe->expr);
     ZERO_POSITION_CHECK(node, pe->rightParenPos);
 }
+
+void ASTChecker::CheckForcedCastExpr(Ptr<Node> node)
+{
+    auto fce = StaticAs<ASTKind::FORCED_CAST_EXPR>(node);
+    AST_NULLPTR_CHECK(node, fce->targetType);
+    ZERO_POSITION_CHECK(node, fce->leftParenPos);
+    AST_NULLPTR_CHECK(node, fce->expr);
+    ZERO_POSITION_CHECK(node, fce->rightParenPos);
+}
+
+void ASTChecker::CheckAmbiguousForcedCastExpr(Ptr<Node> node)
+{
+    auto afce = StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(node);
+    AST_NULLPTR_CHECK(node, afce->forcedExpr);
+    AST_NULLPTR_CHECK(node, afce->fallbackExpr);
+}
 void ASTChecker::CheckPointerExpr(Ptr<Node> node)
 {
     auto pe = StaticAs<ASTKind::POINTER_EXPR>(node);
