@@ -96,7 +96,7 @@ std::vector<llvm::Metadata*> UnwindGenericRelateType(llvm::LLVMContext& llvmCtx,
         std::string ttName = CGType::GetNameOfTypeTemplateGV(ty);
         tyArgMeta.emplace_back(llvm::MDString::get(llvmCtx, ttName));
         auto tyArg = ty.GetTypeArgs()[0];
-        if (tyArg->IsValueType()) {
+        if (CGType::GetCGGenericKind(*tyArg) == CGType::CGGenericKind::CONCRETE) {
             std::string tiName = CGType::GetNameOfTypeInfoGV(*tyArg);
             tyArgMeta.emplace_back(llvm::MDString::get(llvmCtx, tiName));
         } else {
