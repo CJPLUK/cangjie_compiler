@@ -27,69 +27,6 @@ using namespace TypeCheckUtil;
 using namespace Meta;
 
 namespace {
-
-template <typename F>
-bool TryDesugarExternMemberAccess(
-    TypeManager& typeManager, ImportManager& importManager, MemberAccess& ma, F typecheck)
-{
-    CJC_NULLPTR_CHECK(ma.baseExpr);
-    auto sourceExternTy = ma.baseExpr->GetTy();
-    if (!TypeIsExtern(importManager, sourceExternTy)) {
-        return false;
-    }
-    if (ma.TestAttr(Attribute::LEFT_VALUE)) {
-        ma.SetTy(sourceExternTy);
-        return true;
-    }
-    if (ma.callOrPattern) {
-        return false;
-    }
-
-    auto runtimeTy = sourceExternTy->typeArgs[0];
-    CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
-    auto runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
-    CJC_ASSERT(runtimeDecl);
-
-    auto runtimeRef = CreateRefExpr(*runtimeDecl);
-    runtimeRef->isAlone = false;
-    runtimeRef->SetTy(runtimeTy);
-    runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
-    CopyBasicInfo(&ma, runtimeRef.get());
-
-    auto memberAccess = CreateMemberAccess(std::move(runtimeRef), "memberAccess");
-    memberAccess->isAlone = false;
-    memberAccess->EnableAttr(Attribute::COMPILER_ADD);
-    CopyBasicInfo(&ma, memberAccess.get());
-    auto memberAccessDecl = DynamicCast<FuncDecl*>(memberAccess->target);
-    if (!memberAccessDecl) {
-        ma.SetTy(TypeManager::GetInvalidTy());
-        return true;
-    }
-    memberAccess->targets.emplace_back(memberAccessDecl);
-
-    std::vector<OwnedPtr<FuncArg>> args;
-    args.emplace_back(CreateFuncArg(ASTCloner::Clone(Ptr(ma.baseExpr.get()))));
-    args.emplace_back(CreateFuncArg(CreateStringLit(importManager, ma.field.Val())));
-
-    auto call = CreateCallExpr(
-        std::move(memberAccess), std::move(args), memberAccessDecl, sourceExternTy, CallKind::CALL_DECLARED_FUNCTION);
-    CopyBasicInfo(&ma, call.get());
-    call->sourceExpr = &ma;
-    call->EnableAttr(Attribute::COMPILER_ADD);
-
-    Ptr<Ty> callTy = typecheck(call.get());
-    bool isOk = Ty::IsTyCorrect(callTy) && call->resolvedFunction &&
-        call->resolvedFunction->identifier == "memberAccess" && typeManager.IsSubtype(call->GetTy(), sourceExternTy);
-
-    Ptr<Ty> resultTy = isOk ? Ptr<Ty>(sourceExternTy) : Ptr<Ty>(TypeManager::GetInvalidTy());
-    ma.SetTy(resultTy);
-    call->SetTy(resultTy);
-    if (isOk) {
-        ma.desugarExpr = std::move(call);
-    }
-    return true;
-}
-
 bool IsEnumNeedSynthesis(Expr& expr, const Decl& target)
 {
     if (!target.TestAttr(AST::Attribute::ENUM_CONSTRUCTOR) || !target.GetGeneric()) {
@@ -357,6 +294,98 @@ void DiagForGenericParamMemberNotFound(DiagnosticEngine& diag, const MemberAcces
 }
 } // namespace
 
+
+// `e.foo` -> `T.memberAccess("foo")` for `e: Extern<T>`
+bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx, MemberAccess& ma)
+{
+    CJC_NULLPTR_CHECK(ma.baseExpr);
+    auto sourceExternTy = ma.baseExpr->GetTy();
+    if (!TypeIsExtern(importManager, sourceExternTy)) {
+        return false;
+    }
+    if (ma.TestAttr(Attribute::LEFT_VALUE)) {
+        ma.SetTy(sourceExternTy);
+        return true;
+    }
+    if (ma.callOrPattern) {
+        return false;
+    }
+
+    auto runtimeTy = sourceExternTy->typeArgs[0];
+    CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
+    Ptr<Decl> runtimeDecl = nullptr;
+    bool isGenericRuntimeTy = false;
+    if (auto genericsTy = DynamicCast<GenericsTy*>(runtimeTy); genericsTy) {
+        isGenericRuntimeTy = true;
+        runtimeDecl = genericsTy->decl;
+    } else {
+        runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    }
+    CJC_ASSERT(runtimeDecl);
+
+    auto runtimeRef = CreateRefExpr(*runtimeDecl);
+    runtimeRef->isAlone = false;
+    runtimeRef->SetTy(runtimeTy);
+    runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
+    CopyBasicInfo(&ma, runtimeRef.get());
+
+    OwnedPtr<MemberAccess> memberAccess;
+    Ptr<FuncDecl> memberAccessDecl = nullptr;
+    if (isGenericRuntimeTy) {
+        memberAccess = MakeOwned<MemberAccess>();
+        memberAccess->baseExpr = std::move(runtimeRef);
+        memberAccess->field = "memberAccess";
+        memberAccessDecl = GetRuntimeFuncDecl(importManager, "memberAccess");
+        memberAccess->target = memberAccessDecl;
+        auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
+        CJC_ASSERT(runtimeInterfaceDecl);
+        CJC_ASSERT(memberAccessDecl);
+        auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
+        memberAccess->SetTy(typeManager.GetInstantiatedTy(memberAccessDecl->GetTy(), typeMapping));
+    } else {
+        memberAccess = CreateMemberAccess(std::move(runtimeRef), "memberAccess");
+        memberAccessDecl = DynamicCast<FuncDecl*>(memberAccess->target);
+    }
+    memberAccess->isAlone = false;
+    memberAccess->EnableAttr(Attribute::COMPILER_ADD);
+    CopyBasicInfo(&ma, memberAccess.get());
+    CJC_ASSERT(memberAccessDecl);
+    memberAccess->targets.emplace_back(memberAccessDecl);
+
+    std::vector<OwnedPtr<FuncArg>> args;
+
+    OwnedPtr<Expr> namedExpr = ma.baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(ma.baseExpr->desugarExpr.get()))
+                                                        : ASTCloner::Clone(Ptr(ma.baseExpr.get()));
+
+    args.emplace_back(CreateFuncArg(std::move(namedExpr)));
+    args.emplace_back(CreateFuncArg(CreateStringLit(importManager, ma.field.Val())));
+
+    // Generic runtime calls must not be pre-resolved here; overload resolution needs to infer the
+    // Runtime<T> method from T.memberAccess.
+    auto callTarget = isGenericRuntimeTy ? nullptr : memberAccessDecl;
+    auto call = CreateCallExpr(
+        std::move(memberAccess), std::move(args), callTarget, sourceExternTy, CallKind::CALL_DECLARED_FUNCTION);
+    CopyBasicInfo(&ma, call.get());
+    call->sourceExpr = &ma;
+    call->EnableAttr(Attribute::COMPILER_ADD);
+
+    auto typecheck = [this, &ctx](Ptr<Node> node) {
+        auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
+        ReplaceIdealTy(*node);
+        return ty;
+    };
+    Ptr<Ty> callTy = typecheck(call.get());
+    CJC_ASSERT(Ty::IsTyCorrect(callTy));
+    CJC_ASSERT(isGenericRuntimeTy ||
+        (call->resolvedFunction && call->resolvedFunction->identifier == "memberAccess" &&
+            typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
+
+    ma.SetTy(sourceExternTy);
+    call->SetTy(sourceExternTy);
+    ma.desugarExpr = std::move(call);
+    return true;
+}
+
 void TypeChecker::TypeCheckerImpl::DiagMemberAccessNotFound(const MemberAccess& ma)
 {
     if (IsFieldOperator(ma.field)) {
@@ -615,12 +644,7 @@ void TypeChecker::TypeCheckerImpl::InferMemberAccess(ASTContext& ctx, MemberAcce
     }
     SetIsNotAlone(*ma.baseExpr);
     auto targetOfBase = GetBaseDeclInMemberAccess(ctx, ma);
-    if (ma.baseExpr && Ty::IsTyCorrect(ma.baseExpr->GetTy()) &&
-        TryDesugarExternMemberAccess(typeManager, importManager, ma, [this, &ctx](Ptr<Node> node) {
-            auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
-            ReplaceIdealTy(*node);
-            return ty;
-        })) {
+    if (ma.baseExpr && Ty::IsTyCorrect(ma.baseExpr->GetTy()) && TryDesugarExternMemberAccess(ctx, ma)) {
         return;
     }
     TryInitializeBaseSum(ctx, ma);
