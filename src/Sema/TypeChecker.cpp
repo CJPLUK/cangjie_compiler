@@ -88,7 +88,14 @@ ExternifyResult CoerceToExtern(
     auto runtimeTy = target->typeArgs[0];
     CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
 
-    auto runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    Ptr<Decl> runtimeDecl = nullptr;
+    bool isGenericRuntimeTy = false;
+    if (auto genericsTy = DynamicCast<GenericsTy*>(runtimeTy); genericsTy) {
+        isGenericRuntimeTy = true;
+        runtimeDecl = genericsTy->decl;
+    } else {
+        runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    }
     CJC_ASSERT(runtimeDecl);
 
     OwnedPtr<Expr> inner;
@@ -106,14 +113,23 @@ ExternifyResult CoerceToExtern(
     runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(nodeExpr, runtimeRef.get());
 
-    // This yields T.toExtern
-    auto toExtern = CreateMemberAccess(std::move(runtimeRef), "toExtern");
+    // This yields T.toExtern. Generic type parameters do not have a nominal declaration for
+    // CreateMemberAccess to inspect, so leave target resolution to normal member lookup.
+    OwnedPtr<MemberAccess> toExtern;
+    if (isGenericRuntimeTy) {
+        toExtern = MakeOwned<MemberAccess>();
+        toExtern->baseExpr = std::move(runtimeRef);
+        toExtern->field = "toExtern";
+    } else {
+        toExtern = CreateMemberAccess(std::move(runtimeRef), "toExtern");
+    }
     toExtern->isAlone = false;
     toExtern->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(nodeExpr, toExtern.get());
     // TODO: Instantiate toExtern with the generic type parameter T
     auto toExternDecl = DynamicCast<FuncDecl*>(toExtern->target);
-    if (!toExternDecl) {
+    CJC_ASSERT(toExternDecl || isGenericRuntimeTy);
+    if (!toExternDecl && !isGenericRuntimeTy) {
         nodeExpr->SetTy(TypeManager::GetInvalidTy());
         return ExternifyResult::Failure;
     }
@@ -121,8 +137,11 @@ ExternifyResult CoerceToExtern(
     // This is the the type parameter, as in T.toExtern<soruceTy>
     toExtern->instTys.emplace_back(sourceTy);
     // This adds the toExternDecl to the sets of overload targets, we need this
-    // as we are gonna pass this into Synthesise that runs inference for the entire tree
-    toExtern->targets.emplace_back(toExternDecl);
+    // as we are gonna pass this into Synthesise that runs inference for the entire tree.
+    // For generic runtime type, this is done later!
+    if (toExternDecl) {
+        toExtern->targets.emplace_back(toExternDecl);
+    }
 
     // The array of arguments, which grabs wahatevet the inner expression of node is -- due to the fact that
     // node could be desugared already

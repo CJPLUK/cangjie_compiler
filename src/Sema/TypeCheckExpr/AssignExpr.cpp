@@ -54,7 +54,15 @@ bool TryDesugarExternMemberUpdate(
     auto sourceExternTy = ma->baseExpr->GetTy();
     auto runtimeTy = sourceExternTy->typeArgs[0];
     CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
-    auto runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+
+    Ptr<Decl> runtimeDecl = nullptr;
+    bool isGenericRuntimeTy = false;
+    if (auto genericsTy = DynamicCast<GenericsTy*>(runtimeTy); genericsTy) {
+        isGenericRuntimeTy = true;
+        runtimeDecl = genericsTy->decl;
+    } else {
+        runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    }
     CJC_ASSERT(runtimeDecl);
 
     auto runtimeRef = CreateRefExpr(*runtimeDecl);
@@ -63,17 +71,25 @@ bool TryDesugarExternMemberUpdate(
     runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(&ae, runtimeRef.get());
 
-    auto memberUpdate = CreateMemberAccess(std::move(runtimeRef), "memberUpdate");
+    OwnedPtr<MemberAccess> memberUpdate;
+    if (isGenericRuntimeTy) {
+        memberUpdate = MakeOwned<MemberAccess>();
+        memberUpdate->baseExpr = std::move(runtimeRef);
+        memberUpdate->field = "memberUpdate";
+    } else {
+        memberUpdate = CreateMemberAccess(std::move(runtimeRef), "memberUpdate");
+    }
     memberUpdate->isAlone = false;
     memberUpdate->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(&ae, memberUpdate.get());
     auto memberUpdateDecl = DynamicCast<FuncDecl*>(memberUpdate->target);
-    if (!memberUpdateDecl) {
+    if (!memberUpdateDecl && !isGenericRuntimeTy) {
         ae.SetTy(TypeManager::GetInvalidTy());
         return true;
     }
-    memberUpdate->instTys.emplace_back(rightTy);
-    memberUpdate->targets.emplace_back(memberUpdateDecl);
+    if (memberUpdateDecl) {
+        memberUpdate->targets.emplace_back(memberUpdateDecl);
+    }
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(CloneEffectiveExpr(Ptr(ma->baseExpr.get()))));
@@ -135,7 +151,14 @@ bool TryDesugarExternIndexUpdate(TypeManager& typeManager, ImportManager& import
 
     auto runtimeTy = sourceExternTy->typeArgs[0];
     CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
-    auto runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    Ptr<Decl> runtimeDecl = nullptr;
+    bool isGenericRuntimeTy = false;
+    if (auto genericsTy = DynamicCast<GenericsTy*>(runtimeTy); genericsTy) {
+        isGenericRuntimeTy = true;
+        runtimeDecl = genericsTy->decl;
+    } else {
+        runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    }
     CJC_ASSERT(runtimeDecl);
 
     auto createRuntimeAccess = [&](OwnedPtr<Expr> baseExpr, Expr& indexExpr) -> OwnedPtr<CallExpr> {
@@ -145,15 +168,24 @@ bool TryDesugarExternIndexUpdate(TypeManager& typeManager, ImportManager& import
         runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
         CopyBasicInfo(&ae, runtimeRef.get());
 
-        auto indexAccess = CreateMemberAccess(std::move(runtimeRef), "indexAccess");
+        OwnedPtr<MemberAccess> indexAccess;
+        if (isGenericRuntimeTy) {
+            indexAccess = MakeOwned<MemberAccess>();
+            indexAccess->baseExpr = std::move(runtimeRef);
+            indexAccess->field = "indexAccess";
+        } else {
+            indexAccess = CreateMemberAccess(std::move(runtimeRef), "indexAccess");
+        }
         indexAccess->isAlone = false;
         indexAccess->EnableAttr(Attribute::COMPILER_ADD);
         CopyBasicInfo(&ae, indexAccess.get());
         auto indexAccessDecl = DynamicCast<FuncDecl*>(indexAccess->target);
-        if (!indexAccessDecl) {
+        if (!indexAccessDecl && !isGenericRuntimeTy) {
             return nullptr;
         }
-        indexAccess->targets.emplace_back(indexAccessDecl);
+        if (indexAccessDecl) {
+            indexAccess->targets.emplace_back(indexAccessDecl);
+        }
 
         std::vector<OwnedPtr<FuncArg>> args;
         args.emplace_back(CreateFuncArg(std::move(baseExpr)));
@@ -183,17 +215,25 @@ bool TryDesugarExternIndexUpdate(TypeManager& typeManager, ImportManager& import
     runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(&ae, runtimeRef.get());
 
-    auto indexUpdate = CreateMemberAccess(std::move(runtimeRef), "indexUpdate");
+    OwnedPtr<MemberAccess> indexUpdate;
+    if (isGenericRuntimeTy) {
+        indexUpdate = MakeOwned<MemberAccess>();
+        indexUpdate->baseExpr = std::move(runtimeRef);
+        indexUpdate->field = "indexUpdate";
+    } else {
+        indexUpdate = CreateMemberAccess(std::move(runtimeRef), "indexUpdate");
+    }
     indexUpdate->isAlone = false;
     indexUpdate->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(&ae, indexUpdate.get());
     auto indexUpdateDecl = DynamicCast<FuncDecl*>(indexUpdate->target);
-    if (!indexUpdateDecl) {
+    if (!indexUpdateDecl && !isGenericRuntimeTy) {
         ae.SetTy(TypeManager::GetInvalidTy());
         return true;
     }
-    indexUpdate->instTys.emplace_back(rightTy);
-    indexUpdate->targets.emplace_back(indexUpdateDecl);
+    if (indexUpdateDecl) {
+        indexUpdate->targets.emplace_back(indexUpdateDecl);
+    }
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(std::move(updateBaseExpr)));

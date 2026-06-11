@@ -47,7 +47,14 @@ bool TryDesugarExternMemberAccess(
 
     auto runtimeTy = sourceExternTy->typeArgs[0];
     CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
-    auto runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    Ptr<Decl> runtimeDecl = nullptr;
+    bool isGenericRuntimeTy = false;
+    if (auto genericsTy = DynamicCast<GenericsTy*>(runtimeTy); genericsTy) {
+        isGenericRuntimeTy = true;
+        runtimeDecl = genericsTy->decl;
+    } else {
+        runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    }
     CJC_ASSERT(runtimeDecl);
 
     auto runtimeRef = CreateRefExpr(*runtimeDecl);
@@ -56,16 +63,25 @@ bool TryDesugarExternMemberAccess(
     runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(&ma, runtimeRef.get());
 
-    auto memberAccess = CreateMemberAccess(std::move(runtimeRef), "memberAccess");
+    OwnedPtr<MemberAccess> memberAccess;
+    if (isGenericRuntimeTy) {
+        memberAccess = MakeOwned<MemberAccess>();
+        memberAccess->baseExpr = std::move(runtimeRef);
+        memberAccess->field = "memberAccess";
+    } else {
+        memberAccess = CreateMemberAccess(std::move(runtimeRef), "memberAccess");
+    }
     memberAccess->isAlone = false;
     memberAccess->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(&ma, memberAccess.get());
     auto memberAccessDecl = DynamicCast<FuncDecl*>(memberAccess->target);
-    if (!memberAccessDecl) {
+    if (!memberAccessDecl && !isGenericRuntimeTy) {
         ma.SetTy(TypeManager::GetInvalidTy());
         return true;
     }
-    memberAccess->targets.emplace_back(memberAccessDecl);
+    if (memberAccessDecl) {
+        memberAccess->targets.emplace_back(memberAccessDecl);
+    }
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(ASTCloner::Clone(Ptr(ma.baseExpr.get()))));
