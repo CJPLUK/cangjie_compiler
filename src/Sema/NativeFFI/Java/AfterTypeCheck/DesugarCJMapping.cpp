@@ -768,6 +768,8 @@ void JavaDesugarManager::InsertAttachCJObject(ClassDecl& fwdDecl, ClassDecl& cla
     fd->constructorCall = ConstructorCall::SUPER;
     fd->EnableAttr(Attribute::PUBLIC, Attribute::IN_CLASSLIKE);
     fd->funcBody->parentClassLike = &classDecl;
+    // Every AST decl must carry a curFile (see CHIR AST2CHIR::CreateFuncSignatureAndSetGlobalCache).
+    fd->curFile = curFile;
 
     fwdDecl.body->decls.emplace_back(std::move(fd));
 }

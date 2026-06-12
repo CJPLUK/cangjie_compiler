@@ -58,6 +58,9 @@ OwnedPtr<FuncDecl> GenerateInJavaImplRegistryCompanion::GenerateConstructor(Clas
     ctor->funcBody->parentClassLike = &companion;
     ctor->fullPackageName = companion.fullPackageName;
     ctor->moduleName = companion.moduleName;
+    // Every AST decl must carry a curFile; otherwise downstream passes (e.g. CHIR
+    // AST2CHIR::CreateFuncSignatureAndSetGlobalCache) dereference a null pointer.
+    ctor->curFile = file;
     return ctor;
 }
 
