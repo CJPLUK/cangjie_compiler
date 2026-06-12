@@ -40,9 +40,9 @@ private:
         std::unordered_map<Block*, Terminator*>& maybeUnreachable);
 
     struct PluginResult {
-        uint8_t* data;
-        int64_t size;
-        bool success;
+        uint8_t* data{nullptr};
+        int64_t size{0};
+        bool success{false};
     };
     CHIRBuilder& builder;
     void* handle{nullptr};
