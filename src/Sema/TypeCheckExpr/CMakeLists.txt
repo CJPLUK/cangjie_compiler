@@ -4,5 +4,5 @@
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-file(GLOB TYPECHECKEXPR_SRC *.cpp)
+file(GLOB TYPECHECKEXPR_SRC CONFIGURE_DEPENDS *.cpp)
 set(SEMA_SRC ${SEMA_SRC} ${TYPECHECKEXPR_SRC} PARENT_SCOPE)

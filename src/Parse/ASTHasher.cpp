@@ -509,6 +509,30 @@ struct ASTHasherImpl {
         HashExpr<whatTypeToHash>(pe);
         SUPERHash<whatTypeToHash>(pe.expr);
     }
+    template <int whatTypeToHash> void HashForcedCastExpr(const ForcedCastExpr& fce)
+    {
+        HashExpr<whatTypeToHash>(fce);
+        SUPERHash<whatTypeToHash>(fce.targetType, fce.leftParenPos, fce.expr, fce.rightParenPos);
+    }
+    template <int whatTypeToHash> void HashAmbiguousForcedCastExpr(const AmbiguousForcedCastExpr& afce)
+    {
+        HashExpr<whatTypeToHash>(afce);
+        if (afce.desugarExpr) {
+            SUPERHash<whatTypeToHash>(afce.desugarExpr);
+            return;
+        }
+        auto hashBranchShape = [this](const OwnedPtr<Expr>& expr) {
+            if (!expr) {
+                SUPERHash<whatTypeToHash>(static_cast<int64_t>(ASTKind::INVALID_EXPR));
+                return;
+            }
+            SUPERHash<whatTypeToHash>(static_cast<int64_t>(expr->astKind), expr->begin, expr->end);
+        };
+        // Before sema chooses a branch, both children are parse candidates rather than the final semantic tree.
+        // Hashing their full subtrees can touch unresolved target/type fields during AST-cache calculation.
+        hashBranchShape(afce.forcedExpr);
+        hashBranchShape(afce.fallbackExpr);
+    }
     template <int whatTypeToHash> void HashPointerExpr(const PointerExpr& pe)
     {
         HashExpr<whatTypeToHash>(pe);

@@ -2633,6 +2633,38 @@ struct ParenExpr : Expr {
 };
 
 /**
+ * A ForcedCastExpr node represents a forced cast expression.
+ * ```
+ * let x = (Foo)e;
+ * ```
+ */
+struct ForcedCastExpr : Expr {
+    OwnedPtr<Type> targetType; /**< The target type inside '('. */
+    Position leftParenPos;     /**< Position of '('. */
+    OwnedPtr<Expr> expr;       /**< Operand expression. */
+    Position rightParenPos;    /**< Position of ')'. */
+    ForcedCastExpr() : Expr(ASTKind::FORCED_CAST_EXPR)
+    {
+    }
+    std::string ToString() const override;
+    void Clear() noexcept override;
+};
+
+/**
+ * An AmbiguousForcedCastExpr node represents a parse-time ambiguity between
+ * a forced cast candidate and the original parenthesized-expression path.
+ */
+struct AmbiguousForcedCastExpr : Expr {
+    OwnedPtr<Expr> forcedExpr;   /**< Complete forced-cast candidate path. */
+    OwnedPtr<Expr> fallbackExpr; /**< Original parse path, kept to avoid reparsing later. */
+    AmbiguousForcedCastExpr() : Expr(ASTKind::AMBIGUOUS_FORCED_CAST_EXPR)
+    {
+    }
+    std::string ToString() const override;
+    void Clear() noexcept override;
+};
+
+/**
  * A lambdaExpr node represents a lambda expression with '=>'.
  */
 struct LambdaExpr : Expr {

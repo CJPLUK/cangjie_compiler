@@ -735,6 +735,10 @@ private:
     bool ChkIncOrDecExpr(ASTContext& ctx, AST::Ty& target, AST::IncOrDecExpr& ide);
     Ptr<AST::Ty> SynTypeConvExpr(ASTContext& ctx, AST::TypeConvExpr& tce);
     Ptr<AST::Ty> SynNumTypeConvExpr(AST::TypeConvExpr& tce);
+    Ptr<AST::Ty> SynForcedCastExpr(ASTContext& ctx, AST::ForcedCastExpr& fce);
+    bool ChkForcedCastExpr(ASTContext& ctx, AST::Ty& targetTy, AST::ForcedCastExpr& fce);
+    Ptr<AST::Ty> SynAmbiguousForcedCastExpr(ASTContext& ctx, AST::AmbiguousForcedCastExpr& afce);
+    bool ChkAmbiguousForcedCastExpr(ASTContext& ctx, AST::Ty& targetTy, AST::AmbiguousForcedCastExpr& afce);
     bool SynCFuncCall(ASTContext& ctx, AST::CallExpr& ce);
     bool ChkTypeConvExpr(ASTContext& ctx, AST::Ty& targetTy, AST::TypeConvExpr& tce);
     Ptr<AST::Ty> SynLoopControlExpr(const ASTContext& ctx, AST::JumpExpr& je) const;

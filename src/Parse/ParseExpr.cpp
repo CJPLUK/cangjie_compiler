@@ -13,6 +13,7 @@
 
 #include "ParserImpl.h"
 
+#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/Utils.h"
@@ -154,6 +155,17 @@ void ParserImpl::SkipExprOperator()
 // Will only create leftExpr part and operator, the right part will register later.
 OwnedPtr<AST::Expr> ParserImpl::MakeOperatorExpr(OwnedPtr<AST::Expr>& lExpr, const Token& oTok)
 {
+    if (lExpr->astKind == ASTKind::AMBIGUOUS_FORCED_CAST_EXPR) {
+        auto ambiguousExpr = OwnedPtr<AmbiguousForcedCastExpr>(StaticCast<AmbiguousForcedCastExpr*>(lExpr.release()));
+        auto forcedLeft = std::move(ambiguousExpr->forcedExpr);
+        auto fallbackLeft = std::move(ambiguousExpr->fallbackExpr);
+        auto ret = MakeOwned<AmbiguousForcedCastExpr>();
+        ret->begin = ambiguousExpr->begin;
+        ret->forcedExpr = MakeOperatorExpr(forcedLeft, oTok);
+        ret->fallbackExpr = MakeOperatorExpr(fallbackLeft, oTok);
+        ret->end = ret->forcedExpr ? ret->forcedExpr->end : ret->fallbackExpr->end;
+        return ret;
+    }
     if (oTok.kind == TokenKind::IS) {
         OwnedPtr<IsExpr> isExpr = MakeOwned<IsExpr>();
         SpreadAttrAndConsume(lExpr.get(), isExpr.get(), {});
@@ -228,6 +240,18 @@ void ParserImpl::CheckWildcardInExpr(const OwnedPtr<Expr>& root)
 
 void ParserImpl::RegisterRightExpr(const OwnedPtr<AST::Expr>& expr, OwnedPtr<AST::Expr>&& rExpr)
 {
+    if (expr->astKind == ASTKind::AMBIGUOUS_FORCED_CAST_EXPR) {
+        auto ambiguousExpr = StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(expr.get());
+        auto clonedRightExpr = ASTCloner::Clone<Expr>(rExpr.get());
+        RegisterRightExpr(ambiguousExpr->forcedExpr, std::move(clonedRightExpr));
+        RegisterRightExpr(ambiguousExpr->fallbackExpr, std::move(rExpr));
+        expr->end = ambiguousExpr->forcedExpr ? ambiguousExpr->forcedExpr->end : ambiguousExpr->fallbackExpr->end;
+        if ((ambiguousExpr->forcedExpr && ambiguousExpr->forcedExpr->TestAttr(Attribute::HAS_BROKEN)) ||
+            (ambiguousExpr->fallbackExpr && ambiguousExpr->fallbackExpr->TestAttr(Attribute::HAS_BROKEN))) {
+            expr->EnableAttr(Attribute::HAS_BROKEN);
+        }
+        return;
+    }
     // rExpr cannot be a wildcard, or tuple containing wildcards, e.g (1, _) 、(1, (2, _))
     if (expr->astKind == ASTKind::ASSIGN_EXPR && StaticAs<ASTKind::ASSIGN_EXPR>(expr.get())->op == TokenKind::ASSIGN) {
         CheckWildcardInExpr(rExpr);
@@ -571,6 +595,40 @@ void ParserImpl::ParseExprWithRightExprOrType(OwnedPtr<Expr>& base, const Token&
 {
     ChainScope cs(*this, base.get());
     SkipExprOperator();
+    if (base->astKind == ASTKind::AMBIGUOUS_FORCED_CAST_EXPR) {
+        auto ambiguousExpr = StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(base.get());
+        bool parseRightType = ambiguousExpr->forcedExpr &&
+            (ambiguousExpr->forcedExpr->astKind == ASTKind::IS_EXPR ||
+                ambiguousExpr->forcedExpr->astKind == ASTKind::AS_EXPR);
+        if (parseRightType) {
+            OwnedPtr<Type> type;
+            if (!SeeingAny(GetTypeFirst()) && !SeeingContextualKeyword()) {
+                DiagExpectedTypeNameAfterAs(tok);
+                type = MakeInvalid<Type>(lastToken.End());
+                base->EnableAttr(Attribute::HAS_BROKEN);
+            } else {
+                type = ParseType();
+            }
+            auto clonedType = ASTCloner::Clone<Type>(type.get());
+            auto setType = [](const OwnedPtr<Expr>& expr, OwnedPtr<Type> rightType) {
+                expr->end = rightType->end;
+                expr->astKind == ASTKind::IS_EXPR ? StaticAs<ASTKind::IS_EXPR>(expr.get())->isType = std::move(rightType)
+                                                  : StaticAs<ASTKind::AS_EXPR>(expr.get())->asType = std::move(rightType);
+            };
+            setType(ambiguousExpr->forcedExpr, std::move(clonedType));
+            setType(ambiguousExpr->fallbackExpr, std::move(type));
+            base->end = ambiguousExpr->forcedExpr->end;
+            return;
+        }
+
+        auto rExpr = ParseExpr(tok, nullptr, ek);
+        auto res = CheckMacroExprRules(tok, Token{TokenKind::DOT}, *rExpr);
+        if (!res || rExpr->TestAttr(Attribute::HAS_BROKEN) || rExpr->TestAttr(Attribute::IS_BROKEN)) {
+            base->EnableAttr(Attribute::HAS_BROKEN);
+        }
+        RegisterRightExpr(base, std::move(rExpr));
+        return;
+    }
     if (base->astKind == ASTKind::IS_EXPR || base->astKind == ASTKind::AS_EXPR) {
         OwnedPtr<Type> type;
         if (!SeeingAny(GetTypeFirst()) && !SeeingContextualKeyword()) {

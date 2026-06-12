@@ -14,6 +14,9 @@ ERROR(sema_incompatible_expo_target_type,
 ERROR(sema_ambiguous_expo_right_operand_type,
     "both 'Int64' and 'Float64' is compatible with the right operand's type of this exponentiation (assignment) "
     "expression; please give an explicit one")
+ERROR(sema_invalid_forced_cast_expr,
+    "invalid interoperation forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of "
+    "'std.interop.Extern' type; use 'as' for ordinary type conversions")
 ERROR(sema_not_a_type, "'%s' is not a type")
 ERROR(sema_incompatible_func_body_and_return_type, "the return type of this function cannot be calculated from the function body and all the return expressions")
 ERROR(sema_type_must_toplevel, "%s type must be toplevel")

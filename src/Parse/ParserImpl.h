@@ -145,6 +145,8 @@ private:
     bool deadlocked{false};
     bool inForeignBlock{false};
     bool enableCustomAnno{false}; // parse macrocall as custom annotation.
+    bool disableForcedCastParse{false};
+    bool enableForcedCastOnlyParse{false}; // Used by speculative parsing to avoid recursively building fallback branches.
 
     std::unique_ptr<Lexer> lexer;
     std::string inputString{};
@@ -643,6 +645,8 @@ private:
      */
     OwnedPtr<AST::Expr> ParseLeftParenExpr();
     OwnedPtr<AST::Expr> ParseLeftParenExprInKind(ExprKind ek);
+    OwnedPtr<AST::Expr> ParseConventionalLeftParenExprInKind(ExprKind ek, const Position& leftParenPos);
+    OwnedPtr<AST::Expr> ParseForcedCastExpr(ExprKind ek, const Position& leftParenPos);
     OwnedPtr<AST::TupleLit> ParseTupleLitForParenExpr(const Position& leftParenPos);
     OwnedPtr<AST::TupleLit> ParseTupleLitForParenExprComma(const Position& leftParenPos, OwnedPtr<AST::Expr> expr);
     /**

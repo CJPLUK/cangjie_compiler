@@ -19,6 +19,7 @@
 #include <windows.h>
 #else
 #include <unistd.h>
+extern char **environ;
 #endif
 
 using namespace Cangjie;
@@ -44,6 +45,36 @@ std::unordered_map<std::string, std::string> GetEnvironmentVars()
         ++env;
     }
     return envVars;
+}
+
+VarDecl* FindVarDeclByName(File& file, const std::string& name)
+{
+    VarDecl* result = nullptr;
+    Walker walker(&file, [&result, &name](Ptr<Node> node) -> VisitAction {
+        if (auto vd = DynamicCast<VarDecl*>(node); vd && vd->identifier.Val() == name) {
+            if (vd->initializer) {
+                result = vd;
+                return VisitAction::STOP_NOW;
+            }
+            if (!result) {
+                result = vd;
+            }
+        }
+        return VisitAction::WALK_CHILDREN;
+    });
+    walker.Walk();
+    return result;
+}
+
+CallExpr* RequireDesugaredCall(Expr& expr)
+{
+    if (!expr.desugarExpr) {
+        return nullptr;
+    }
+    if (expr.desugarExpr->astKind == ASTKind::CALL_EXPR) {
+        return StaticAs<ASTKind::CALL_EXPR>(expr.desugarExpr.get());
+    }
+    return RequireDesugaredCall(*expr.desugarExpr);
 }
 }
 
@@ -81,7 +112,7 @@ protected:
 #elif defined(__APPLE__) && defined(__x86_64__)
         std::string platform = "darwin_x86_64";
 #elif defined(__APPLE__)
-        std::string platform = "darwin_arm64";
+        std::string platform = "darwin_aarch64";
 #elif defined(__x86_64__)
         std::string platform = "linux_x86_64";
 #else
@@ -167,6 +198,374 @@ main() {
     });
     walker.Walk();
     EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+TEST_F(TypeCheckerTest, ForcedCastDirectDesugarsToFromExtern)
+{
+    std::string code = R"(
+import std.interop.*
+
+public class foo {}
+public class DummyRuntime <: Runtime<DummyRuntime> {
+    public static func memberAccess(e: Extern<DummyRuntime>, field: String): Extern<DummyRuntime> {
+        return e
+    }
+
+    public static func indexAccess(e: Extern<DummyRuntime>, arg: Any): Extern<DummyRuntime> {
+        return e
+    }
+
+    public static func memberUpdate(e: Extern<DummyRuntime>, field: String, value: Any): Unit {
+    }
+
+    public static func indexUpdate(e: Extern<DummyRuntime>, field: Any, value: Any): Unit {
+    }
+
+    public static func functionCall(e: Extern<DummyRuntime>, args: Array<Any>): Extern<DummyRuntime> {
+        return e
+    }
+
+    public static func fromExtern<R>(h: Extern<DummyRuntime>): R {
+        throw Exception()
+    }
+
+    public static func toExtern<R>(v: R): Extern<DummyRuntime> {
+        return Extern<DummyRuntime>(v)
+    }
+}
+
+func makeExtern(): Extern<DummyRuntime> {
+    return Extern<DummyRuntime>(0)
+}
+
+main() {
+    let externValue = makeExtern()
+    let value = (foo)externValue
+}
+)";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+
+    auto* valueDecl = FindVarDeclByName(*instance->GetSourcePackages()[0]->files[0], "value");
+    ASSERT_NE(valueDecl, nullptr);
+    ASSERT_NE(valueDecl->initializer, nullptr);
+    EXPECT_EQ(valueDecl->initializer->astKind, ASTKind::FORCED_CAST_EXPR);
+    auto* callExpr = RequireDesugaredCall(*valueDecl->initializer);
+    ASSERT_NE(callExpr, nullptr);
+    ASSERT_NE(callExpr->resolvedFunction, nullptr);
+    EXPECT_EQ(callExpr->resolvedFunction->identifier.Val(), "fromExtern");
+    auto* memberAccess = DynamicCast<MemberAccess*>(callExpr->baseFunc.get());
+    ASSERT_NE(memberAccess, nullptr);
+    EXPECT_EQ(memberAccess->field.Val(), "fromExtern");
+    ASSERT_EQ(memberAccess->typeArguments.size(), 1);
+    EXPECT_EQ(memberAccess->typeArguments[0]->ToString(), "foo");
+    EXPECT_EQ(valueDecl->GetTy()->String(), "Class-foo");
+}
+
+TEST_F(TypeCheckerTest, ForcedCastGenericTargetDesugarsToFromExtern)
+{
+    std::string code = R"(
+import std.interop.*
+
+public class Box<T> {}
+public class DummyRuntime <: Runtime<DummyRuntime> {
+    public static func memberAccess(e: Extern<DummyRuntime>, field: String): Extern<DummyRuntime> {
+        return e
+    }
+
+    public static func indexAccess(e: Extern<DummyRuntime>, arg: Any): Extern<DummyRuntime> {
+        return e
+    }
+
+    public static func memberUpdate(e: Extern<DummyRuntime>, field: String, value: Any): Unit {
+    }
+
+    public static func indexUpdate(e: Extern<DummyRuntime>, field: Any, value: Any): Unit {
+    }
+
+    public static func functionCall(e: Extern<DummyRuntime>, args: Array<Any>): Extern<DummyRuntime> {
+        return e
+    }
+
+    public static func fromExtern<R>(h: Extern<DummyRuntime>): R {
+        throw Exception()
+    }
+
+    public static func toExtern<R>(v: R): Extern<DummyRuntime> {
+        return Extern<DummyRuntime>(v)
+    }
+}
+
+func makeExtern(): Extern<DummyRuntime> {
+    return Extern<DummyRuntime>(0)
+}
+
+main() {
+    let externValue = makeExtern()
+    let value = (Box<Int64>)externValue
+}
+)";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+
+    auto* valueDecl = FindVarDeclByName(*instance->GetSourcePackages()[0]->files[0], "value");
+    ASSERT_NE(valueDecl, nullptr);
+    ASSERT_NE(valueDecl->initializer, nullptr);
+    EXPECT_EQ(valueDecl->initializer->astKind, ASTKind::FORCED_CAST_EXPR);
+    auto* callExpr = RequireDesugaredCall(*valueDecl->initializer);
+    ASSERT_NE(callExpr, nullptr);
+    ASSERT_NE(callExpr->resolvedFunction, nullptr);
+    EXPECT_EQ(callExpr->resolvedFunction->identifier.Val(), "fromExtern");
+    auto* memberAccess = DynamicCast<MemberAccess*>(callExpr->baseFunc.get());
+    ASSERT_NE(memberAccess, nullptr);
+    EXPECT_EQ(memberAccess->field.Val(), "fromExtern");
+    ASSERT_EQ(memberAccess->typeArguments.size(), 1);
+    EXPECT_EQ(memberAccess->typeArguments[0]->ToString(), "Box<Int64>");
+    EXPECT_EQ(valueDecl->GetTy()->String(), "Class-Box<Int64>");
+}
+
+TEST_F(TypeCheckerTest, ForcedCastDirectNonExternOperandReportsInteropDiagnostic)
+{
+    std::string code = R"(
+public class foo {}
+
+main() {
+    let value: foo = (foo)1
+}
+)";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    EXPECT_FALSE(instance->Compile(CompileStage::SEMA));
+
+    auto diags = diag.GetCategoryDiagnostic(DiagCategory::SEMA);
+    bool foundForcedCastDiag = false;
+    for (auto& d : diags) {
+        auto message = d.GetErrorMessage();
+        if (message.find("invalid interoperation forced cast") != std::string::npos) {
+            foundForcedCastDiag = true;
+            EXPECT_NE(message.find("'(U)e' requires 'U' to be a type"), std::string::npos);
+            EXPECT_NE(message.find("'std.interop.Extern' type"), std::string::npos);
+            EXPECT_NE(message.find("use 'as' for ordinary type conversions"), std::string::npos);
+        }
+    }
+    EXPECT_TRUE(foundForcedCastDiag);
+}
+
+TEST_F(TypeCheckerTest, ForcedCastRejectsUserDefinedExternWithSameName)
+{
+    std::string code = R"(
+public interface Runtime<T> where T <: Runtime<T> {
+    static func fromExtern<R>(h: Extern<T>): R
+}
+
+public struct Extern<T> where T <: Runtime<T> {
+    Extern(public let content: Any) {}
+}
+
+public class foo {}
+public class DummyRuntime <: Runtime<DummyRuntime> {
+    public static func fromExtern<R>(h: Extern<DummyRuntime>): R {
+        throw Exception()
+    }
+}
+
+func makeExtern(): Extern<DummyRuntime> {
+    return Extern<DummyRuntime>(0)
+}
+
+main() {
+    let externValue = makeExtern()
+    let value: foo = (foo)externValue
+}
+)";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    EXPECT_FALSE(instance->Compile(CompileStage::SEMA));
+
+    auto diags = diag.GetCategoryDiagnostic(DiagCategory::SEMA);
+    bool foundForcedCastDiag = false;
+    for (auto& d : diags) {
+        if (d.GetErrorMessage().find("'std.interop.Extern' type") != std::string::npos) {
+            foundForcedCastDiag = true;
+        }
+    }
+    EXPECT_TRUE(foundForcedCastDiag);
+}
+
+TEST_F(TypeCheckerTest, ForcedCastAmbiguousFallbackKeepsOriginalCallPath)
+{
+    std::string code = R"(
+func foo(x: Int64): Int64 {
+    return x + 1
+}
+
+main() {
+    let value = (foo)(1)
+}
+)";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+
+    auto* valueDecl = FindVarDeclByName(*instance->GetSourcePackages()[0]->files[0], "value");
+    ASSERT_NE(valueDecl, nullptr);
+    ASSERT_NE(valueDecl->initializer, nullptr);
+    EXPECT_EQ(valueDecl->initializer->astKind, ASTKind::AMBIGUOUS_FORCED_CAST_EXPR);
+    auto* callExpr = RequireDesugaredCall(*valueDecl->initializer);
+    ASSERT_NE(callExpr, nullptr);
+    EXPECT_EQ(callExpr->GetTy()->String(), "Int64");
+    auto* parenExpr = DynamicCast<ParenExpr*>(callExpr->baseFunc.get());
+    ASSERT_NE(parenExpr, nullptr);
+    auto* refExpr = DynamicCast<RefExpr*>(parenExpr->expr.get());
+    ASSERT_NE(refExpr, nullptr);
+    EXPECT_EQ(refExpr->ref.identifier.Val(), "foo");
+}
+
+TEST_F(TypeCheckerTest, ForcedCastAmbiguousFallbackKeepsOriginalBinaryPath)
+{
+    std::string code = R"(
+main() {
+    let foo: Int64 = 2
+    let value = (foo)-1
+}
+)";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+
+    auto* valueDecl = FindVarDeclByName(*instance->GetSourcePackages()[0]->files[0], "value");
+    ASSERT_NE(valueDecl, nullptr);
+    ASSERT_NE(valueDecl->initializer, nullptr);
+    EXPECT_EQ(valueDecl->initializer->astKind, ASTKind::AMBIGUOUS_FORCED_CAST_EXPR);
+    ASSERT_NE(valueDecl->initializer->desugarExpr, nullptr);
+    auto* binaryExpr = DynamicCast<BinaryExpr*>(valueDecl->initializer->desugarExpr.get());
+    ASSERT_NE(binaryExpr, nullptr);
+    EXPECT_EQ(binaryExpr->op, TokenKind::SUB);
+    EXPECT_EQ(binaryExpr->GetTy()->String(), "Int64");
+}
+
+TEST_F(TypeCheckerTest, ForcedCastAmbiguousFallbackKeepsOriginalExtendedBinaryPath)
+{
+    std::string code = R"(
+main() {
+    let foo: Int64 = 2
+    let value = (foo)-1 * 2
+}
+)";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+
+    auto* valueDecl = FindVarDeclByName(*instance->GetSourcePackages()[0]->files[0], "value");
+    ASSERT_NE(valueDecl, nullptr);
+    ASSERT_NE(valueDecl->initializer, nullptr);
+    EXPECT_EQ(valueDecl->initializer->astKind, ASTKind::AMBIGUOUS_FORCED_CAST_EXPR);
+    ASSERT_NE(valueDecl->initializer->desugarExpr, nullptr);
+    auto* binaryExpr = DynamicCast<BinaryExpr*>(valueDecl->initializer->desugarExpr.get());
+    ASSERT_NE(binaryExpr, nullptr);
+    EXPECT_EQ(binaryExpr->op, TokenKind::SUB);
+    auto* rightExpr = DynamicCast<BinaryExpr*>(binaryExpr->rightExpr.get());
+    ASSERT_NE(rightExpr, nullptr);
+    EXPECT_EQ(rightExpr->op, TokenKind::MUL);
+    EXPECT_EQ(binaryExpr->GetTy()->String(), "Int64");
+}
+
+TEST_F(TypeCheckerTest, ForcedCastAmbiguousExprSelectsForcedCast)
+{
+    std::string code = R"(
+import std.interop.*
+
+public class foo {}
+public class DummyRuntime <: Runtime<DummyRuntime> {
+    public static func memberAccess(e: Extern<DummyRuntime>, field: String): Extern<DummyRuntime> {
+        return e
+    }
+
+    public static func indexAccess(e: Extern<DummyRuntime>, arg: Any): Extern<DummyRuntime> {
+        return e
+    }
+
+    public static func memberUpdate(e: Extern<DummyRuntime>, field: String, value: Any): Unit {
+    }
+
+    public static func indexUpdate(e: Extern<DummyRuntime>, field: Any, value: Any): Unit {
+    }
+
+    public static func functionCall(e: Extern<DummyRuntime>, args: Array<Any>): Extern<DummyRuntime> {
+        return e
+    }
+
+    public static func fromExtern<R>(h: Extern<DummyRuntime>): R {
+        throw Exception()
+    }
+
+    public static func toExtern<R>(v: R): Extern<DummyRuntime> {
+        return Extern<DummyRuntime>(v)
+    }
+}
+
+func makeExtern(): Extern<DummyRuntime> {
+    return Extern<DummyRuntime>(0)
+}
+
+main() {
+    let externValue = makeExtern()
+    let value = (foo)(externValue)
+}
+)";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    ASSERT_TRUE(instance->Compile(CompileStage::SEMA));
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+
+    auto* valueDecl = FindVarDeclByName(*instance->GetSourcePackages()[0]->files[0], "value");
+    ASSERT_NE(valueDecl, nullptr);
+    ASSERT_NE(valueDecl->initializer, nullptr);
+    EXPECT_EQ(valueDecl->initializer->astKind, ASTKind::AMBIGUOUS_FORCED_CAST_EXPR);
+    auto* callExpr = RequireDesugaredCall(*valueDecl->initializer);
+    ASSERT_NE(callExpr, nullptr);
+    ASSERT_NE(callExpr->resolvedFunction, nullptr);
+    EXPECT_EQ(callExpr->resolvedFunction->identifier.Val(), "fromExtern");
+    auto* memberAccess = DynamicCast<MemberAccess*>(callExpr->baseFunc.get());
+    ASSERT_NE(memberAccess, nullptr);
+    EXPECT_EQ(memberAccess->field.Val(), "fromExtern");
+    ASSERT_EQ(callExpr->args.size(), 1);
+    auto* argParenExpr = DynamicCast<ParenExpr*>(callExpr->args[0]->expr.get());
+    ASSERT_NE(argParenExpr, nullptr);
+    auto* argRefExpr = DynamicCast<RefExpr*>(argParenExpr->expr.get());
+    ASSERT_NE(argRefExpr, nullptr);
+    EXPECT_EQ(argRefExpr->ref.identifier.Val(), "externValue");
+}
+
+TEST_F(TypeCheckerTest, ForcedCastAmbiguousFallsBackAndKeepsOriginalFailureForTypeCall)
+{
+    std::string code = R"(
+public class foo {}
+
+main() {
+    let value = (foo)(1)
+}
+)";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    EXPECT_FALSE(instance->Compile(CompileStage::SEMA));
+    EXPECT_GT(diag.GetErrorCount(), 0);
 }
 
 TEST_F(TypeCheckerTest, MacroDeclTest)

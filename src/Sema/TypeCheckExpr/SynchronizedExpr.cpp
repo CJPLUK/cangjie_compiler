@@ -6,7 +6,7 @@
 
 #include "TypeCheckerImpl.h"
 
-#include "DiagSuppressor.h"
+#include "cangjie/Basic/DiagSuppressor.h"
 
 using namespace Cangjie;
 using namespace AST;

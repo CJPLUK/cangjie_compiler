@@ -15,7 +15,7 @@
 #include <algorithm>
 #include <list>
 
-#include "DiagSuppressor.h"
+#include "cangjie/Basic/DiagSuppressor.h"
 #include "Diags.h"
 #include "JoinAndMeet.h"
 #include "TypeCheckUtil.h"

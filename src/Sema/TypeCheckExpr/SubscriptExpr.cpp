@@ -7,7 +7,7 @@
 #include "TypeCheckerImpl.h"
 
 #include "Desugar/DesugarInTypeCheck.h"
-#include "DiagSuppressor.h"
+#include "cangjie/Basic/DiagSuppressor.h"
 #include "Diags.h"
 #include "TypeCheckUtil.h"
 
