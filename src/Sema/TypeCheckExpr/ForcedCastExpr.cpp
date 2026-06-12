@@ -6,7 +6,7 @@
 
 #include "TypeCheckerImpl.h"
 
-#include "DiagSuppressor.h"
+#include "cangjie/Basic/DiagSuppressor.h"
 #include "Diags.h"
 #include "NativeFFI/Utils.h"
 #include "TypeCheckUtil.h"

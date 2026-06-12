@@ -15,7 +15,7 @@
 #include "TypeCheckUtil.h"
 #include "ExtraScopes.h"
 #include "LocalTypeArgumentSynthesis.h"
-#include "DiagSuppressor.h"
+#include "cangjie/Basic/DiagSuppressor.h"
 #include "Diags.h"
 
 using namespace Cangjie;

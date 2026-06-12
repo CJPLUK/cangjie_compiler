@@ -7,10 +7,12 @@
 /**
  * @file
  *
- * This file implements diagnostic suppressor class for semantic check.
+ * This file implements a scoped diagnostic suppressor for speculative analysis.
  */
 
-#include "DiagSuppressor.h"
+#include "cangjie/Basic/DiagSuppressor.h"
+
+#include "cangjie/Basic/Utils.h"
 
 using namespace Cangjie;
 using namespace std;

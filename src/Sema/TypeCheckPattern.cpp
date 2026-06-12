@@ -22,7 +22,7 @@
 
 #include "BuiltInOperatorUtil.h"
 #include "Collector.h"
-#include "DiagSuppressor.h"
+#include "cangjie/Basic/DiagSuppressor.h"
 #include "Diags.h"
 #include "JoinAndMeet.h"
 #include "TypeCheckUtil.h"

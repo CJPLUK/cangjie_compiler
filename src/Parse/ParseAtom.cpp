@@ -13,7 +13,7 @@
 
 #include "ParserImpl.h"
 
-#include "../Sema/DiagSuppressor.h"
+#include "cangjie/Basic/DiagSuppressor.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
