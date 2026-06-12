@@ -67,6 +67,9 @@ ExternifyResult CoerceToExtern(
     if (!nodeExpr) {
         return ExternifyResult::Unnecessary;
     }
+    if (nodeExpr->astKind == ASTKind::BLOCK) {
+        return ExternifyResult::Unnecessary;
+    }
 
     // Typecheck the RHS as itself first.
     typecheck(node);
@@ -126,6 +129,7 @@ ExternifyResult CoerceToExtern(
     toExtern->isAlone = false;
     toExtern->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(nodeExpr, toExtern.get());
+
     // TODO: Instantiate toExtern with the generic type parameter T
     auto toExternDecl = DynamicCast<FuncDecl*>(toExtern->target);
     CJC_ASSERT(toExternDecl || isGenericRuntimeTy);
