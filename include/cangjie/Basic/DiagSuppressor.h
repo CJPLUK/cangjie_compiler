@@ -7,11 +7,11 @@
 /**
  * @file
  *
- * This file implements diagnostic suppressor class for semantic check.
+ * This file declares a scoped diagnostic suppressor for speculative analysis.
  */
 
-#ifndef CANGJIE_DIAGSUPPRESSOR_H
-#define CANGJIE_DIAGSUPPRESSOR_H
+#ifndef CANGJIE_BASIC_DIAGSUPPRESSOR_H
+#define CANGJIE_BASIC_DIAGSUPPRESSOR_H
 
 #include "cangjie/Basic/DiagnosticEngine.h"
 
@@ -36,4 +36,4 @@ private:
 };
 } // namespace Cangjie
 
-#endif // CANGJIE_DIAGSUPPRESSOR_H
+#endif // CANGJIE_BASIC_DIAGSUPPRESSOR_H

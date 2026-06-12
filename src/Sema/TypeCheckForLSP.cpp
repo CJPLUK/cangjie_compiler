@@ -14,7 +14,7 @@
 
 #include <limits>
 
-#include "DiagSuppressor.h"
+#include "cangjie/Basic/DiagSuppressor.h"
 #include "JoinAndMeet.h"
 #include "TypeCheckUtil.h"
 

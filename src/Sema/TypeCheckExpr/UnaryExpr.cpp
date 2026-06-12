@@ -14,7 +14,7 @@
 #include "cangjie/AST/RecoverDesugar.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CheckUtils.h"
-#include "DiagSuppressor.h"
+#include "cangjie/Basic/DiagSuppressor.h"
 
 using namespace Cangjie;
 using namespace Sema;

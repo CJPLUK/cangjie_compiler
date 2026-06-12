@@ -15,6 +15,7 @@ set(BASIC_SRC
     Display.cpp
     DiagnosticEmitter.cpp
     DiagnosticJsonFormatter.cpp
+    DiagSuppressor.cpp
     Utils.cpp
     Print.cpp)
 
