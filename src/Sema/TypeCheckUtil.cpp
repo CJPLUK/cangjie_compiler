@@ -1323,6 +1323,18 @@ bool TypeIsExtern(ImportManager& importManager, Ptr<Ty> ty)
     return structTy && structTy->declPtr == externDecl && structTy->typeArgs.size() == 1;
 }
 
+Ptr<FuncDecl> GetRuntimeFuncDecl(ImportManager& importManager, const std::string& name)
+{
+    auto runtimeDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
+    CJC_ASSERT(runtimeDecl);
+    for (auto& member : runtimeDecl->GetMemberDecls()) {
+        if (member && member->identifier == name) {
+            return DynamicCast<FuncDecl*>(member.get());
+        }
+    }
+    return nullptr;
+}
+
 OwnedPtr<LitConstExpr> CreateStringLit(ImportManager& importManager, const std::string& value)
 {
     auto stringDecl = importManager.GetCoreDecl<StructDecl>("String");
