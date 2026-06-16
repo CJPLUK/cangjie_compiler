@@ -20,10 +20,7 @@ using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
 
-namespace {
-template <typename F>
-bool TryDesugarExternIndexAccess(
-    TypeManager& typeManager, ImportManager& importManager, SubscriptExpr& se, F typecheck)
+bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
 {
     CJC_NULLPTR_CHECK(se.baseExpr);
     auto sourceExternTy = se.baseExpr->GetTy();
@@ -75,10 +72,7 @@ bool TryDesugarExternIndexAccess(
         indexAccess->isAlone = false;
         indexAccess->EnableAttr(Attribute::COMPILER_ADD);
         CopyBasicInfo(&se, indexAccess.get());
-        if (!indexAccessDecl) {
-            se.SetTy(TypeManager::GetInvalidTy());
-            return true;
-        }
+        CJC_ASSERT(indexAccessDecl);
         indexAccess->targets.emplace_back(indexAccessDecl);
 
         std::vector<OwnedPtr<FuncArg>> args;
@@ -87,7 +81,7 @@ bool TryDesugarExternIndexAccess(
 
         // Generic runtime calls must not be pre-resolved here; overload resolution needs to infer the
         // Runtime<T> method from T.indexAccess.
-        auto callTarget = isGenericRuntimeTy ? Ptr<FuncDecl>() : indexAccessDecl;
+        auto callTarget = isGenericRuntimeTy ? nullptr : indexAccessDecl;
         auto call = CreateCallExpr(
             std::move(indexAccess), std::move(args), callTarget, sourceExternTy, CallKind::CALL_DECLARED_FUNCTION);
         CopyBasicInfo(&se, call.get());
@@ -97,21 +91,26 @@ bool TryDesugarExternIndexAccess(
         indexedExpr = std::move(call);
     }
 
+    auto typecheck = [this, &ctx, target](Ptr<Node> node) {
+        if (target == nullptr) {
+            return Synthesize({ctx, SynPos::EXPR_ARG}, node);
+        }
+        (void)Check(ctx, target, node);
+        return node->GetTy();
+    };
     Ptr<Ty> callTy = typecheck(indexedExpr.get());
     auto call = DynamicCast<CallExpr*>(indexedExpr.get());
-    bool hasExpectedTarget = isGenericRuntimeTy ||
-        (call && call->resolvedFunction && call->resolvedFunction->identifier == "indexAccess");
-    bool isOk = Ty::IsTyCorrect(callTy) && call && hasExpectedTarget && typeManager.IsSubtype(call->GetTy(), sourceExternTy);
+    CJC_ASSERT(Ty::IsTyCorrect(callTy));
+    CJC_ASSERT(call);
+    CJC_ASSERT(isGenericRuntimeTy ||
+        (call->resolvedFunction && call->resolvedFunction->identifier == "indexAccess" &&
+            typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
 
-    Ptr<Ty> resultTy = isOk ? Ptr<Ty>(sourceExternTy) : Ptr<Ty>(TypeManager::GetInvalidTy());
-    se.SetTy(resultTy);
-    indexedExpr->SetTy(resultTy);
-    if (isOk) {
-        se.desugarExpr = std::move(indexedExpr);
-    }
+    se.SetTy(sourceExternTy);
+    indexedExpr->SetTy(sourceExternTy);
+    se.desugarExpr = std::move(indexedExpr);
     return true;
 }
-} // namespace
 
 bool TypeChecker::TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
 {
@@ -138,13 +137,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> tar
     if (!Ty::IsTyCorrect(baseTy) || !Ty::AreTysCorrect(indexTys)) {
         return false;
     }
-    if (TryDesugarExternIndexAccess(typeManager, importManager, se, [this, &ctx, target](Ptr<Node> node) {
-        if (target == nullptr) {
-            return Synthesize({ctx, SynPos::EXPR_ARG}, node);
-        }
-        (void)Check(ctx, target, node);
-        return node->GetTy();
-    })) {
+    if (TryDesugarExternIndexAccess(ctx, target, se)) {
         return Ty::IsTyCorrect(se.GetTy());
     }
     // NOTE: Tuple and VArray type support built-in 'SubscriptExpr', others are all operator overload.
