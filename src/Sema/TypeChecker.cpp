@@ -116,34 +116,33 @@ ExternifyResult CoerceToExtern(
     runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(nodeExpr, runtimeRef.get());
 
-    // This yields T.toExtern. Generic type parameters do not have a nominal declaration for
-    // CreateMemberAccess to inspect, so leave target resolution to normal member lookup.
+    // This yields T.toExtern. Generic type parameters are resolved by normal member lookup.
     OwnedPtr<MemberAccess> toExtern;
+    Ptr<FuncDecl> toExternDecl = nullptr;
     if (isGenericRuntimeTy) {
         toExtern = MakeOwned<MemberAccess>();
         toExtern->baseExpr = std::move(runtimeRef);
         toExtern->field = "toExtern";
+        toExternDecl = GetRuntimeFuncDecl(importManager, "toExtern");
     } else {
         toExtern = CreateMemberAccess(std::move(runtimeRef), "toExtern");
+        toExternDecl = DynamicCast<FuncDecl*>(toExtern->target);
     }
     toExtern->isAlone = false;
     toExtern->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(nodeExpr, toExtern.get());
 
     // TODO: Instantiate toExtern with the generic type parameter T
-    auto toExternDecl = DynamicCast<FuncDecl*>(toExtern->target);
-    CJC_ASSERT(toExternDecl || isGenericRuntimeTy);
-    if (!toExternDecl && !isGenericRuntimeTy) {
+    if (!toExternDecl) {
         nodeExpr->SetTy(TypeManager::GetInvalidTy());
         return ExternifyResult::Failure;
     }
 
-    // This is the the type parameter, as in T.toExtern<soruceTy>
+    // This is the the type parameter, as in T.toExtern<sourceTy>
     toExtern->instTys.emplace_back(sourceTy);
     // This adds the toExternDecl to the sets of overload targets, we need this
     // as we are gonna pass this into Synthesise that runs inference for the entire tree.
-    // For generic runtime type, this is done later!
-    if (toExternDecl) {
+    if (!isGenericRuntimeTy) {
         toExtern->targets.emplace_back(toExternDecl);
     }
 
@@ -153,8 +152,9 @@ ExternifyResult CoerceToExtern(
     args.emplace_back(CreateFuncArg(std::move(inner)));
 
     // The actual call expressions, at last
+    auto callTarget = isGenericRuntimeTy ? Ptr<FuncDecl>() : toExternDecl;
     auto call =
-        CreateCallExpr(std::move(toExtern), std::move(args), toExternDecl, target, CallKind::CALL_DECLARED_FUNCTION);
+        CreateCallExpr(std::move(toExtern), std::move(args), callTarget, target, CallKind::CALL_DECLARED_FUNCTION);
     CopyBasicInfo(nodeExpr, call.get());
     call->sourceExpr = nodeExpr;
     call->EnableAttr(Attribute::COMPILER_ADD);
@@ -168,8 +168,9 @@ ExternifyResult CoerceToExtern(
     }
 
     // Make sure everything ends up well
-    bool isOk = call->resolvedFunction && call->resolvedFunction->identifier == "toExtern" &&
-        typeManager.IsSubtype(call->GetTy(), target);
+    bool hasExpectedTarget = isGenericRuntimeTy ||
+        (call->resolvedFunction && call->resolvedFunction->identifier == "toExtern");
+    bool isOk = hasExpectedTarget && typeManager.IsSubtype(call->GetTy(), target);
 
     Ty* resultTy = isOk ? target : TypeManager::GetInvalidTy();
     nodeExpr->SetTy(resultTy);

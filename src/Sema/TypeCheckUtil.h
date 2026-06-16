@@ -352,6 +352,7 @@ bool IsLegalAccess(AST::Symbol* curComposite, const AST::Decl& d, const AST::Nod
 Ptr<AST::Decl> FindCorrespondingCommonDecl(const AST::Decl& specificDecl);
 
 bool TypeIsExtern(ImportManager& importManager, Ptr<AST::Ty> ty);
+Ptr<AST::FuncDecl> GetRuntimeFuncDecl(ImportManager& importManager, const std::string& name);
 OwnedPtr<AST::LitConstExpr> CreateStringLit(ImportManager& importManager, const std::string& value);
 } // namespace Cangjie::TypeCheckUtil
 #endif
