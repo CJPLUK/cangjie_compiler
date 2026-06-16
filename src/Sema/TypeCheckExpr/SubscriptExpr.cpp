@@ -65,10 +65,9 @@ bool TryDesugarExternIndexAccess(
             indexAccess->target = indexAccessDecl;
             auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
             CJC_ASSERT(runtimeInterfaceDecl);
-            if (indexAccessDecl) {
-                auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
-                indexAccess->SetTy(typeManager.GetInstantiatedTy(indexAccessDecl->GetTy(), typeMapping));
-            }
+            CJC_ASSERT(indexAccessDecl);
+            auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
+            indexAccess->SetTy(typeManager.GetInstantiatedTy(indexAccessDecl->GetTy(), typeMapping));
         } else {
             indexAccess = CreateMemberAccess(std::move(runtimeRef), "indexAccess");
             indexAccessDecl = DynamicCast<FuncDecl*>(indexAccess->target);
@@ -86,6 +85,8 @@ bool TryDesugarExternIndexAccess(
         args.emplace_back(CreateFuncArg(std::move(indexedExpr)));
         args.emplace_back(CreateFuncArg(ASTCloner::Clone(Ptr(indexExpr.get()))));
 
+        // Generic runtime calls must not be pre-resolved here; overload resolution needs to infer the
+        // Runtime<T> method from T.indexAccess.
         auto callTarget = isGenericRuntimeTy ? Ptr<FuncDecl>() : indexAccessDecl;
         auto call = CreateCallExpr(
             std::move(indexAccess), std::move(args), callTarget, sourceExternTy, CallKind::CALL_DECLARED_FUNCTION);

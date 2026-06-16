@@ -78,6 +78,11 @@ bool TryDesugarExternMemberUpdate(
         memberUpdate->baseExpr = std::move(runtimeRef);
         memberUpdate->field = "memberUpdate";
         memberUpdateDecl = GetRuntimeFuncDecl(importManager, "memberUpdate");
+        auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
+        CJC_ASSERT(runtimeInterfaceDecl);
+        CJC_ASSERT(memberUpdateDecl);
+        auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
+        memberUpdate->SetTy(typeManager.GetInstantiatedTy(memberUpdateDecl->GetTy(), typeMapping));
     } else {
         memberUpdate = CreateMemberAccess(std::move(runtimeRef), "memberUpdate");
         memberUpdateDecl = DynamicCast<FuncDecl*>(memberUpdate->target);
@@ -99,6 +104,8 @@ bool TryDesugarExternMemberUpdate(
     args.emplace_back(CreateFuncArg(CloneEffectiveExpr(Ptr(ae.rightExpr.get()))));
 
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    // Generic runtime calls must not be pre-resolved here; overload resolution needs to infer the
+    // Runtime<T> method from T.memberUpdate.
     auto callTarget = isGenericRuntimeTy ? Ptr<FuncDecl>() : memberUpdateDecl;
     auto call =
         CreateCallExpr(std::move(memberUpdate), std::move(args), callTarget, unitTy, CallKind::CALL_DECLARED_FUNCTION);
@@ -202,6 +209,8 @@ bool TryDesugarExternIndexUpdate(TypeManager& typeManager, ImportManager& import
         args.emplace_back(CreateFuncArg(std::move(baseExpr)));
         args.emplace_back(CreateFuncArg(CloneEffectiveExpr(Ptr(&indexExpr))));
 
+        // Generic runtime calls must not be pre-resolved here; overload resolution needs to infer the
+        // Runtime<T> method from T.indexAccess.
         auto callTarget = isGenericRuntimeTy ? Ptr<FuncDecl>() : indexAccessDecl;
         auto call = CreateCallExpr(
             std::move(indexAccess), std::move(args), callTarget, sourceExternTy, CallKind::CALL_DECLARED_FUNCTION);
@@ -237,10 +246,9 @@ bool TryDesugarExternIndexUpdate(TypeManager& typeManager, ImportManager& import
         indexUpdate->target = indexUpdateDecl;
         auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
         CJC_ASSERT(runtimeInterfaceDecl);
-        if (indexUpdateDecl) {
-            auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
-            indexUpdate->SetTy(typeManager.GetInstantiatedTy(indexUpdateDecl->GetTy(), typeMapping));
-        }
+        CJC_ASSERT(indexUpdateDecl);
+        auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
+        indexUpdate->SetTy(typeManager.GetInstantiatedTy(indexUpdateDecl->GetTy(), typeMapping));
     } else {
         indexUpdate = CreateMemberAccess(std::move(runtimeRef), "indexUpdate");
         indexUpdateDecl = DynamicCast<FuncDecl*>(indexUpdate->target);
@@ -260,6 +268,8 @@ bool TryDesugarExternIndexUpdate(TypeManager& typeManager, ImportManager& import
     args.emplace_back(CreateFuncArg(CloneEffectiveExpr(Ptr(ae.rightExpr.get()))));
 
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    // Generic runtime calls must not be pre-resolved here; overload resolution needs to infer the
+    // Runtime<T> method from T.indexUpdate.
     auto callTarget = isGenericRuntimeTy ? Ptr<FuncDecl>() : indexUpdateDecl;
     auto call =
         CreateCallExpr(std::move(indexUpdate), std::move(args), callTarget, unitTy, CallKind::CALL_DECLARED_FUNCTION);

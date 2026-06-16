@@ -73,10 +73,9 @@ bool TryDesugarExternMemberAccess(
         memberAccess->target = memberAccessDecl;
         auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
         CJC_ASSERT(runtimeInterfaceDecl);
-        if (memberAccessDecl) {
-            auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
-            memberAccess->SetTy(typeManager.GetInstantiatedTy(memberAccessDecl->GetTy(), typeMapping));
-        }
+        CJC_ASSERT(memberAccessDecl);
+        auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
+        memberAccess->SetTy(typeManager.GetInstantiatedTy(memberAccessDecl->GetTy(), typeMapping));
     } else {
         memberAccess = CreateMemberAccess(std::move(runtimeRef), "memberAccess");
         memberAccessDecl = DynamicCast<FuncDecl*>(memberAccess->target);
@@ -94,6 +93,8 @@ bool TryDesugarExternMemberAccess(
     args.emplace_back(CreateFuncArg(ASTCloner::Clone(Ptr(ma.baseExpr.get()))));
     args.emplace_back(CreateFuncArg(CreateStringLit(importManager, ma.field.Val())));
 
+    // Generic runtime calls must not be pre-resolved here; overload resolution needs to infer the
+    // Runtime<T> method from T.memberAccess.
     auto callTarget = isGenericRuntimeTy ? Ptr<FuncDecl>() : memberAccessDecl;
     auto call = CreateCallExpr(
         std::move(memberAccess), std::move(args), callTarget, sourceExternTy, CallKind::CALL_DECLARED_FUNCTION);
