@@ -1756,6 +1756,12 @@ private:
      */
     AST::VisitAction MarkUsedDecl(Ptr<AST::Decl> decl, unsigned walkerId);
 
+    /**
+     * @brief Coerce the type of @p nodeExpr to @p target if possible.
+     * Assumption: type of @p nodeExpr is Extern<T>
+     */
+    bool CoerceToExtern(ASTContext& ctx, Ptr<AST::Ty> target, Ptr<AST::Expr> nodeExpr);
+
     /** Members */
     Promotion promotion;
     TypeManager& typeManager;
