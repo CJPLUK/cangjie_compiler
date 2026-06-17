@@ -115,13 +115,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, 
 bool TypeChecker::TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
 {
     if (se.desugarExpr) {
-        if (target == nullptr) {
-            se.SetTy(se.desugarExpr->GetTy());
-            return Ty::IsTyCorrect(se.GetTy());
-        }
-        bool isWellTyped = typeManager.IsSubtype(se.desugarExpr->GetTy(), target);
-        se.SetTy(isWellTyped ? se.desugarExpr->GetTy() : TypeManager::GetInvalidTy());
-        return isWellTyped;
+        return typeManager.IsSubtype(se.desugarExpr->GetTy(), target);
     }
     se.SetTy(TypeManager::GetInvalidTy()); // Set invalid ty at first, will be updated later.
     bool invalid = !se.baseExpr || se.indexExprs.empty();
