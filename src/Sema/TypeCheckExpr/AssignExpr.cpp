@@ -184,6 +184,7 @@ void CheckMultipleAssignExpr(DiagnosticEngine& diag, TypeManager& typeManager, A
 }
 } // namespace
 
+// `e.foo = v` -> `T.memberUpdate("foo", v)` for `e: Extern<T>`
 bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx, AssignExpr& ae)
 {
     if (ae.isCompound) {
@@ -278,6 +279,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
     return true;
 }
 
+// `e[idx] = v` -> `T.indexUpdate(idx, v)` for `e: Extern<T>`
 bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, AssignExpr& ae)
 {
     if (ae.isCompound) {

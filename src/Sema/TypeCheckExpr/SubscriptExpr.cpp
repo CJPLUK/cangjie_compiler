@@ -20,6 +20,7 @@ using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
 
+// `e[idx]` -> `T.indexAccess(idx)` for `e: Extern<T>`
 bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
 {
     CJC_NULLPTR_CHECK(se.baseExpr);

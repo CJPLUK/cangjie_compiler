@@ -47,6 +47,7 @@ using namespace Sema;
 using namespace TypeCheckUtil;
 using namespace AST;
 
+// `x` -> `T.toExtern(x)` in a context of type `Extern<T>`
 bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targetTy, Ptr<Expr> nodeExpr)
 {
     CJC_ASSERT(TypeIsExtern(importManager, targetTy));

@@ -294,6 +294,8 @@ void DiagForGenericParamMemberNotFound(DiagnosticEngine& diag, const MemberAcces
 }
 } // namespace
 
+
+// `e.foo` -> `T.memberAccess("foo")` for `e: Extern<T>`
 bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx, MemberAccess& ma)
 {
     CJC_NULLPTR_CHECK(ma.baseExpr);
