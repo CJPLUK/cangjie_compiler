@@ -353,7 +353,11 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     memberAccess->targets.emplace_back(memberAccessDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
-    args.emplace_back(CreateFuncArg(ASTCloner::Clone(Ptr(ma.baseExpr.get()))));
+
+    OwnedPtr<Expr> namedExpr = ma.baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(ma.baseExpr->desugarExpr.get()))
+                                                        : ASTCloner::Clone(Ptr(ma.baseExpr.get()));
+
+    args.emplace_back(CreateFuncArg(std::move(namedExpr)));
     args.emplace_back(CreateFuncArg(CreateStringLit(importManager, ma.field.Val())));
 
     // Generic runtime calls must not be pre-resolved here; overload resolution needs to infer the
