@@ -45,7 +45,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, 
     }
     CJC_ASSERT(runtimeDecl);
 
-    OwnedPtr<Expr> indexedExpr = ASTCloner::Clone(Ptr(se.baseExpr.get()));
+    OwnedPtr<Expr> indexedExpr = se.baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(se.baseExpr->desugarExpr.get()))
+                                                          : ASTCloner::Clone(Ptr(se.baseExpr.get()));
     for (auto& indexExpr : se.indexExprs) {
         auto runtimeRef = CreateRefExpr(*runtimeDecl);
         runtimeRef->isAlone = false;
