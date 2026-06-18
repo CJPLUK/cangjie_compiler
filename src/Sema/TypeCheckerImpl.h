@@ -1774,6 +1774,7 @@ private:
     bool TryDesugarExternIndexUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     bool TryDesugarExternMemberAccess(ASTContext& ctx, AST::MemberAccess& ma);
     bool TryDesugarExternIndexAccess(ASTContext& ctx, Ptr<AST::Ty> target, AST::SubscriptExpr& se);
+    bool TryDesugarFunctionCall(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
 
     /** Members */
     Promotion promotion;
