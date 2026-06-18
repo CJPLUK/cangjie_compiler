@@ -2283,6 +2283,151 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynCallExpr(ASTContext& ctx, CallExpr& ce)
     return ce.GetTy();
 }
 
+// `e(args...)` -> `T.functionCall(e, argsArray)` for `e: Extern<T>`.
+// `e.foo(args...)` -> `T.functionCall(T.memberAccess(e, "foo"), argsArray)` for `e: Extern<T>`.
+bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce)
+{
+    if (!ce.baseFunc) {
+        return false;
+    }
+
+    auto typecheck = [this, &ctx](Ptr<Node> node) {
+        auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
+        ReplaceIdealTy(*node);
+        return ty;
+    };
+    auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get());
+    auto externReceiver = (ma && ma->baseExpr) ? Ptr<Expr>(ma->baseExpr.get()) : Ptr<Expr>(ce.baseFunc.get());
+    SetIsNotAlone(*externReceiver);
+    Ptr<Node> oldCallOrPattern = nullptr;
+    Ptr<NameReferenceExpr> directReceiverRef = nullptr;
+    if (externReceiver == Ptr<Expr>(ce.baseFunc.get())) {
+        if (auto nre = DynamicCast<NameReferenceExpr*>(externReceiver.get())) {
+            directReceiverRef = nre;
+            oldCallOrPattern = nre->callOrPattern;
+            nre->callOrPattern = nullptr;
+        }
+    }
+    auto sourceExternTy = typecheck(externReceiver);
+    if (directReceiverRef) {
+        directReceiverRef->callOrPattern = oldCallOrPattern;
+    }
+    if (!ma) {
+        if (auto re = DynamicCast<RefExpr*>(ce.baseFunc.get());
+            re && re->ref.target && re->ref.target->astKind != ASTKind::VAR_DECL &&
+            re->ref.target->astKind != ASTKind::FUNC_PARAM) {
+            return false;
+        }
+    }
+    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(importManager, sourceExternTy)) {
+        return false;
+    }
+
+    auto runtimeTy = sourceExternTy->typeArgs[0];
+    CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
+    Ptr<Decl> runtimeDecl = nullptr;
+    bool isGenericRuntimeTy = false;
+    if (auto genericsTy = DynamicCast<GenericsTy*>(runtimeTy); genericsTy) {
+        isGenericRuntimeTy = true;
+        runtimeDecl = genericsTy->decl;
+    } else {
+        runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
+    }
+    CJC_ASSERT(runtimeDecl);
+
+    auto createRuntimeMember = [&](const std::string& name, Ptr<Ty> retTy) {
+        auto runtimeRef = CreateRefExpr(*runtimeDecl);
+        runtimeRef->isAlone = false;
+        runtimeRef->SetTy(runtimeTy);
+        runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
+        CopyBasicInfo(&ce, runtimeRef.get());
+
+        OwnedPtr<MemberAccess> member = nullptr;
+        Ptr<FuncDecl> decl = nullptr;
+        if (isGenericRuntimeTy) {
+            member = MakeOwned<MemberAccess>();
+            member->baseExpr = std::move(runtimeRef);
+            member->field = name;
+            decl = GetRuntimeFuncDecl(importManager, name);
+            auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
+            CJC_ASSERT(runtimeInterfaceDecl);
+            CJC_ASSERT(decl);
+            auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
+            member->SetTy(typeManager.GetInstantiatedTy(decl->GetTy(), typeMapping));
+        } else {
+            member = CreateMemberAccess(std::move(runtimeRef), name);
+            decl = DynamicCast<FuncDecl*>(member->target);
+        }
+        member->isAlone = false;
+        member->EnableAttr(Attribute::COMPILER_ADD);
+        CopyBasicInfo(&ce, member.get());
+        CJC_ASSERT(decl);
+        if (!isGenericRuntimeTy) {
+            member->targets.emplace_back(decl);
+        }
+        auto callTarget = isGenericRuntimeTy ? nullptr : decl;
+        return std::make_pair(std::move(member), std::make_pair(callTarget, retTy));
+    };
+
+    OwnedPtr<Expr> callableExtern;
+    if (ma && ma->baseExpr) {
+        std::vector<OwnedPtr<FuncArg>> memberAccessArgs;
+        auto effectiveBase = ma->baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(ma->baseExpr->desugarExpr.get()))
+                                                       : ASTCloner::Clone(Ptr(ma->baseExpr.get()));
+        memberAccessArgs.emplace_back(CreateFuncArg(std::move(effectiveBase)));
+        memberAccessArgs.emplace_back(CreateFuncArg(CreateStringLit(importManager, ma->field.Val())));
+
+        auto [memberAccess, memberAccessInfo] = createRuntimeMember("memberAccess", sourceExternTy);
+        callableExtern = CreateCallExpr(
+            std::move(memberAccess), std::move(memberAccessArgs), memberAccessInfo.first, memberAccessInfo.second,
+            CallKind::CALL_DECLARED_FUNCTION);
+        CopyBasicInfo(&ce, callableExtern.get());
+        callableExtern->sourceExpr = &ce;
+        callableExtern->EnableAttr(Attribute::COMPILER_ADD);
+    } else {
+        callableExtern = ce.baseFunc->desugarExpr ? ASTCloner::Clone(Ptr(ce.baseFunc->desugarExpr.get()))
+                                                  : ASTCloner::Clone(Ptr(ce.baseFunc.get()));
+    }
+
+    std::vector<OwnedPtr<Expr>> argExprs;
+    for (auto& arg : ce.args) {
+        CJC_NULLPTR_CHECK(arg);
+        CJC_NULLPTR_CHECK(arg->expr);
+        auto argExpr = arg->expr->desugarExpr ? ASTCloner::Clone(Ptr(arg->expr->desugarExpr.get()))
+                                              : ASTCloner::Clone(Ptr(arg->expr.get()));
+        argExprs.emplace_back(std::move(argExpr));
+    }
+
+    auto arrayDecl = importManager.GetCoreDecl<StructDecl>("Array");
+    CJC_ASSERT(arrayDecl);
+    auto arrayTy = typeManager.GetStructTy(*arrayDecl, {typeManager.GetAnyTy()});
+    auto argsArray = CreateArrayLit(std::move(argExprs), arrayTy);
+    AddArrayLitConstructor(*argsArray);
+    argsArray->EnableAttr(Attribute::COMPILER_ADD);
+    CopyBasicInfo(&ce, argsArray.get());
+
+    std::vector<OwnedPtr<FuncArg>> functionCallArgs;
+    functionCallArgs.emplace_back(CreateFuncArg(std::move(callableExtern)));
+    functionCallArgs.emplace_back(CreateFuncArg(std::move(argsArray)));
+
+    auto [functionCall, functionCallInfo] = createRuntimeMember("functionCall", sourceExternTy);
+    auto call = CreateCallExpr(
+        std::move(functionCall), std::move(functionCallArgs), functionCallInfo.first, functionCallInfo.second,
+        CallKind::CALL_DECLARED_FUNCTION);
+    CopyBasicInfo(&ce, call.get());
+    call->sourceExpr = &ce;
+    call->EnableAttr(Attribute::COMPILER_ADD);
+
+    bool isWellTyped = target ? Check(ctx, target, call.get()) : Ty::IsTyCorrect(typecheck(call.get()));
+    if (!isWellTyped || !Ty::IsTyCorrect(call->GetTy())) {
+        ce.SetTy(TypeManager::GetInvalidTy());
+        return true;
+    }
+    ce.SetTy(call->GetTy());
+    ce.desugarExpr = std::move(call);
+    return true;
+}
+
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTrailingClosure(ASTContext& ctx, TrailingClosureExpr& tc)
 {
     // TrailingClosureExpr will be desugared if ast node is valid.
@@ -2968,6 +3113,9 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
     }
     if (!ce.baseFunc) {
         return false;
+    }
+    if (TryDesugarFunctionCall(ctx, target, ce)) {
+        return Ty::IsTyCorrect(ce.GetTy());
     }
 
     bool prevCheckTrue =
