@@ -304,8 +304,15 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
         return false;
     }
     if (ma.TestAttr(Attribute::LEFT_VALUE)) {
-        ma.SetTy(sourceExternTy);
-        return true;
+        if (auto baseRef = DynamicCast<RefExpr*>(ma.baseExpr.get()); baseRef && baseRef->isThis) {
+            // this corresponds to the `this.payload` expression, part of `this.payload = payload`,
+            // in the core library which is a normal field, and should be left alone.
+            CJC_ASSERT(ma.field == "payload");
+            return false;
+        } else {
+            ma.SetTy(sourceExternTy);
+            return true;
+        }
     }
     if (ma.callOrPattern) {
         return false;

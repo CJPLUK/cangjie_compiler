@@ -191,8 +191,16 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
         return false;
     }
     auto ma = DynamicCast<MemberAccess*>(ae.leftValue.get());
-    if (!ma || !ma->baseExpr || !Ty::IsTyCorrect(ma->baseExpr->GetTy()) ||
-        !TypeIsExtern(importManager, ma->baseExpr->GetTy())) {
+    if (ma == nullptr || ma->baseExpr == nullptr) {
+        return false;
+    }
+    if (!Ty::IsTyCorrect(ma->baseExpr->GetTy()) || !TypeIsExtern(importManager, ma->baseExpr->GetTy())) {
+        return false;
+    }
+    if (auto baseRef = DynamicCast<RefExpr*>(ma->baseExpr.get()); baseRef && baseRef->isThis) {
+        // this corresponds to the `this.payload = payload` expression in the core library
+        // which is a normal field assignment
+        CJC_ASSERT(ma->field == "payload");
         return false;
     }
 
