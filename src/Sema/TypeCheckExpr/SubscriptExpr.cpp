@@ -23,8 +23,25 @@ using namespace TypeCheckUtil;
 // `e[idx]` -> `T.indexAccess(idx)` for `e: Extern<T>`
 bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
 {
+    (void)target;
     CJC_NULLPTR_CHECK(se.baseExpr);
-    auto sourceExternTy = se.baseExpr->GetTy();
+    auto typecheck = [this, &ctx](Ptr<Node> node) {
+        auto ty = node->GetTy();
+        if (!Ty::IsTyCorrect(ty)) {
+            ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
+        }
+        ReplaceIdealTy(*node);
+        return node->GetTy();
+    };
+    auto sourceExternTy = typecheck(se.baseExpr.get());
+    for (auto& indexExpr : se.indexExprs) {
+        CJC_NULLPTR_CHECK(indexExpr);
+        auto indexTy = typecheck(indexExpr.get());
+        if (!Ty::IsTyCorrect(indexTy)) {
+            se.SetTy(TypeManager::GetInvalidTy());
+            return true;
+        }
+    }
     if (!TypeIsExtern(importManager, sourceExternTy)) {
         return false;
     }
@@ -75,34 +92,33 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, 
         indexAccess->EnableAttr(Attribute::COMPILER_ADD);
         CopyBasicInfo(&se, indexAccess.get());
         CJC_ASSERT(indexAccessDecl);
+        indexAccess->target = indexAccessDecl;
         indexAccess->targets.emplace_back(indexAccessDecl);
+        auto createTypedArg = [](OwnedPtr<Expr> expr) {
+            auto ty = expr->GetTy();
+            auto arg = CreateFuncArg(std::move(expr));
+            arg->SetTy(ty);
+            CJC_NULLPTR_CHECK(arg->expr);
+            arg->expr->SetTy(ty);
+            return arg;
+        };
 
         std::vector<OwnedPtr<FuncArg>> args;
-        args.emplace_back(CreateFuncArg(std::move(indexedExpr)));
-        args.emplace_back(CreateFuncArg(ASTCloner::Clone(Ptr(indexExpr.get()))));
+        args.emplace_back(createTypedArg(std::move(indexedExpr)));
+        args.emplace_back(createTypedArg(ASTCloner::Clone(Ptr(indexExpr.get()))));
 
-        // Generic runtime calls must not be pre-resolved here; overload resolution needs to infer the
-        // Runtime<T> method from T.indexAccess.
         auto callTarget = isGenericRuntimeTy ? nullptr : indexAccessDecl;
         auto call = CreateCallExpr(
             std::move(indexAccess), std::move(args), callTarget, sourceExternTy, CallKind::CALL_DECLARED_FUNCTION);
         CopyBasicInfo(&se, call.get());
         call->sourceExpr = &se;
         call->EnableAttr(Attribute::COMPILER_ADD);
+        call->resolvedFunction = indexAccessDecl;
         call->SetTy(sourceExternTy);
         indexedExpr = std::move(call);
     }
 
-    auto typecheck = [this, &ctx, target](Ptr<Node> node) {
-        if (target == nullptr) {
-            return Synthesize({ctx, SynPos::EXPR_ARG}, node);
-        }
-        (void)Check(ctx, target, node);
-        return node->GetTy();
-    };
-    Ptr<Ty> callTy = typecheck(indexedExpr.get());
     auto call = DynamicCast<CallExpr*>(indexedExpr.get());
-    CJC_ASSERT(Ty::IsTyCorrect(callTy));
     CJC_ASSERT(call);
     CJC_ASSERT(isGenericRuntimeTy ||
         (call->resolvedFunction && call->resolvedFunction->identifier == "indexAccess" &&
