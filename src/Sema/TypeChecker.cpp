@@ -52,14 +52,9 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
 {
     CJC_ASSERT(TypeIsExtern(importManager, targetTy));
     CJC_ASSERT(targetTy->typeArgs.size() == 1);
-    auto typecheck = [this, &ctx](Ptr<Node> node) {
-        auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
-        ReplaceIdealTy(*node);
-        return ty;
-    };
 
-    // Typecheck possible inner expressions
-    (void)typecheck(nodeExpr);
+    Synthesize({ctx, SynPos::EXPR_ARG}, nodeExpr);
+    ReplaceIdealTy(*nodeExpr);
 
     auto sourceTy = nodeExpr->GetTy();
     // Typechecking of the inner node failed, so we fail
@@ -92,12 +87,18 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
         inner = std::move(nodeExpr->desugarExpr);
     } else {
         inner = ASTCloner::Clone(Ptr(nodeExpr));
+        inner->SetTy(sourceTy);
+        inner->EnableAttr(Attribute::IS_CHECK_VISITED);
     }
 
     // The array of arguments, which grabs wahatevet the inner expression of node is -- due to the fact that
     // node could be desugared already
     std::vector<OwnedPtr<FuncArg>> args = {};
-    args.emplace_back(CreateFuncArg(std::move(inner)));
+    auto valueArg = CreateFuncArg(std::move(inner));
+    valueArg->SetTy(sourceTy);
+    CJC_NULLPTR_CHECK(valueArg->expr);
+    valueArg->expr->SetTy(sourceTy);
+    args.emplace_back(std::move(valueArg));
 
     // Grab the reference to the runtime type from the Extern
     // Ie, if target is Extern<T>, this grabs T
@@ -130,6 +131,9 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
 
     // This is the the type parameter, as in T.toExtern<sourceTy>
     toExtern->instTys.emplace_back(sourceTy);
+    auto instantiatedToExternTy = typeManager.GetFunctionTy({sourceTy}, targetTy);
+    toExtern->target = toExternDecl;
+    toExtern->SetTy(instantiatedToExternTy);
     // This adds the toExternDecl to the sets of overload targets, we need this
     // as we are gonna pass this into Synthesise that runs inference for the entire tree.
     if (!isGenericRuntimeTy) {
@@ -143,10 +147,7 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
         CreateCallExpr(std::move(toExtern), std::move(args), callTarget, targetTy, CallKind::CALL_DECLARED_FUNCTION);
     CopyBasicInfo(nodeExpr, call.get());
     call->sourceExpr = nodeExpr;
-
-    // Typecheck the function call.
-    Ptr<Ty> callTy = typecheck(call.get());
-    CJC_ASSERT(Ty::IsTyCorrect(callTy));
+    call->resolvedFunction = toExternDecl;
 
     // Make sure everything ends up well
     CJC_ASSERT(isGenericRuntimeTy ||
@@ -1214,15 +1215,10 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
     bool chkRet = false;
     auto realTarget = typeManager.TryGreedySubst(target);
 
-
-
     // Check if the type of the actual target is valid, and is Extern. If not, externification is unnecessary
     if (auto nodeExpr = DynamicCast<Expr*>(node.get()); nodeExpr && node->astKind != ASTKind::BLOCK && TypeIsExtern(importManager, realTarget)) {
-        return
-            CoerceToExtern(ctx, realTarget, nodeExpr);
-    }
-
-    if (realTarget->IsPlaceholder() && !AcceptPlaceholderTarget(*node)) {
+        chkRet = CoerceToExtern(ctx, realTarget, nodeExpr);
+    } else if (realTarget->IsPlaceholder() && !AcceptPlaceholderTarget(*node)) {
         auto& cst = typeManager.constraints[RawStaticCast<GenericsTy*>(realTarget)];
         Ptr<Ty> lub = nullptr;
         if (!cst.ubs.empty()) {
