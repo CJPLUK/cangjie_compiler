@@ -88,7 +88,7 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
     } else {
         inner = ASTCloner::Clone(Ptr(nodeExpr));
         inner->SetTy(sourceTy);
-        inner->EnableAttr(Attribute::IS_CHECK_VISITED);
+        inner->EnableAttr(Attribute::IS_CHECK_VISITED, Attribute::EXTERN_DESUGAR);
     }
 
     // The array of arguments, which grabs wahatevet the inner expression of node is -- due to the fact that
@@ -96,8 +96,10 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
     std::vector<OwnedPtr<FuncArg>> args = {};
     auto valueArg = CreateFuncArg(std::move(inner));
     valueArg->SetTy(sourceTy);
+    valueArg->EnableAttr(Attribute::EXTERN_DESUGAR);
     CJC_NULLPTR_CHECK(valueArg->expr);
     valueArg->expr->SetTy(sourceTy);
+    valueArg->expr->EnableAttr(Attribute::EXTERN_DESUGAR);
     args.emplace_back(std::move(valueArg));
 
     // Grab the reference to the runtime type from the Extern
@@ -105,7 +107,7 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
     auto runtimeRef = CreateRefExpr(*runtimeDecl);
     runtimeRef->isAlone = false;
     runtimeRef->SetTy(runtimeTy);
-    runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
+    runtimeRef->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
     CopyBasicInfo(nodeExpr, runtimeRef.get());
 
     // This yields T.toExtern. Generic type parameters are resolved by normal member lookup.
@@ -125,7 +127,7 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
         toExternDecl = DynamicCast<FuncDecl*>(toExtern->target);
     }
     toExtern->isAlone = false;
-    toExtern->EnableAttr(Attribute::COMPILER_ADD);
+    toExtern->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
     CopyBasicInfo(nodeExpr, toExtern.get());
     CJC_ASSERT(toExternDecl);
 
@@ -148,6 +150,7 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
     CopyBasicInfo(nodeExpr, call.get());
     call->sourceExpr = nodeExpr;
     call->resolvedFunction = toExternDecl;
+    call->EnableAttr(Attribute::EXTERN_DESUGAR);
 
     // Make sure everything ends up well
     CJC_ASSERT(isGenericRuntimeTy ||

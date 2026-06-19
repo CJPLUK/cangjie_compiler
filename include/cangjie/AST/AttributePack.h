@@ -682,6 +682,12 @@ enum class Attribute {
      * R: ASTLoader
      */
     ALREADY_LOADED,
+    /**
+     * Mark whether the node is generated while desugaring Extern operations.
+     * W: Sema
+     * R: AST recovery
+     */
+    EXTERN_DESUGAR,
 
     /**
      * Mark whether a class is a registry companion class generated for every impl class.

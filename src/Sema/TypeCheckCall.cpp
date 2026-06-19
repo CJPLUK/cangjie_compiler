@@ -2393,7 +2393,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         auto runtimeRef = CreateRefExpr(*runtimeDecl);
         runtimeRef->isAlone = false;
         runtimeRef->SetTy(runtimeTy);
-        runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
+        runtimeRef->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
         CopyBasicInfo(&ce, runtimeRef.get());
 
         OwnedPtr<MemberAccess> member = nullptr;
@@ -2413,7 +2413,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
             decl = DynamicCast<FuncDecl*>(member->target);
         }
         member->isAlone = false;
-        member->EnableAttr(Attribute::COMPILER_ADD);
+        member->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
         CopyBasicInfo(&ce, member.get());
         CJC_ASSERT(decl);
         member->target = decl;
@@ -2424,8 +2424,10 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         auto ty = expr->GetTy();
         auto arg = CreateFuncArg(std::move(expr));
         arg->SetTy(ty);
+        arg->EnableAttr(Attribute::EXTERN_DESUGAR);
         CJC_NULLPTR_CHECK(arg->expr);
         arg->expr->SetTy(ty);
+        arg->expr->EnableAttr(Attribute::EXTERN_DESUGAR);
         return arg;
     };
 
@@ -2444,7 +2446,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
             CallKind::CALL_DECLARED_FUNCTION);
         CopyBasicInfo(&ce, callableExtern.get());
         callableExtern->sourceExpr = &ce;
-        callableExtern->EnableAttr(Attribute::COMPILER_ADD);
+        callableExtern->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
         StaticCast<CallExpr*>(callableExtern.get())->resolvedFunction = memberAccessInfo.first;
         callableExtern->SetTy(sourceExternTy);
     } else {
@@ -2458,6 +2460,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         CJC_NULLPTR_CHECK(arg->expr);
         auto argExpr = arg->expr->desugarExpr ? ASTCloner::Clone(Ptr(arg->expr->desugarExpr.get()))
                                               : ASTCloner::Clone(Ptr(arg->expr.get()));
+        argExpr->EnableAttr(Attribute::EXTERN_DESUGAR);
         argExprs.emplace_back(std::move(argExpr));
     }
 
@@ -2466,7 +2469,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
     auto arrayTy = typeManager.GetStructTy(*arrayDecl, {typeManager.GetAnyTy()});
     auto argsArray = CreateArrayLit(std::move(argExprs), arrayTy);
     AddArrayLitConstructor(*argsArray);
-    argsArray->EnableAttr(Attribute::COMPILER_ADD);
+    argsArray->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
     CopyBasicInfo(&ce, argsArray.get());
 
     std::vector<OwnedPtr<FuncArg>> functionCallArgs;
@@ -2480,7 +2483,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         CallKind::CALL_DECLARED_FUNCTION);
     CopyBasicInfo(&ce, call.get());
     call->sourceExpr = &ce;
-    call->EnableAttr(Attribute::COMPILER_ADD);
+    call->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
     call->resolvedFunction = functionCallInfo.first;
     ce.SetTy(call->GetTy());
     ce.desugarExpr = std::move(call);
