@@ -298,6 +298,7 @@ void DiagForGenericParamMemberNotFound(DiagnosticEngine& diag, const MemberAcces
 // `e.foo` -> `T.memberAccess("foo")` for `e: Extern<T>`
 bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx, MemberAccess& ma)
 {
+    (void)ctx;
     CJC_NULLPTR_CHECK(ma.baseExpr);
     auto sourceExternTy = ma.baseExpr->GetTy();
     if (!TypeIsExtern(importManager, sourceExternTy)) {
@@ -357,32 +358,32 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     memberAccess->EnableAttr(Attribute::COMPILER_ADD);
     CopyBasicInfo(&ma, memberAccess.get());
     CJC_ASSERT(memberAccessDecl);
+    memberAccess->target = memberAccessDecl;
     memberAccess->targets.emplace_back(memberAccessDecl);
+    auto createTypedArg = [](OwnedPtr<Expr> expr) {
+        auto ty = expr->GetTy();
+        auto arg = CreateFuncArg(std::move(expr));
+        arg->SetTy(ty);
+        CJC_NULLPTR_CHECK(arg->expr);
+        arg->expr->SetTy(ty);
+        return arg;
+    };
 
     std::vector<OwnedPtr<FuncArg>> args;
 
     OwnedPtr<Expr> namedExpr = ma.baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(ma.baseExpr->desugarExpr.get()))
                                                         : ASTCloner::Clone(Ptr(ma.baseExpr.get()));
 
-    args.emplace_back(CreateFuncArg(std::move(namedExpr)));
-    args.emplace_back(CreateFuncArg(CreateStringLit(importManager, ma.field.Val())));
+    args.emplace_back(createTypedArg(std::move(namedExpr)));
+    args.emplace_back(createTypedArg(CreateStringLit(importManager, ma.field.Val())));
 
-    // Generic runtime calls must not be pre-resolved here; overload resolution needs to infer the
-    // Runtime<T> method from T.memberAccess.
     auto callTarget = isGenericRuntimeTy ? nullptr : memberAccessDecl;
     auto call = CreateCallExpr(
         std::move(memberAccess), std::move(args), callTarget, sourceExternTy, CallKind::CALL_DECLARED_FUNCTION);
     CopyBasicInfo(&ma, call.get());
     call->sourceExpr = &ma;
     call->EnableAttr(Attribute::COMPILER_ADD);
-
-    auto typecheck = [this, &ctx](Ptr<Node> node) {
-        auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
-        ReplaceIdealTy(*node);
-        return ty;
-    };
-    Ptr<Ty> callTy = typecheck(call.get());
-    CJC_ASSERT(Ty::IsTyCorrect(callTy));
+    call->resolvedFunction = memberAccessDecl;
     CJC_ASSERT(isGenericRuntimeTy ||
         (call->resolvedFunction && call->resolvedFunction->identifier == "memberAccess" &&
             typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
