@@ -334,7 +334,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     auto runtimeRef = CreateRefExpr(*runtimeDecl);
     runtimeRef->isAlone = false;
     runtimeRef->SetTy(runtimeTy);
-    runtimeRef->EnableAttr(Attribute::COMPILER_ADD);
+    runtimeRef->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
     CopyBasicInfo(&ma, runtimeRef.get());
 
     OwnedPtr<MemberAccess> memberAccess;
@@ -355,7 +355,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
         memberAccessDecl = DynamicCast<FuncDecl*>(memberAccess->target);
     }
     memberAccess->isAlone = false;
-    memberAccess->EnableAttr(Attribute::COMPILER_ADD);
+    memberAccess->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
     CopyBasicInfo(&ma, memberAccess.get());
     CJC_ASSERT(memberAccessDecl);
     memberAccess->target = memberAccessDecl;
@@ -364,8 +364,10 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
         auto ty = expr->GetTy();
         auto arg = CreateFuncArg(std::move(expr));
         arg->SetTy(ty);
+        arg->EnableAttr(Attribute::EXTERN_DESUGAR);
         CJC_NULLPTR_CHECK(arg->expr);
         arg->expr->SetTy(ty);
+        arg->expr->EnableAttr(Attribute::EXTERN_DESUGAR);
         return arg;
     };
 
@@ -382,7 +384,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
         std::move(memberAccess), std::move(args), callTarget, sourceExternTy, CallKind::CALL_DECLARED_FUNCTION);
     CopyBasicInfo(&ma, call.get());
     call->sourceExpr = &ma;
-    call->EnableAttr(Attribute::COMPILER_ADD);
+    call->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
     call->resolvedFunction = memberAccessDecl;
     CJC_ASSERT(isGenericRuntimeTy ||
         (call->resolvedFunction && call->resolvedFunction->identifier == "memberAccess" &&
