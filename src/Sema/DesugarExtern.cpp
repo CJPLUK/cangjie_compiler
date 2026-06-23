@@ -44,86 +44,40 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
     CJC_ASSERT(TypeIsExtern(targetTy));
     CJC_ASSERT(targetTy->typeArgs.size() == 1);
 
+    // Synthesize the source expression first so that we know its type `R` and so that any nested
+    // extern expressions it contains get desugared.
     Synthesize({ctx, SynPos::EXPR_ARG}, nodeExpr);
     ReplaceIdealTy(*nodeExpr);
 
     auto sourceTy = nodeExpr->GetTy();
-    // Typechecking of the inner node failed, so we fail
     if (!Ty::IsTyCorrect(sourceTy)) {
         nodeExpr->SetTy(TypeManager::GetInvalidTy());
         return false;
     }
 
-    // Node is extern as well, nothing to be done
+    // `R` is already a subtype of `Extern<T>`, so no coercion is necessary.
     if (typeManager.IsSubtype(sourceTy, targetTy)) {
         return true;
     }
 
-    // Runtime type T in Extern<T>.
+    // Runtime type `T` of `Extern<T>`.
     auto info = ResolveExternRuntime(targetTy);
-    auto runtimeTy = info.runtimeTy;
 
-    OwnedPtr<Expr> inner;
-    if (nodeExpr->desugarExpr) {
-        inner = std::move(nodeExpr->desugarExpr);
-    } else {
-        inner = ASTCloner::Clone(Ptr(nodeExpr));
-        inner->SetTy(sourceTy);
-        inner->EnableAttr(Attribute::IS_CHECK_VISITED, Attribute::EXTERN_DESUGAR);
-    }
+    // Grab the effective inner expression (the desugared form if `nodeExpr` was itself desugared)
+    // as the argument to `toExtern`.
+    std::vector<OwnedPtr<FuncArg>> args;
+    args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(nodeExpr), sourceTy));
 
-    // The array of arguments, which grabs wahatevet the inner expression of node is -- due to the fact that
-    // node could be desugared already
-    std::vector<OwnedPtr<FuncArg>> args = {};
-    args.emplace_back(CreateExternDesugarArg(std::move(inner), sourceTy));
-
-    // Grab the reference to the runtime type from the Extern
-    // Ie, if target is Extern<T>, this grabs T
-    auto runtimeRef = CreateExternRuntimeRef(*nodeExpr, info);
-
-    // This yields T.toExtern. Generic type parameters are resolved by normal member lookup.
-    OwnedPtr<MemberAccess> toExtern;
+    // Build `T.toExtern`. Unlike the other runtime members, `toExtern<R>` is a generic method, so we
+    // pin its type argument to `R` and give the member access the instantiated function type
+    // `(R) -> Extern<T>`.
     Ptr<FuncDecl> toExternDecl = nullptr;
-    if (info.isGeneric) {
-        toExtern = MakeOwned<MemberAccess>();
-        toExtern->baseExpr = std::move(runtimeRef);
-        toExtern->field = "toExtern";
-        toExternDecl = GetRuntimeFuncDecl("toExtern");
-        auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
-        CJC_ASSERT(runtimeInterfaceDecl);
-        auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
-        toExtern->SetTy(typeManager.GetInstantiatedTy(toExternDecl->GetTy(), typeMapping));
-    } else {
-        toExtern = CreateMemberAccess(std::move(runtimeRef), "toExtern");
-        toExternDecl = DynamicCast<FuncDecl*>(toExtern->target);
-    }
-    toExtern->isAlone = false;
-    toExtern->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-    CopyBasicInfo(nodeExpr, toExtern.get());
-    CJC_ASSERT(toExternDecl);
-
-    // This is the the type parameter, as in T.toExtern<sourceTy>
+    auto toExtern = CreateRuntimeMemberAccess(*nodeExpr, info, "toExtern", toExternDecl);
+    toExtern->instTys.clear();
     toExtern->instTys.emplace_back(sourceTy);
-    auto instantiatedToExternTy = typeManager.GetFunctionTy({sourceTy}, targetTy);
-    toExtern->target = toExternDecl;
-    toExtern->SetTy(instantiatedToExternTy);
-    // This adds the toExternDecl to the sets of overload targets, we need this
-    // as we are gonna pass this into Synthesise that runs inference for the entire tree.
-    if (!info.isGeneric) {
-        toExtern->targets.emplace_back(toExternDecl);
-    }
+    toExtern->SetTy(typeManager.GetFunctionTy({sourceTy}, targetTy));
 
-    // The actual call expressions, at last. Generic runtime calls must not be pre-resolved here;
-    // overload resolution needs to infer the Runtime<T> method from T.toExtern.
-    auto callTarget = info.isGeneric ? nullptr : toExternDecl;
-    auto call =
-        CreateCallExpr(std::move(toExtern), std::move(args), callTarget, targetTy, CallKind::CALL_DECLARED_FUNCTION);
-    CopyBasicInfo(nodeExpr, call.get());
-    call->sourceExpr = nodeExpr;
-    call->resolvedFunction = toExternDecl;
-    call->EnableAttr(Attribute::EXTERN_DESUGAR);
-
-    // Make sure everything ends up well
+    auto call = CreateRuntimeCall(*nodeExpr, info, std::move(toExtern), toExternDecl, std::move(args), targetTy);
     CJC_ASSERT(info.isGeneric ||
         (call->resolvedFunction && call->resolvedFunction->identifier == "toExtern" &&
             typeManager.IsSubtype(call->GetTy(), targetTy)));
