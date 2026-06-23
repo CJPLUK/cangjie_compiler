@@ -1772,7 +1772,7 @@ private:
     bool CoerceToExtern(ASTContext& ctx, Ptr<AST::Ty> target, Ptr<AST::Expr> nodeExpr);
     bool TryDesugarExternMemberUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     bool TryDesugarExternIndexUpdate(ASTContext& ctx, AST::AssignExpr& ae);
-    bool TryDesugarExternMemberAccess(ASTContext& ctx, AST::MemberAccess& ma);
+    bool TryDesugarExternMemberAccess(AST::MemberAccess& ma);
     bool TryDesugarExternIndexAccess(ASTContext& ctx, Ptr<AST::Ty> target, AST::SubscriptExpr& se);
     bool TryDesugarFunctionCall(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
     bool TypeIsExtern(Ptr<AST::Ty> ty);

@@ -88,26 +88,28 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
     return true;
 }
 
-// `e.foo` -> `T.memberAccess("foo")` for `e: Extern<T>`
-bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx, MemberAccess& ma)
+// `e.foo` -> `T.memberAccess(e, "foo")` for `e: Extern<T>`.
+// Chains such as `e1.f1.f2` and `a.b.e1.f1.f2` (where only `a.b.e1` is `Extern<T>`) are handled
+// automatically: the inner member access `...f1` is synthesized first and, being itself an extern
+// member access, is replaced by its own `T.memberAccess(...)` desugaring. `CloneEffectiveExpr` then
+// picks up that desugared form as the base, producing nested `T.memberAccess` calls.
+// `e.foo = v` (left value) is handled by `TryDesugarExternMemberUpdate`, and `e.foo(args...)` by
+// `TryDesugarFunctionCall`, so both cases are deferred here.
+bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(MemberAccess& ma)
 {
-    (void)ctx;
     CJC_NULLPTR_CHECK(ma.baseExpr);
     auto sourceExternTy = ma.baseExpr->GetTy();
-    if (!TypeIsExtern(sourceExternTy)) {
+    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
         return false;
     }
+    // As a left value, the member access is the target of an assignment and is desugared into
+    // `T.memberUpdate(...)` by `TryDesugarExternMemberUpdate`.
     if (ma.TestAttr(Attribute::LEFT_VALUE)) {
-        if (auto baseRef = DynamicCast<RefExpr*>(ma.baseExpr.get()); baseRef && baseRef->isThis) {
-            // this corresponds to the `this.payload` expression, part of `this.payload = payload`,
-            // in the core library which is a normal field, and should be left alone.
-            CJC_ASSERT(ma.field == "payload");
-            return false;
-        } else {
-            ma.SetTy(sourceExternTy);
-            return true;
-        }
+        ma.SetTy(sourceExternTy);
+        return true;
     }
+    // As the callee of a call, the member access is desugared together with the call into
+    // `T.functionCall(T.memberAccess(...), [args...])` by `TryDesugarFunctionCall`.
     if (ma.callOrPattern) {
         return false;
     }
@@ -117,14 +119,12 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     Ptr<FuncDecl> memberAccessDecl = nullptr;
     auto memberAccess = CreateRuntimeMemberAccess(ma, info, "memberAccess", memberAccessDecl);
 
-    OwnedPtr<Expr> namedExpr = ma.baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(ma.baseExpr->desugarExpr.get()))
-                                                        : ASTCloner::Clone(Ptr(ma.baseExpr.get()));
-
     std::vector<OwnedPtr<FuncArg>> args;
-    args.emplace_back(CreateExternDesugarArg(std::move(namedExpr)));
+    args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(Ptr(ma.baseExpr.get()))));
     args.emplace_back(CreateExternDesugarArg(CreateStringLit(ma.field.Val())));
 
-    auto call = CreateRuntimeCall(ma, info, std::move(memberAccess), memberAccessDecl, std::move(args), sourceExternTy);
+    auto call =
+        CreateRuntimeCall(ma, info, std::move(memberAccess), memberAccessDecl, std::move(args), sourceExternTy);
     CJC_ASSERT(info.isGeneric ||
         (call->resolvedFunction && call->resolvedFunction->identifier == "memberAccess" &&
             typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
