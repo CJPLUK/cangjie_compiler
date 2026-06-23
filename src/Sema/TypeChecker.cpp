@@ -47,105 +47,6 @@ using namespace Sema;
 using namespace TypeCheckUtil;
 using namespace AST;
 
-// `x` -> `T.toExtern(x)` in a context of type `Extern<T>`
-bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targetTy, Ptr<Expr> nodeExpr)
-{
-    CJC_ASSERT(TypeIsExtern(targetTy));
-    CJC_ASSERT(targetTy->typeArgs.size() == 1);
-
-    Synthesize({ctx, SynPos::EXPR_ARG}, nodeExpr);
-    ReplaceIdealTy(*nodeExpr);
-
-    auto sourceTy = nodeExpr->GetTy();
-    // Typechecking of the inner node failed, so we fail
-    if (!Ty::IsTyCorrect(sourceTy)) {
-        nodeExpr->SetTy(TypeManager::GetInvalidTy());
-        return false;
-    }
-
-    // Node is extern as well, nothing to be done
-    if (typeManager.IsSubtype(sourceTy, targetTy)) {
-        return true;
-    }
-
-    // Runtime type T in Extern<T>.
-    auto info = ResolveExternRuntime(targetTy);
-    auto runtimeTy = info.runtimeTy;
-
-    OwnedPtr<Expr> inner;
-    if (nodeExpr->desugarExpr) {
-        inner = std::move(nodeExpr->desugarExpr);
-    } else {
-        inner = ASTCloner::Clone(Ptr(nodeExpr));
-        inner->SetTy(sourceTy);
-        inner->EnableAttr(Attribute::IS_CHECK_VISITED, Attribute::EXTERN_DESUGAR);
-    }
-
-    // The array of arguments, which grabs wahatevet the inner expression of node is -- due to the fact that
-    // node could be desugared already
-    std::vector<OwnedPtr<FuncArg>> args = {};
-    args.emplace_back(CreateExternDesugarArg(std::move(inner), sourceTy));
-
-    // Grab the reference to the runtime type from the Extern
-    // Ie, if target is Extern<T>, this grabs T
-    auto runtimeRef = CreateExternRuntimeRef(*nodeExpr, info);
-
-    // This yields T.toExtern. Generic type parameters are resolved by normal member lookup.
-    OwnedPtr<MemberAccess> toExtern;
-    Ptr<FuncDecl> toExternDecl = nullptr;
-    if (info.isGeneric) {
-        toExtern = MakeOwned<MemberAccess>();
-        toExtern->baseExpr = std::move(runtimeRef);
-        toExtern->field = "toExtern";
-        toExternDecl = GetRuntimeFuncDecl("toExtern");
-        auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
-        CJC_ASSERT(runtimeInterfaceDecl);
-        auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
-        toExtern->SetTy(typeManager.GetInstantiatedTy(toExternDecl->GetTy(), typeMapping));
-    } else {
-        toExtern = CreateMemberAccess(std::move(runtimeRef), "toExtern");
-        toExternDecl = DynamicCast<FuncDecl*>(toExtern->target);
-    }
-    toExtern->isAlone = false;
-    toExtern->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-    CopyBasicInfo(nodeExpr, toExtern.get());
-    CJC_ASSERT(toExternDecl);
-
-    // This is the the type parameter, as in T.toExtern<sourceTy>
-    toExtern->instTys.emplace_back(sourceTy);
-    auto instantiatedToExternTy = typeManager.GetFunctionTy({sourceTy}, targetTy);
-    toExtern->target = toExternDecl;
-    toExtern->SetTy(instantiatedToExternTy);
-    // This adds the toExternDecl to the sets of overload targets, we need this
-    // as we are gonna pass this into Synthesise that runs inference for the entire tree.
-    if (!info.isGeneric) {
-        toExtern->targets.emplace_back(toExternDecl);
-    }
-
-    // The actual call expressions, at last. Generic runtime calls must not be pre-resolved here;
-    // overload resolution needs to infer the Runtime<T> method from T.toExtern.
-    auto callTarget = info.isGeneric ? nullptr : toExternDecl;
-    auto call =
-        CreateCallExpr(std::move(toExtern), std::move(args), callTarget, targetTy, CallKind::CALL_DECLARED_FUNCTION);
-    CopyBasicInfo(nodeExpr, call.get());
-    call->sourceExpr = nodeExpr;
-    call->resolvedFunction = toExternDecl;
-    call->EnableAttr(Attribute::EXTERN_DESUGAR);
-
-    // Make sure everything ends up well
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction &&
-            call->resolvedFunction->identifier == "toExtern" &&
-            typeManager.IsSubtype(call->GetTy(), targetTy)
-        )
-    );
-
-    nodeExpr->SetTy(targetTy);
-    call->SetTy(targetTy);
-    nodeExpr->desugarExpr = std::move(call);
-    return true;
-}
-
 TypeChecker::TypeChecker(CompilerInstance* ci)
 {
     impl = std::make_unique<TypeCheckerImpl>(ci);
@@ -342,7 +243,7 @@ bool TypeChecker::TypeCheckerImpl::CheckNormalFuncBody(ASTContext& ctx, FuncBody
     // Check and update return type for foreign functions.
     if (!Ty::IsTyCorrect(fb.retType->GetTy())) {
         if (!fb.TestAttr(Attribute::IS_CHECK_VISITED)) {
-            fb.EnableAttr(Attribute::IS_CHECK_VISITED);     // Avoid re-enter funcDecl check, when function is invalid.
+            fb.EnableAttr(Attribute::IS_CHECK_VISITED); // Avoid re-enter funcDecl check, when function is invalid.
             Synthesize({ctx, SynPos::NONE}, fb.body.get()); // Synthesize for other decl/expr in function body.
         }
         fb.SetTy(typeManager.GetFunctionTy(paramTys, fb.retType->GetTy(), {isCFunc, false, hasVariableLenArg}));
@@ -1522,8 +1423,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithNegCache(const CheckerContex
         return Synthesize(ctx, node);
     }
     CacheKey key = GetCacheKeyForSyn(ctx.Ctx(), node);
-    if (ctx.Ctx().typeCheckCache[node].synCache.count(key) != 0 &&
-        !ctx.Ctx().typeCheckCache[node].synCache[key].successful) {
+    if (ctx.Ctx().typeCheckCache[node].synCache.count(key) != 0 && !ctx.Ctx().typeCheckCache[node].synCache[key].successful) {
         auto& cache = ctx.Ctx().typeCheckCache[node].synCache[key];
         RestoreCached(ctx.Ctx(), node, cache);
         return cache.result;
@@ -1570,8 +1470,7 @@ bool TypeChecker::TypeCheckerImpl::CheckWithEffectiveCache(
     return CheckAndCache(ctx, target, node, key);
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithEffectiveCache(
-    const CheckerContext& ctx, Ptr<Node> node, bool recoverDiag)
+Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithEffectiveCache(const CheckerContext& ctx, Ptr<Node> node, bool recoverDiag)
 {
     if (!typeManager.GetUnsolvedTyVars().empty() || !node) {
         return Synthesize(ctx, node);
@@ -1995,8 +1894,7 @@ void MarkImplicitUsedFunctions(const Package& pkg)
             {"arrayInitByCollection", "arrayInitByFunction", "composition", "handleException",
                 "createOverflowExceptionMsg", "createArithmeticExceptionMsg", "getCommandLineArgs"}},
         {AST_PACKAGE_NAME,
-            {MACRO_OBJECT_NAME, "refreshTokensPosition", "refreshPos", "unsafePointerCastFromUint8Array",
-                "transformTokens"}}};
+            {MACRO_OBJECT_NAME, "refreshTokensPosition", "refreshPos", "unsafePointerCastFromUint8Array", "transformTokens"}}};
     auto found = SPECIAL_EXPORTED_FUNCS.find(pkg.fullPackageName);
     if (found == SPECIAL_EXPORTED_FUNCS.end()) {
         return;

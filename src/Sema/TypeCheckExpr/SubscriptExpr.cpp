@@ -11,74 +11,12 @@
 #include "Diags.h"
 #include "TypeCheckUtil.h"
 
-#include "cangjie/AST/Clone.h"
-#include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/RecoverDesugar.h"
 
 using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
-
-// `e[idx]` -> `T.indexAccess(idx)` for `e: Extern<T>`
-bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
-{
-    (void)target;
-    CJC_NULLPTR_CHECK(se.baseExpr);
-    auto typecheck = [this, &ctx](Ptr<Node> node) {
-        auto ty = node->GetTy();
-        if (!Ty::IsTyCorrect(ty)) {
-            ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
-        }
-        ReplaceIdealTy(*node);
-        return node->GetTy();
-    };
-    auto sourceExternTy = typecheck(se.baseExpr.get());
-    for (auto& indexExpr : se.indexExprs) {
-        CJC_NULLPTR_CHECK(indexExpr);
-        auto indexTy = typecheck(indexExpr.get());
-        if (!Ty::IsTyCorrect(indexTy)) {
-            se.SetTy(TypeManager::GetInvalidTy());
-            return true;
-        }
-    }
-    if (!TypeIsExtern(sourceExternTy)) {
-        return false;
-    }
-    if (se.TestAttr(Attribute::LEFT_VALUE)) {
-        se.SetTy(sourceExternTy);
-        return true;
-    }
-
-    auto info = ResolveExternRuntime(sourceExternTy);
-
-    OwnedPtr<Expr> indexedExpr = se.baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(se.baseExpr->desugarExpr.get()))
-                                                          : ASTCloner::Clone(Ptr(se.baseExpr.get()));
-    for (auto& indexExpr : se.indexExprs) {
-        Ptr<FuncDecl> indexAccessDecl = nullptr;
-        auto indexAccess = CreateRuntimeMemberAccess(se, info, "indexAccess", indexAccessDecl);
-
-        std::vector<OwnedPtr<FuncArg>> args;
-        args.emplace_back(CreateExternDesugarArg(std::move(indexedExpr)));
-        args.emplace_back(CreateExternDesugarArg(ASTCloner::Clone(Ptr(indexExpr.get()))));
-
-        auto call =
-            CreateRuntimeCall(se, info, std::move(indexAccess), indexAccessDecl, std::move(args), sourceExternTy);
-        call->SetTy(sourceExternTy);
-        indexedExpr = std::move(call);
-    }
-
-    auto call = DynamicCast<CallExpr*>(indexedExpr.get());
-    CJC_ASSERT(call);
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction && call->resolvedFunction->identifier == "indexAccess" &&
-            typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
-
-    se.SetTy(sourceExternTy);
-    indexedExpr->SetTy(sourceExternTy);
-    se.desugarExpr = std::move(indexedExpr);
-    return true;
-}
 
 bool TypeChecker::TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
 {

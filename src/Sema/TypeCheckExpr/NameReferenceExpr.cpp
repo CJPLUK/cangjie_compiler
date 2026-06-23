@@ -14,7 +14,6 @@
 #include "TypeCheckUtil.h"
 #include "ExtraScopes.h"
 
-#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/Basic/Match.h"
@@ -293,55 +292,6 @@ void DiagForGenericParamMemberNotFound(DiagnosticEngine& diag, const MemberAcces
     }
 }
 } // namespace
-
-
-// `e.foo` -> `T.memberAccess("foo")` for `e: Extern<T>`
-bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx, MemberAccess& ma)
-{
-    (void)ctx;
-    CJC_NULLPTR_CHECK(ma.baseExpr);
-    auto sourceExternTy = ma.baseExpr->GetTy();
-    if (!TypeIsExtern(sourceExternTy)) {
-        return false;
-    }
-    if (ma.TestAttr(Attribute::LEFT_VALUE)) {
-        if (auto baseRef = DynamicCast<RefExpr*>(ma.baseExpr.get()); baseRef && baseRef->isThis) {
-            // this corresponds to the `this.payload` expression, part of `this.payload = payload`,
-            // in the core library which is a normal field, and should be left alone.
-            CJC_ASSERT(ma.field == "payload");
-            return false;
-        } else {
-            ma.SetTy(sourceExternTy);
-            return true;
-        }
-    }
-    if (ma.callOrPattern) {
-        return false;
-    }
-
-    auto info = ResolveExternRuntime(sourceExternTy);
-
-    Ptr<FuncDecl> memberAccessDecl = nullptr;
-    auto memberAccess = CreateRuntimeMemberAccess(ma, info, "memberAccess", memberAccessDecl);
-
-    OwnedPtr<Expr> namedExpr = ma.baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(ma.baseExpr->desugarExpr.get()))
-                                                        : ASTCloner::Clone(Ptr(ma.baseExpr.get()));
-
-    std::vector<OwnedPtr<FuncArg>> args;
-    args.emplace_back(CreateExternDesugarArg(std::move(namedExpr)));
-    args.emplace_back(CreateExternDesugarArg(CreateStringLit(ma.field.Val())));
-
-    auto call =
-        CreateRuntimeCall(ma, info, std::move(memberAccess), memberAccessDecl, std::move(args), sourceExternTy);
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction && call->resolvedFunction->identifier == "memberAccess" &&
-            typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
-
-    ma.SetTy(sourceExternTy);
-    call->SetTy(sourceExternTy);
-    ma.desugarExpr = std::move(call);
-    return true;
-}
 
 void TypeChecker::TypeCheckerImpl::DiagMemberAccessNotFound(const MemberAccess& ma)
 {

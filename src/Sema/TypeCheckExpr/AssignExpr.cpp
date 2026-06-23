@@ -12,8 +12,6 @@
 #include "Diags.h"
 #include "TypeCheckUtil.h"
 
-#include "cangjie/AST/Clone.h"
-#include "cangjie/AST/Create.h"
 #include "cangjie/AST/RecoverDesugar.h"
 
 using namespace Cangjie;
@@ -22,20 +20,6 @@ using namespace TypeCheckUtil;
 
 namespace {
 const std::vector<TokenKind> SHIFT_ASSIGN_OPERATOR = {TokenKind::LSHIFT_ASSIGN, TokenKind::RSHIFT_ASSIGN};
-
-OwnedPtr<Expr> CloneEffectiveExpr(Ptr<Expr> expr)
-{
-    OwnedPtr<Expr> cloned;
-    if (expr && expr->desugarExpr) {
-        cloned = ASTCloner::Clone(Ptr(expr->desugarExpr.get()));
-    } else {
-        cloned = ASTCloner::Clone(expr);
-    }
-    if (cloned) {
-        cloned->EnableAttr(Attribute::EXTERN_DESUGAR);
-    }
-    return cloned;
-}
 
 /**
  * This table encodes the types of the operator and result, for every assignment operator, where key is assignment
@@ -189,146 +173,6 @@ void CheckMultipleAssignExpr(DiagnosticEngine& diag, TypeManager& typeManager, A
     }
 }
 } // namespace
-
-// `e.foo = v` -> `T.memberUpdate("foo", v)` for `e: Extern<T>`
-bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx, AssignExpr& ae)
-{
-    if (ae.isCompound) {
-        return false;
-    }
-    auto ma = DynamicCast<MemberAccess*>(ae.leftValue.get());
-    if (ma == nullptr || ma->baseExpr == nullptr) {
-        return false;
-    }
-    if (!Ty::IsTyCorrect(ma->baseExpr->GetTy()) || !TypeIsExtern(ma->baseExpr->GetTy())) {
-        return false;
-    }
-    if (auto baseRef = DynamicCast<RefExpr*>(ma->baseExpr.get()); baseRef && baseRef->isThis) {
-        // this corresponds to the `this.payload = payload` expression in the core library
-        // which is a normal field assignment
-        CJC_ASSERT(ma->field == "payload");
-        return false;
-    }
-
-    auto typecheck = [this, &ctx](Ptr<Node> node) {
-        auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
-        ReplaceIdealTy(*node);
-        return ty;
-    };
-    Ptr<Ty> rightTy = typecheck(ae.rightExpr.get());
-    if (!Ty::IsTyCorrect(rightTy)) {
-        ae.SetTy(TypeManager::GetInvalidTy());
-        return true;
-    }
-    rightTy = ae.rightExpr->GetTy();
-
-    auto sourceExternTy = ma->baseExpr->GetTy();
-    auto info = ResolveExternRuntime(sourceExternTy);
-
-    Ptr<FuncDecl> memberUpdateDecl = nullptr;
-    auto memberUpdate = CreateRuntimeMemberAccess(ae, info, "memberUpdate", memberUpdateDecl);
-
-    std::vector<OwnedPtr<FuncArg>> args;
-    args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(Ptr(ma->baseExpr.get()))));
-    args.emplace_back(CreateExternDesugarArg(CreateStringLit(ma->field.Val())));
-    args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(Ptr(ae.rightExpr.get()))));
-
-    auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-    auto call = CreateRuntimeCall(ae, info, std::move(memberUpdate), memberUpdateDecl, std::move(args), unitTy);
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction && call->resolvedFunction->identifier == "memberUpdate" &&
-            typeManager.IsSubtype(call->GetTy(), unitTy)));
-
-    ae.SetTy(unitTy);
-    call->SetTy(unitTy);
-    ae.desugarExpr = std::move(call);
-    return true;
-}
-
-// `e[idx] = v` -> `T.indexUpdate(idx, v)` for `e: Extern<T>`
-bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, AssignExpr& ae)
-{
-    if (ae.isCompound) {
-        return false;
-    }
-    auto se = DynamicCast<SubscriptExpr*>(ae.leftValue.get());
-    if (!se || !se->baseExpr || se->indexExprs.empty()) {
-        return false;
-    }
-
-    auto typecheck = [this, &ctx](Ptr<Node> node) {
-        auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
-        ReplaceIdealTy(*node);
-        return ty;
-    };
-    SetIsNotAlone(*se->baseExpr);
-    Ptr<Ty> sourceExternTy = typecheck(se->baseExpr.get());
-    for (auto& indexExpr : se->indexExprs) {
-        (void)typecheck(indexExpr.get());
-    }
-    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
-        return false;
-    }
-    if (!std::all_of(se->indexExprs.cbegin(), se->indexExprs.cend(), [](auto& indexExpr) {
-        return indexExpr && Ty::IsTyCorrect(indexExpr->GetTy());
-    })) {
-        ae.SetTy(TypeManager::GetInvalidTy());
-        return true;
-    }
-
-    Ptr<Ty> rightTy = typecheck(ae.rightExpr.get());
-    if (!Ty::IsTyCorrect(rightTy)) {
-        ae.SetTy(TypeManager::GetInvalidTy());
-        return true;
-    }
-    rightTy = ae.rightExpr->GetTy();
-
-    auto info = ResolveExternRuntime(sourceExternTy);
-
-    // Build `T.indexAccess(base, idx)` for every index except the last; the last index is handled by
-    // `indexUpdate` below.
-    auto createRuntimeAccess = [&](OwnedPtr<Expr> baseExpr, Expr& indexExpr) -> OwnedPtr<CallExpr> {
-        Ptr<FuncDecl> indexAccessDecl = nullptr;
-        auto indexAccess = CreateRuntimeMemberAccess(ae, info, "indexAccess", indexAccessDecl);
-
-        std::vector<OwnedPtr<FuncArg>> args;
-        args.emplace_back(CreateExternDesugarArg(std::move(baseExpr)));
-        args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(Ptr(&indexExpr))));
-
-        auto call =
-            CreateRuntimeCall(ae, info, std::move(indexAccess), indexAccessDecl, std::move(args), sourceExternTy);
-        call->SetTy(sourceExternTy);
-        return call;
-    };
-
-    OwnedPtr<Expr> updateBaseExpr = CloneEffectiveExpr(Ptr(se->baseExpr.get()));
-    for (size_t i = 0; i + 1 < se->indexExprs.size(); ++i) {
-        updateBaseExpr = createRuntimeAccess(std::move(updateBaseExpr), *se->indexExprs[i]);
-        if (!updateBaseExpr) {
-            ae.SetTy(TypeManager::GetInvalidTy());
-            return true;
-        }
-    }
-
-    Ptr<FuncDecl> indexUpdateDecl = nullptr;
-    auto indexUpdate = CreateRuntimeMemberAccess(ae, info, "indexUpdate", indexUpdateDecl);
-
-    std::vector<OwnedPtr<FuncArg>> args;
-    args.emplace_back(CreateExternDesugarArg(std::move(updateBaseExpr)));
-    args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(Ptr(se->indexExprs.back().get()))));
-    args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(Ptr(ae.rightExpr.get()))));
-
-    auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-    auto call = CreateRuntimeCall(ae, info, std::move(indexUpdate), indexUpdateDecl, std::move(args), unitTy);
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction && call->resolvedFunction->identifier == "indexUpdate" &&
-            typeManager.IsSubtype(call->GetTy(), unitTy)));
-
-    ae.SetTy(unitTy);
-    call->SetTy(unitTy);
-    ae.desugarExpr = std::move(call);
-    return true;
-}
 
 bool TypeChecker::TypeCheckerImpl::IsAssignable(Expr& e, bool isCompound, const std::vector<Diagnostic>& diags) const
 {
