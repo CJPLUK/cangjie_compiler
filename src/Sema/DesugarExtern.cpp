@@ -199,39 +199,41 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(SubscriptExpr& se
     se.desugarExpr = std::move(accessExpr);
     return true;
 }
-// `e.foo = v` -> `T.memberUpdate("foo", v)` for `e: Extern<T>`
+// `e.foo = v` -> `T.memberUpdate(e, "foo", v)` for `e: Extern<T>`.
+// Chains such as `e.f1.f2 = v` and `a.b.e.f1 = v` (where only the inner sub-expression is
+// `Extern<T>`) are handled by the base member access: when the left value is synthesized by the
+// caller (`SynAssignExpr`), its base expression (here `ma->baseExpr`) is synthesized first, so any
+// nested extern member/index/call access it contains is already desugared. `CloneEffectiveExpr`
+// then picks up that desugared form, producing e.g.
+// `T.memberUpdate(T.memberAccess(e, "f1"), "f2", v)`. Bases such as `a().f1` or `b["k"].f1` rely on
+// `TryDesugarFunctionCall` / `TryDesugarExternIndexAccess` having run during that same synthesis.
 bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx, AssignExpr& ae)
 {
     if (ae.isCompound) {
         return false;
     }
     auto ma = DynamicCast<MemberAccess*>(ae.leftValue.get());
-    if (ma == nullptr || ma->baseExpr == nullptr) {
-        return false;
-    }
-    if (!Ty::IsTyCorrect(ma->baseExpr->GetTy()) || !TypeIsExtern(ma->baseExpr->GetTy())) {
-        return false;
-    }
-    if (auto baseRef = DynamicCast<RefExpr*>(ma->baseExpr.get()); baseRef && baseRef->isThis) {
-        // this corresponds to the `this.payload = payload` expression in the core library
-        // which is a normal field assignment
-        CJC_ASSERT(ma->field == "payload");
+    if (!ma || !ma->baseExpr) {
         return false;
     }
 
-    auto typecheck = [this, &ctx](Ptr<Node> node) {
-        auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
-        ReplaceIdealTy(*node);
-        return ty;
-    };
-    Ptr<Ty> rightTy = typecheck(ae.rightExpr.get());
-    if (!Ty::IsTyCorrect(rightTy)) {
+    // The left value (and therefore its base expression) has already been synthesized by
+    // `SynAssignExpr` before reaching this point, so the base's type and any desugaring are
+    // available without re-synthesizing here.
+    auto sourceExternTy = ma->baseExpr->GetTy();
+    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
+        return false;
+    }
+
+    // Synthesize the right-hand side value so that nested extern expressions get desugared, and pin
+    // its ideal type before it is cloned as the `Any` argument to `memberUpdate`.
+    Synthesize({ctx, SynPos::EXPR_ARG}, ae.rightExpr.get());
+    ReplaceIdealTy(*ae.rightExpr);
+    if (!Ty::IsTyCorrect(ae.rightExpr->GetTy())) {
         ae.SetTy(TypeManager::GetInvalidTy());
         return true;
     }
-    rightTy = ae.rightExpr->GetTy();
 
-    auto sourceExternTy = ma->baseExpr->GetTy();
     auto info = ResolveExternRuntime(sourceExternTy);
 
     Ptr<FuncDecl> memberUpdateDecl = nullptr;
