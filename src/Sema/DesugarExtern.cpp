@@ -171,27 +171,10 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(SubscriptExpr& se
 
     auto info = ResolveExternRuntime(sourceExternTy);
 
-    // Build `T.indexAccess(base, idx)`, used once per index when there is more than one.
-    auto createRuntimeAccess = [&](OwnedPtr<Expr> baseExpr, Expr& indexExpr) -> OwnedPtr<CallExpr> {
-        Ptr<FuncDecl> indexAccessDecl = nullptr;
-        auto indexAccess = CreateRuntimeMemberAccess(se, info, "indexAccess", indexAccessDecl);
-
-        std::vector<OwnedPtr<FuncArg>> args;
-        args.emplace_back(CreateExternDesugarArg(std::move(baseExpr)));
-        args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(Ptr(&indexExpr))));
-
-        auto call =
-            CreateRuntimeCall(se, info, std::move(indexAccess), indexAccessDecl, std::move(args), sourceExternTy);
-        CJC_ASSERT(info.isGeneric ||
-            (call->resolvedFunction && call->resolvedFunction->identifier == "indexAccess" &&
-                typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
-        call->SetTy(sourceExternTy);
-        return call;
-    };
-
+    // Build `T.indexAccess(base, idx)` once per index, chaining when there is more than one.
     OwnedPtr<Expr> accessExpr = CloneEffectiveExpr(Ptr(se.baseExpr.get()));
     for (auto& indexExpr : se.indexExprs) {
-        accessExpr = createRuntimeAccess(std::move(accessExpr), *indexExpr);
+        accessExpr = CreateRuntimeIndexAccess(se, info, std::move(accessExpr), *indexExpr, sourceExternTy);
     }
 
     se.SetTy(sourceExternTy);
@@ -323,30 +306,11 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
 
     auto info = ResolveExternRuntime(sourceExternTy);
 
-    // Build `T.indexAccess(base, idx)`, used for every index but the last one when there is more than
-    // one (the read part of the chain).
-    auto createRuntimeAccess = [&](OwnedPtr<Expr> baseExpr, Expr& indexExpr) -> OwnedPtr<CallExpr> {
-        Ptr<FuncDecl> indexAccessDecl = nullptr;
-        auto indexAccess = CreateRuntimeMemberAccess(*se, info, "indexAccess", indexAccessDecl);
-
-        std::vector<OwnedPtr<FuncArg>> args;
-        args.emplace_back(CreateExternDesugarArg(std::move(baseExpr)));
-        args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(Ptr(&indexExpr))));
-
-        auto call =
-            CreateRuntimeCall(*se, info, std::move(indexAccess), indexAccessDecl, std::move(args), sourceExternTy);
-        CJC_ASSERT(info.isGeneric ||
-            (call->resolvedFunction && call->resolvedFunction->identifier == "indexAccess" &&
-                typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
-        call->SetTy(sourceExternTy);
-        return call;
-    };
-
     // Receiver of the final `indexUpdate`: the base, with all but the last index applied via
-    // `indexAccess`.
+    // `T.indexAccess(base, idx)` (the read part of the chain).
     OwnedPtr<Expr> receiver = CloneEffectiveExpr(Ptr(se->baseExpr.get()));
     for (size_t i = 0; i + 1 < se->indexExprs.size(); ++i) {
-        receiver = createRuntimeAccess(std::move(receiver), *se->indexExprs[i]);
+        receiver = CreateRuntimeIndexAccess(*se, info, std::move(receiver), *se->indexExprs[i], sourceExternTy);
     }
 
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
@@ -564,6 +528,24 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeCall(const Expr& s
     call->sourceExpr = const_cast<Expr*>(&srcNode);
     call->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
     call->resolvedFunction = decl;
+    return call;
+}
+
+OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeIndexAccess(const Expr& srcNode,
+    const ExternRuntimeInfo& info, OwnedPtr<Expr> baseExpr, Expr& indexExpr, Ptr<Ty> ty)
+{
+    Ptr<FuncDecl> indexAccessDecl = nullptr;
+    auto indexAccess = CreateRuntimeMemberAccess(srcNode, info, "indexAccess", indexAccessDecl);
+
+    std::vector<OwnedPtr<FuncArg>> args;
+    args.emplace_back(CreateExternDesugarArg(std::move(baseExpr)));
+    args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(Ptr(&indexExpr))));
+
+    auto call = CreateRuntimeCall(srcNode, info, std::move(indexAccess), indexAccessDecl, std::move(args), ty);
+    CJC_ASSERT(info.isGeneric ||
+        (call->resolvedFunction && call->resolvedFunction->identifier == "indexAccess" &&
+            typeManager.IsSubtype(call->GetTy(), ty)));
+    call->SetTy(ty);
     return call;
 }
 

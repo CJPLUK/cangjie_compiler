@@ -1807,6 +1807,12 @@ private:
     OwnedPtr<AST::CallExpr> CreateRuntimeCall(const AST::Expr& srcNode, const ExternRuntimeInfo& info,
         OwnedPtr<AST::MemberAccess> member, Ptr<AST::FuncDecl> decl, std::vector<OwnedPtr<AST::FuncArg>> args,
         Ptr<AST::Ty> retTy);
+    /**
+     * @brief Build a single runtime index read `T.indexAccess(base, index)` of type @p ty. Used to
+     * chain the read part of both `e[i...]` and `e[i...] = v` desugarings.
+     */
+    OwnedPtr<AST::CallExpr> CreateRuntimeIndexAccess(const AST::Expr& srcNode, const ExternRuntimeInfo& info,
+        OwnedPtr<AST::Expr> baseExpr, AST::Expr& indexExpr, Ptr<AST::Ty> ty);
 
 
     /** Members */
