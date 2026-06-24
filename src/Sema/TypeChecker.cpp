@@ -1100,8 +1100,9 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
     auto realTarget = typeManager.TryGreedySubst(target);
 
     // Check if the type of the actual target is valid, and is Extern. If not, externification is unnecessary
-    if (auto nodeExpr = DynamicCast<Expr*>(node.get()); nodeExpr && node->astKind != ASTKind::BLOCK && TypeIsExtern(realTarget)) {
-        chkRet = CoerceToExtern(ctx, realTarget, nodeExpr);
+    if (auto nodeExpr = DynamicCast<Expr*>(node.get());
+        nodeExpr && node->astKind != ASTKind::BLOCK && TypeIsExtern(*realTarget)) {
+        chkRet = CoerceToExtern(ctx, *realTarget, *nodeExpr);
     } else if (realTarget->IsPlaceholder() && !AcceptPlaceholderTarget(*node)) {
         auto& cst = typeManager.constraints[RawStaticCast<GenericsTy*>(realTarget)];
         Ptr<Ty> lub = nullptr;

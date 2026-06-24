@@ -2969,7 +2969,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
     if (!ce.baseFunc) {
         return false;
     }
-    if (TryDesugarFunctionCall(ctx, target, ce)) {
+    if (TryDesugarFunctionCall(ctx, ce)) {
         return Ty::IsTyCorrect(ce.GetTy());
     }
 
