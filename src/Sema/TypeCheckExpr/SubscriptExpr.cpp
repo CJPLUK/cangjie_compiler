@@ -37,7 +37,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> tar
     if (!Ty::IsTyCorrect(baseTy) || !Ty::AreTysCorrect(indexTys)) {
         return false;
     }
-    if (TryDesugarExternIndexAccess(ctx, target, se)) {
+    if (TryDesugarExternIndexAccess(se)) {
         return Ty::IsTyCorrect(se.GetTy());
     }
     // NOTE: Tuple and VArray type support built-in 'SubscriptExpr', others are all operator overload.

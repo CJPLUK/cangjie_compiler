@@ -135,63 +135,68 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(MemberAccess& ma
     return true;
 }
 
-// `e[idx]` -> `T.indexAccess(idx)` for `e: Extern<T>`
-bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
+// `e[idx]` -> `T.indexAccess(e, idx)` for `e: Extern<T>`.
+// The base and indices have already been synthesized by `ChkSubscriptExpr` before this is called,
+// so any nested extern member/index accesses contained in the base are already desugared and are
+// picked up here via `CloneEffectiveExpr`. Chains such as `a.b.e[idx]` (where only `a.b.e` is
+// `Extern<T>`) and `e[i1][i2]` therefore desugar naturally. A subscript that is the callee of a
+// call (`e[idx](args...)`) or the target of an assignment (`e[idx] = v`) is handled by
+// `TryDesugarFunctionCall` / `TryDesugarExternIndexUpdate` respectively: in those cases this
+// desugaring still runs for the read part and the enclosing rule reuses the desugared form.
+// Multiple indices `e[i1, i2, ...]` are chained into nested `indexAccess` calls, matching the
+// handling in `TryDesugarExternIndexUpdate`.
+bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(SubscriptExpr& se)
 {
-    (void)target;
-    CJC_NULLPTR_CHECK(se.baseExpr);
-    auto typecheck = [this, &ctx](Ptr<Node> node) {
-        auto ty = node->GetTy();
-        if (!Ty::IsTyCorrect(ty)) {
-            ty = Synthesize({ctx, SynPos::EXPR_ARG}, node);
-        }
-        ReplaceIdealTy(*node);
-        return node->GetTy();
-    };
-    auto sourceExternTy = typecheck(se.baseExpr.get());
-    for (auto& indexExpr : se.indexExprs) {
-        CJC_NULLPTR_CHECK(indexExpr);
-        auto indexTy = typecheck(indexExpr.get());
-        if (!Ty::IsTyCorrect(indexTy)) {
-            se.SetTy(TypeManager::GetInvalidTy());
-            return true;
-        }
-    }
-    if (!TypeIsExtern(sourceExternTy)) {
+    if (!se.baseExpr || se.indexExprs.empty()) {
         return false;
     }
-    if (se.TestAttr(Attribute::LEFT_VALUE)) {
-        se.SetTy(sourceExternTy);
+    auto sourceExternTy = se.baseExpr->GetTy();
+    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
+        return false;
+    }
+    if (!std::all_of(se.indexExprs.cbegin(), se.indexExprs.cend(),
+            [](auto& indexExpr) { return indexExpr && Ty::IsTyCorrect(indexExpr->GetTy()); })) {
+        se.SetTy(TypeManager::GetInvalidTy());
         return true;
+    }
+
+    // The base and indices were synthesized by `ChkSubscriptExpr` without replacing ideal types
+    // (e.g. the literal `0` in `e[0]` still carries an ideal integer type). Each index is passed to
+    // `indexAccess` as an `Any` argument, so it must be given its concrete type before being cloned
+    // into the desugared call; otherwise post-typecheck AST validation rejects the ideal-typed node.
+    ReplaceIdealTy(*se.baseExpr);
+    for (auto& indexExpr : se.indexExprs) {
+        ReplaceIdealTy(*indexExpr);
     }
 
     auto info = ResolveExternRuntime(sourceExternTy);
 
-    OwnedPtr<Expr> indexedExpr = se.baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(se.baseExpr->desugarExpr.get()))
-                                                          : ASTCloner::Clone(Ptr(se.baseExpr.get()));
-    for (auto& indexExpr : se.indexExprs) {
+    // Build `T.indexAccess(base, idx)`, used once per index when there is more than one.
+    auto createRuntimeAccess = [&](OwnedPtr<Expr> baseExpr, Expr& indexExpr) -> OwnedPtr<CallExpr> {
         Ptr<FuncDecl> indexAccessDecl = nullptr;
         auto indexAccess = CreateRuntimeMemberAccess(se, info, "indexAccess", indexAccessDecl);
 
         std::vector<OwnedPtr<FuncArg>> args;
-        args.emplace_back(CreateExternDesugarArg(std::move(indexedExpr)));
-        args.emplace_back(CreateExternDesugarArg(ASTCloner::Clone(Ptr(indexExpr.get()))));
+        args.emplace_back(CreateExternDesugarArg(std::move(baseExpr)));
+        args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(Ptr(&indexExpr))));
 
         auto call =
             CreateRuntimeCall(se, info, std::move(indexAccess), indexAccessDecl, std::move(args), sourceExternTy);
+        CJC_ASSERT(info.isGeneric ||
+            (call->resolvedFunction && call->resolvedFunction->identifier == "indexAccess" &&
+                typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
         call->SetTy(sourceExternTy);
-        indexedExpr = std::move(call);
+        return call;
+    };
+
+    OwnedPtr<Expr> accessExpr = CloneEffectiveExpr(Ptr(se.baseExpr.get()));
+    for (auto& indexExpr : se.indexExprs) {
+        accessExpr = createRuntimeAccess(std::move(accessExpr), *indexExpr);
     }
 
-    auto call = DynamicCast<CallExpr*>(indexedExpr.get());
-    CJC_ASSERT(call);
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction && call->resolvedFunction->identifier == "indexAccess" &&
-            typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
-
     se.SetTy(sourceExternTy);
-    indexedExpr->SetTy(sourceExternTy);
-    se.desugarExpr = std::move(indexedExpr);
+    accessExpr->SetTy(sourceExternTy);
+    se.desugarExpr = std::move(accessExpr);
     return true;
 }
 // `e.foo = v` -> `T.memberUpdate("foo", v)` for `e: Extern<T>`

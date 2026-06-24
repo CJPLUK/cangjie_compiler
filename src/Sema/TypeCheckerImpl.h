@@ -1773,7 +1773,7 @@ private:
     bool TryDesugarExternMemberUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     bool TryDesugarExternIndexUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     bool TryDesugarExternMemberAccess(AST::MemberAccess& ma);
-    bool TryDesugarExternIndexAccess(ASTContext& ctx, Ptr<AST::Ty> target, AST::SubscriptExpr& se);
+    bool TryDesugarExternIndexAccess(AST::SubscriptExpr& se);
     bool TryDesugarFunctionCall(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
     bool TypeIsExtern(Ptr<AST::Ty> ty);
     Ptr<AST::FuncDecl> GetRuntimeFuncDecl(const std::string& name);
