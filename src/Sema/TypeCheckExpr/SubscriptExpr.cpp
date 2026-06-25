@@ -42,7 +42,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, 
             return true;
         }
     }
-    if (!TypeIsExtern(importManager, sourceExternTy)) {
+    if (!TypeIsExtern(sourceExternTy)) {
         return false;
     }
     if (se.TestAttr(Attribute::LEFT_VALUE)) {
@@ -50,79 +50,27 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, 
         return true;
     }
 
-    auto runtimeTy = sourceExternTy->typeArgs[0];
-    CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
-    Ptr<Decl> runtimeDecl = nullptr;
-    bool isGenericRuntimeTy = false;
-    if (auto genericsTy = DynamicCast<GenericsTy*>(runtimeTy); genericsTy) {
-        isGenericRuntimeTy = true;
-        runtimeDecl = genericsTy->decl;
-    } else {
-        runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
-    }
-    CJC_ASSERT(runtimeDecl);
+    auto info = ResolveExternRuntime(sourceExternTy);
 
     OwnedPtr<Expr> indexedExpr = se.baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(se.baseExpr->desugarExpr.get()))
                                                           : ASTCloner::Clone(Ptr(se.baseExpr.get()));
     for (auto& indexExpr : se.indexExprs) {
-        auto runtimeRef = CreateRefExpr(*runtimeDecl);
-        runtimeRef->isAlone = false;
-        runtimeRef->SetTy(runtimeTy);
-        runtimeRef->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-        CopyBasicInfo(&se, runtimeRef.get());
-
-        OwnedPtr<MemberAccess> indexAccess;
         Ptr<FuncDecl> indexAccessDecl = nullptr;
-        if (isGenericRuntimeTy) {
-            indexAccess = MakeOwned<MemberAccess>();
-            indexAccess->baseExpr = std::move(runtimeRef);
-            indexAccess->field = "indexAccess";
-            indexAccessDecl = GetRuntimeFuncDecl(importManager, "indexAccess");
-            indexAccess->target = indexAccessDecl;
-            auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
-            CJC_ASSERT(runtimeInterfaceDecl);
-            CJC_ASSERT(indexAccessDecl);
-            auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
-            indexAccess->SetTy(typeManager.GetInstantiatedTy(indexAccessDecl->GetTy(), typeMapping));
-        } else {
-            indexAccess = CreateMemberAccess(std::move(runtimeRef), "indexAccess");
-            indexAccessDecl = DynamicCast<FuncDecl*>(indexAccess->target);
-        }
-        indexAccess->isAlone = false;
-        indexAccess->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-        CopyBasicInfo(&se, indexAccess.get());
-        CJC_ASSERT(indexAccessDecl);
-        indexAccess->target = indexAccessDecl;
-        indexAccess->targets.emplace_back(indexAccessDecl);
-        auto createTypedArg = [](OwnedPtr<Expr> expr) {
-            auto ty = expr->GetTy();
-            auto arg = CreateFuncArg(std::move(expr));
-            arg->SetTy(ty);
-            arg->EnableAttr(Attribute::EXTERN_DESUGAR);
-            CJC_NULLPTR_CHECK(arg->expr);
-            arg->expr->SetTy(ty);
-            arg->expr->EnableAttr(Attribute::EXTERN_DESUGAR);
-            return arg;
-        };
+        auto indexAccess = CreateRuntimeMemberAccess(se, info, "indexAccess", indexAccessDecl);
 
         std::vector<OwnedPtr<FuncArg>> args;
-        args.emplace_back(createTypedArg(std::move(indexedExpr)));
-        args.emplace_back(createTypedArg(ASTCloner::Clone(Ptr(indexExpr.get()))));
+        args.emplace_back(CreateExternDesugarArg(std::move(indexedExpr)));
+        args.emplace_back(CreateExternDesugarArg(ASTCloner::Clone(Ptr(indexExpr.get()))));
 
-        auto callTarget = isGenericRuntimeTy ? nullptr : indexAccessDecl;
-        auto call = CreateCallExpr(
-            std::move(indexAccess), std::move(args), callTarget, sourceExternTy, CallKind::CALL_DECLARED_FUNCTION);
-        CopyBasicInfo(&se, call.get());
-        call->sourceExpr = &se;
-        call->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-        call->resolvedFunction = indexAccessDecl;
+        auto call =
+            CreateRuntimeCall(se, info, std::move(indexAccess), indexAccessDecl, std::move(args), sourceExternTy);
         call->SetTy(sourceExternTy);
         indexedExpr = std::move(call);
     }
 
     auto call = DynamicCast<CallExpr*>(indexedExpr.get());
     CJC_ASSERT(call);
-    CJC_ASSERT(isGenericRuntimeTy ||
+    CJC_ASSERT(info.isGeneric ||
         (call->resolvedFunction && call->resolvedFunction->identifier == "indexAccess" &&
             typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
 

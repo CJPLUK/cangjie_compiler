@@ -2296,9 +2296,52 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         ReplaceIdealTy(*node);
         return ty;
     };
-    auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get());
-    auto externReceiver = (ma && ma->baseExpr) ? Ptr<Expr>(ma->baseExpr.get()) : Ptr<Expr>(ce.baseFunc.get());
-    auto getLeftmostReceiver = [](Ptr<Expr> expr) {
+    // A NameReferenceExpr that is the callee of `ce` stores a back-pointer to the call in
+    // `callOrPattern`. Clearing it while synthesizing makes the checker yield the referenced
+    // value's type instead of trying to resolve an overloaded function call. The caller decides
+    // whether diagnostics should be reported during this probe.
+    auto typecheckAsValue = [this, &typecheck](Ptr<Expr> expr, bool suppressDiag) {
+        Ptr<NameReferenceExpr> nre = DynamicCast<NameReferenceExpr*>(expr.get());
+        Ptr<Node> savedCallOrPattern = nre ? nre->callOrPattern : nullptr;
+        if (nre) {
+            nre->callOrPattern = nullptr;
+        }
+        Ptr<Ty> ty = nullptr;
+        if (suppressDiag) {
+            auto ds = DiagSuppressor(diag);
+            ty = typecheck(expr);
+        } else {
+            ty = typecheck(expr);
+        }
+        if (nre) {
+            nre->callOrPattern = savedCallOrPattern;
+        }
+        return ty;
+    };
+    // Probe (without reporting diagnostics) whether `expr` already has, or synthesizes to, an
+    // extern type; returns that type or nullptr.
+    auto externTyOf = [&](Ptr<Expr> expr) -> Ptr<Ty> {
+        auto ty = expr->GetTy();
+        if (!Ty::IsTyCorrect(ty) || !TypeIsExtern(ty)) {
+            ty = typecheckAsValue(expr, /*suppressDiag=*/true);
+        }
+        return Ty::IsTyCorrect(ty) && TypeIsExtern(ty) ? ty : nullptr;
+    };
+    // A bare reference to a non-value declaration (e.g. a function name) can never be an extern
+    // value, so such callees are never desugared here. `nullTargetIsNonValue` controls whether an
+    // unresolved reference is treated as a non-value too.
+    auto isNonValueCalleeRef = [](Ptr<Expr> expr, bool nullTargetIsNonValue) {
+        auto re = DynamicCast<RefExpr*>(expr.get());
+        if (!re) {
+            return false;
+        }
+        if (!re->ref.target) {
+            return nullTargetIsNonValue;
+        }
+        return re->ref.target->astKind != ASTKind::VAR_DECL &&
+            re->ref.target->astKind != ASTKind::FUNC_PARAM;
+    };
+    auto leftmostReceiverOf = [](Ptr<Expr> expr) {
         while (true) {
             if (auto receiverMa = DynamicCast<MemberAccess*>(expr.get())) {
                 if (!receiverMa->baseExpr) {
@@ -2318,48 +2361,46 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         }
         return expr;
     };
-    auto leftmostReceiver = getLeftmostReceiver(externReceiver);
+
+    // Classify the callee. For a member-style callee `e.foo(...)` the relevant extern value is the
+    // receiver `e`; otherwise it is the callee expression itself.
+    auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get());
+    auto externReceiver = (ma && ma->baseExpr) ? Ptr<Expr>(ma->baseExpr.get()) : Ptr<Expr>(ce.baseFunc.get());
+    auto leftmostReceiver = leftmostReceiverOf(externReceiver);
     if (!leftmostReceiver) {
         return false;
     }
-    if (!ma) {
-        if (auto re = DynamicCast<RefExpr*>(ce.baseFunc.get());
-            re && re->ref.target && re->ref.target->astKind != ASTKind::VAR_DECL &&
-            re->ref.target->astKind != ASTKind::FUNC_PARAM) {
-            return false;
-        }
-    }
-    auto leftmostReceiverTy = leftmostReceiver->GetTy();
-    if (!Ty::IsTyCorrect(leftmostReceiverTy) || !TypeIsExtern(importManager, leftmostReceiverTy)) {
-        auto ds = DiagSuppressor(diag);
-        leftmostReceiverTy = typecheck(leftmostReceiver);
-    }
-    if (!Ty::IsTyCorrect(leftmostReceiverTy) || !TypeIsExtern(importManager, leftmostReceiverTy)) {
+    if (!ma && isNonValueCalleeRef(Ptr<Expr>(ce.baseFunc.get()), /*nullTargetIsNonValue=*/false)) {
         return false;
     }
-    if (!ma) {
-        if (auto re = DynamicCast<RefExpr*>(ce.baseFunc.get());
-            re && (!re->ref.target ||
-            (re->ref.target->astKind != ASTKind::VAR_DECL && re->ref.target->astKind != ASTKind::FUNC_PARAM))) {
+
+    // Two desugaring shapes:
+    //  - receiver chain rooted at an extern value: `e.foo(...)` / `e(...)` (useDirectCallee == false);
+    //  - callee expression that itself evaluates to an extern value, e.g. `hold(x)()` or
+    //    `tool.make()(...)`: call it directly (useDirectCallee == true).
+    bool useDirectCallee = false;
+    Ptr<Ty> sourceExternTy = nullptr;
+    if (externTyOf(leftmostReceiver) == nullptr) {
+        sourceExternTy = externTyOf(Ptr<Expr>(ce.baseFunc.get()));
+        if (sourceExternTy == nullptr) {
             return false;
         }
+        externReceiver = Ptr<Expr>(ce.baseFunc.get());
+        useDirectCallee = true;
+    }
+    if (!useDirectCallee && !ma &&
+        isNonValueCalleeRef(Ptr<Expr>(ce.baseFunc.get()), /*nullTargetIsNonValue=*/true)) {
+        return false;
     }
     SetIsNotAlone(*externReceiver);
-    Ptr<Node> oldCallOrPattern = nullptr;
-    Ptr<NameReferenceExpr> directReceiverRef = nullptr;
-    if (externReceiver == Ptr<Expr>(ce.baseFunc.get())) {
-        if (auto nre = DynamicCast<NameReferenceExpr*>(externReceiver.get())) {
-            directReceiverRef = nre;
-            oldCallOrPattern = nre->callOrPattern;
-            nre->callOrPattern = nullptr;
+    if (!useDirectCallee) {
+        // The receiver still needs to be type-checked (with diagnostics) to obtain its extern type.
+        bool calleeIsReceiver = externReceiver == Ptr<Expr>(ce.baseFunc.get());
+        sourceExternTy = calleeIsReceiver ? typecheckAsValue(externReceiver, /*suppressDiag=*/false)
+                                          : typecheck(externReceiver);
+        if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
+            return false;
         }
-    }
-    auto sourceExternTy = typecheck(externReceiver);
-    if (directReceiverRef) {
-        directReceiverRef->callOrPattern = oldCallOrPattern;
-    }
-    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(importManager, sourceExternTy)) {
-        return false;
     }
     for (auto& arg : ce.args) {
         CJC_NULLPTR_CHECK(arg);
@@ -2377,77 +2418,20 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         return true;
     }
 
-    auto runtimeTy = sourceExternTy->typeArgs[0];
-    CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
-    Ptr<Decl> runtimeDecl = nullptr;
-    bool isGenericRuntimeTy = false;
-    if (auto genericsTy = DynamicCast<GenericsTy*>(runtimeTy); genericsTy) {
-        isGenericRuntimeTy = true;
-        runtimeDecl = genericsTy->decl;
-    } else {
-        runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
-    }
-    CJC_ASSERT(runtimeDecl);
-
-    auto createRuntimeMember = [&](const std::string& name, Ptr<Ty> retTy) {
-        auto runtimeRef = CreateRefExpr(*runtimeDecl);
-        runtimeRef->isAlone = false;
-        runtimeRef->SetTy(runtimeTy);
-        runtimeRef->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-        CopyBasicInfo(&ce, runtimeRef.get());
-
-        OwnedPtr<MemberAccess> member = nullptr;
-        Ptr<FuncDecl> decl = nullptr;
-        if (isGenericRuntimeTy) {
-            member = MakeOwned<MemberAccess>();
-            member->baseExpr = std::move(runtimeRef);
-            member->field = name;
-            decl = GetRuntimeFuncDecl(importManager, name);
-            auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
-            CJC_ASSERT(runtimeInterfaceDecl);
-            CJC_ASSERT(decl);
-            auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
-            member->SetTy(typeManager.GetInstantiatedTy(decl->GetTy(), typeMapping));
-        } else {
-            member = CreateMemberAccess(std::move(runtimeRef), name);
-            decl = DynamicCast<FuncDecl*>(member->target);
-        }
-        member->isAlone = false;
-        member->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-        CopyBasicInfo(&ce, member.get());
-        CJC_ASSERT(decl);
-        member->target = decl;
-        member->targets.emplace_back(decl);
-        return std::make_pair(std::move(member), std::make_pair(decl, retTy));
-    };
-    auto createTypedArg = [](OwnedPtr<Expr> expr) {
-        auto ty = expr->GetTy();
-        auto arg = CreateFuncArg(std::move(expr));
-        arg->SetTy(ty);
-        arg->EnableAttr(Attribute::EXTERN_DESUGAR);
-        CJC_NULLPTR_CHECK(arg->expr);
-        arg->expr->SetTy(ty);
-        arg->expr->EnableAttr(Attribute::EXTERN_DESUGAR);
-        return arg;
-    };
+    auto info = ResolveExternRuntime(sourceExternTy);
 
     OwnedPtr<Expr> callableExtern;
-    if (ma && ma->baseExpr) {
+    if (!useDirectCallee && ma && ma->baseExpr) {
         std::vector<OwnedPtr<FuncArg>> memberAccessArgs;
         auto effectiveBase = ma->baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(ma->baseExpr->desugarExpr.get()))
                                                        : ASTCloner::Clone(Ptr(ma->baseExpr.get()));
-        memberAccessArgs.emplace_back(createTypedArg(std::move(effectiveBase)));
-        memberAccessArgs.emplace_back(createTypedArg(CreateStringLit(importManager, ma->field.Val())));
+        memberAccessArgs.emplace_back(CreateExternDesugarArg(std::move(effectiveBase)));
+        memberAccessArgs.emplace_back(CreateExternDesugarArg(CreateStringLit(ma->field.Val())));
 
-        auto [memberAccess, memberAccessInfo] = createRuntimeMember("memberAccess", sourceExternTy);
-        auto callTarget = isGenericRuntimeTy ? nullptr : memberAccessInfo.first;
-        callableExtern = CreateCallExpr(
-            std::move(memberAccess), std::move(memberAccessArgs), callTarget, memberAccessInfo.second,
-            CallKind::CALL_DECLARED_FUNCTION);
-        CopyBasicInfo(&ce, callableExtern.get());
-        callableExtern->sourceExpr = &ce;
-        callableExtern->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-        StaticCast<CallExpr*>(callableExtern.get())->resolvedFunction = memberAccessInfo.first;
+        Ptr<FuncDecl> memberAccessDecl = nullptr;
+        auto memberAccess = CreateRuntimeMemberAccess(ce, info, "memberAccess", memberAccessDecl);
+        callableExtern = CreateRuntimeCall(
+            ce, info, std::move(memberAccess), memberAccessDecl, std::move(memberAccessArgs), sourceExternTy);
         callableExtern->SetTy(sourceExternTy);
     } else {
         callableExtern = ce.baseFunc->desugarExpr ? ASTCloner::Clone(Ptr(ce.baseFunc->desugarExpr.get()))
@@ -2473,18 +2457,13 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
     CopyBasicInfo(&ce, argsArray.get());
 
     std::vector<OwnedPtr<FuncArg>> functionCallArgs;
-    functionCallArgs.emplace_back(createTypedArg(std::move(callableExtern)));
-    functionCallArgs.emplace_back(createTypedArg(std::move(argsArray)));
+    functionCallArgs.emplace_back(CreateExternDesugarArg(std::move(callableExtern)));
+    functionCallArgs.emplace_back(CreateExternDesugarArg(std::move(argsArray)));
 
-    auto [functionCall, functionCallInfo] = createRuntimeMember("functionCall", sourceExternTy);
-    auto callTarget = isGenericRuntimeTy ? nullptr : functionCallInfo.first;
-    auto call = CreateCallExpr(
-        std::move(functionCall), std::move(functionCallArgs), callTarget, functionCallInfo.second,
-        CallKind::CALL_DECLARED_FUNCTION);
-    CopyBasicInfo(&ce, call.get());
-    call->sourceExpr = &ce;
-    call->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-    call->resolvedFunction = functionCallInfo.first;
+    Ptr<FuncDecl> functionCallDecl = nullptr;
+    auto functionCall = CreateRuntimeMemberAccess(ce, info, "functionCall", functionCallDecl);
+    auto call =
+        CreateRuntimeCall(ce, info, std::move(functionCall), functionCallDecl, std::move(functionCallArgs), sourceExternTy);
     ce.SetTy(call->GetTy());
     ce.desugarExpr = std::move(call);
     return true;

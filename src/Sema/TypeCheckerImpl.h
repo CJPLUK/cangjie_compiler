@@ -1775,6 +1775,39 @@ private:
     bool TryDesugarExternMemberAccess(ASTContext& ctx, AST::MemberAccess& ma);
     bool TryDesugarExternIndexAccess(ASTContext& ctx, Ptr<AST::Ty> target, AST::SubscriptExpr& se);
     bool TryDesugarFunctionCall(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
+    bool TypeIsExtern(Ptr<AST::Ty> ty);
+    Ptr<AST::FuncDecl> GetRuntimeFuncDecl(const std::string& name);
+    OwnedPtr<AST::LitConstExpr> CreateStringLit(const std::string& value);
+
+    /**
+     * @brief Resolved runtime information for an `Extern<T>` type, shared by all extern desugarings.
+     * @c runtimeTy is the `T` in `Extern<T>`; @c runtimeDecl is the declaration of @c runtimeTy;
+     * @c isGeneric is true when @c runtimeTy is a generic type parameter (i.e. `T` is itself generic).
+     */
+    struct ExternRuntimeInfo {
+        Ptr<AST::Ty> runtimeTy = nullptr;
+        Ptr<AST::Decl> runtimeDecl = nullptr;
+        bool isGeneric = false;
+    };
+    /** @brief Extract the runtime `T` of an `Extern<T>` type and resolve its declaration. */
+    ExternRuntimeInfo ResolveExternRuntime(Ptr<AST::Ty> externTy);
+    /** @brief Create a reference to the runtime type `T`, tagged as compiler-added extern desugar. */
+    OwnedPtr<AST::RefExpr> CreateExternRuntimeRef(const AST::Node& srcNode, const ExternRuntimeInfo& info);
+    /**
+     * @brief Build the `T.<runtimeFuncName>` member access used as the callee of a runtime desugaring
+     * (e.g. `memberAccess`, `memberUpdate`, `indexAccess`, `indexUpdate`, `functionCall`).
+     * @c outDecl receives the resolved runtime @c FuncDecl.
+     */
+    OwnedPtr<AST::MemberAccess> CreateRuntimeMemberAccess(
+        const AST::Node& srcNode, const ExternRuntimeInfo& info, const std::string& runtimeFuncName,
+        Ptr<AST::FuncDecl>& outDecl);
+    /** @brief Wrap @p expr in a @c FuncArg tagged as extern desugar; defaults @p ty to the expr's type. */
+    OwnedPtr<AST::FuncArg> CreateExternDesugarArg(OwnedPtr<AST::Expr> expr, Ptr<AST::Ty> ty = nullptr);
+    /** @brief Build the runtime @c CallExpr `T.<member>(args)` from a member access produced above. */
+    OwnedPtr<AST::CallExpr> CreateRuntimeCall(const AST::Expr& srcNode, const ExternRuntimeInfo& info,
+        OwnedPtr<AST::MemberAccess> member, Ptr<AST::FuncDecl> decl, std::vector<OwnedPtr<AST::FuncArg>> args,
+        Ptr<AST::Ty> retTy);
+
 
     /** Members */
     Promotion promotion;
