@@ -12,12 +12,11 @@
 
 #include "TypeCheckerImpl.h"
 
+#include "DiagSuppressor.h"
 #include "Diags.h"
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
-#include "DiagSuppressor.h"
-#include "Diags.h"
 
 namespace Cangjie {
 using namespace TypeCheckUtil;
@@ -529,7 +528,8 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeCall(const Expr& s
     OwnedPtr<MemberAccess> member, FuncDecl& decl, std::vector<OwnedPtr<FuncArg>> args, Ty& retTy)
 {
     Ptr<FuncDecl> callTarget = info.isGeneric ? nullptr : &decl;
-    auto call = CreateCallExpr(std::move(member), std::move(args), callTarget, &retTy, CallKind::CALL_DECLARED_FUNCTION);
+    auto call =
+        CreateCallExpr(std::move(member), std::move(args), callTarget, &retTy, CallKind::CALL_DECLARED_FUNCTION);
     CopyBasicInfo(&srcNode, call.get());
     call->sourceExpr = const_cast<Expr*>(&srcNode);
     call->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
@@ -537,8 +537,8 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeCall(const Expr& s
     return call;
 }
 
-OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeIndexAccess(const Expr& srcNode,
-    const ExternRuntimeInfo& info, OwnedPtr<Expr> baseExpr, Expr& indexExpr, Ty& ty)
+OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeIndexAccess(
+    const Expr& srcNode, const ExternRuntimeInfo& info, OwnedPtr<Expr> baseExpr, Expr& indexExpr, Ty& ty)
 {
     Ptr<FuncDecl> indexAccessDecl = nullptr;
     auto indexAccess = CreateRuntimeMemberAccess(srcNode, info, "indexAccess", indexAccessDecl);

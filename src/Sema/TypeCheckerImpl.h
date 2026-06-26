@@ -1819,7 +1819,6 @@ private:
     OwnedPtr<AST::CallExpr> CreateRuntimeIndexAccess(const AST::Expr& srcNode, const ExternRuntimeInfo& info,
         OwnedPtr<AST::Expr> baseExpr, AST::Expr& indexExpr, AST::Ty& ty);
 
-
     /** Members */
     Promotion promotion;
     TypeManager& typeManager;
