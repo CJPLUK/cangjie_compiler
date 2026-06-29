@@ -38,6 +38,26 @@ OwnedPtr<LitConstExpr> CreateStringLit(ImportManager& importManager, const std::
     return CreateLitConstExpr(LitConstKind::STRING, value, stringDecl->GetTy(), true);
 }
 
+Ptr<Ty> TypeChecker::TypeCheckerImpl::ProbeExternBaseTy(ASTContext& ctx, Expr& expr)
+{
+    Ptr<Ty> ty = expr.GetTy();
+    if (Ty::IsTyCorrect(ty)) {
+        return TypeIsExtern(*ty) ? ty : nullptr;
+    }
+    // Diagnostics are suppressed during the probe so that a regular (non-extern) expression is not
+    // affected: if it turns out not to be `Extern<T>`, the probe results are discarded and the
+    // normal path runs cleanly.
+    auto ds = DiagSuppressor(diag);
+    Synthesize({ctx, SynPos::EXPR_ARG}, &expr);
+    ReplaceIdealTy(expr);
+    ty = expr.GetTy();
+    if (!Ty::IsTyCorrect(ty) || !TypeIsExtern(*ty)) {
+        ctx.ClearTypeCheckCache(expr);
+        return nullptr;
+    }
+    return ty;
+}
+
 // `x` -> `T.toExtern(x)` in a context of type `Extern<T>`
 bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ty& targetTy, Expr& nodeExpr)
 {
@@ -78,9 +98,6 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ty& targetTy,
     toExtern->SetTy(typeManager.GetFunctionTy({sourceTy}, &targetTy));
 
     auto call = CreateRuntimeCall(nodeExpr, info, std::move(toExtern), *toExternDecl, std::move(args), targetTy);
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction && call->resolvedFunction->identifier == "toExtern" &&
-            typeManager.IsSubtype(call->GetTy(), &targetTy)));
 
     nodeExpr.SetTy(&targetTy);
     call->SetTy(&targetTy);
@@ -130,9 +147,6 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(MemberAccess& ma
 
     auto call =
         CreateRuntimeCall(ma, info, std::move(memberAccess), *memberAccessDecl, std::move(args), *sourceExternTy);
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction && call->resolvedFunction->identifier == "memberAccess" &&
-            typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
 
     ma.SetTy(sourceExternTy);
     call->SetTy(sourceExternTy);
@@ -159,8 +173,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(SubscriptExpr& se
     if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(*sourceExternTy)) {
         return false;
     }
-    if (!std::all_of(se.indexExprs.cbegin(), se.indexExprs.cend(),
-            [](auto& indexExpr) { return indexExpr && Ty::IsTyCorrect(indexExpr->GetTy()); })) {
+    auto checkIndexExpr = [](auto& indexExpr) { return indexExpr && Ty::IsTyCorrect(indexExpr->GetTy()); };
+    if (!std::all_of(se.indexExprs.cbegin(), se.indexExprs.cend(), checkIndexExpr)) {
         se.SetTy(TypeManager::GetInvalidTy());
         return true;
     }
@@ -221,7 +235,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
 
     // Synthesize the right-hand side value so that nested extern expressions get desugared, and pin
     // its ideal type before it is cloned as the `Any` argument to `memberUpdate`.
-    Synthesize({ctx, SynPos::EXPR_ARG}, ae.rightExpr.get());
+    Synthesize({ctx, SynPos::EXPR_ARG}, ae.rightExpr);
     ReplaceIdealTy(*ae.rightExpr);
     if (!Ty::IsTyCorrect(ae.rightExpr->GetTy())) {
         ae.SetTy(TypeManager::GetInvalidTy());
@@ -240,9 +254,6 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
 
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     auto call = CreateRuntimeCall(ae, info, std::move(memberUpdate), *memberUpdateDecl, std::move(args), *unitTy);
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction && call->resolvedFunction->identifier == "memberUpdate" &&
-            typeManager.IsSubtype(call->GetTy(), unitTy)));
 
     ae.SetTy(unitTy);
     call->SetTy(unitTy);
@@ -279,16 +290,9 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
     // affected: if the base turns out not to be `Extern<T>`, the probe results are discarded and the
     // normal subscript-assignment path runs cleanly.
     SetIsNotAlone(*se->baseExpr);
-    Ptr<Ty> sourceExternTy = se->baseExpr->GetTy();
-    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(*sourceExternTy)) {
-        auto ds = DiagSuppressor(diag);
-        Synthesize({ctx, SynPos::EXPR_ARG}, se->baseExpr.get());
-        ReplaceIdealTy(*se->baseExpr);
-        sourceExternTy = se->baseExpr->GetTy();
-        if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(*sourceExternTy)) {
-            ctx.ClearTypeCheckCache(*se->baseExpr);
-            return false;
-        }
+    Ptr<Ty> sourceExternTy = ProbeExternBaseTy(ctx, *se->baseExpr);
+    if (!sourceExternTy) {
+        return false;
     }
 
     // Committed to the extern desugaring. Synthesize the indices and the right-hand side value (so
@@ -300,10 +304,10 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
             ae.SetTy(TypeManager::GetInvalidTy());
             return true;
         }
-        Synthesize({ctx, SynPos::EXPR_ARG}, indexExpr.get());
+        Synthesize({ctx, SynPos::EXPR_ARG}, indexExpr);
         ReplaceIdealTy(*indexExpr);
     }
-    Synthesize({ctx, SynPos::EXPR_ARG}, ae.rightExpr.get());
+    Synthesize({ctx, SynPos::EXPR_ARG}, ae.rightExpr);
     ReplaceIdealTy(*ae.rightExpr);
     ReplaceIdealTy(*se->baseExpr);
 
@@ -335,9 +339,6 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
     args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(*ae.rightExpr)));
 
     auto call = CreateRuntimeCall(ae, info, std::move(indexUpdate), *indexUpdateDecl, std::move(args), *unitTy);
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction && call->resolvedFunction->identifier == "indexUpdate" &&
-            typeManager.IsSubtype(call->GetTy(), unitTy)));
 
     ae.SetTy(unitTy);
     call->SetTy(unitTy);
@@ -359,20 +360,12 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, CallE
     }
     Ptr<Expr> base = ce.baseFunc.get();
 
-    // Determine the type of the callee interpreted as a value. The callee has not been synthesized
-    // yet at this point, so we synthesize it ourselves. Diagnostics are suppressed during this
-    // probe so that a regular (non-extern) call is not affected: if the callee turns out not to be
-    // `Extern<T>`, we discard the probe results and let the normal call-checking path run cleanly.
-    Ptr<Ty> baseTy = base->GetTy();
-    if (!Ty::IsTyCorrect(baseTy) || !TypeIsExtern(*baseTy)) {
-        auto ds = DiagSuppressor(diag);
-        Synthesize({ctx, SynPos::EXPR_ARG}, base);
-        ReplaceIdealTy(*base);
-        baseTy = base->GetTy();
-        if (!Ty::IsTyCorrect(baseTy) || !TypeIsExtern(*baseTy)) {
-            ctx.ClearTypeCheckCache(*base);
-            return false;
-        }
+    // Determine the type of the callee interpreted as a value (the callee has not been synthesized
+    // yet at this point). If it is not `Extern<T>`, this is an ordinary call that must be left to the
+    // normal call-checking path.
+    Ptr<Ty> baseTy = ProbeExternBaseTy(ctx, *base);
+    if (!baseTy) {
+        return false;
     }
 
     // A reference to a type (e.g. the constructor call `Extern<T>(payload)`) is not a value call and
@@ -393,7 +386,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, CallE
             ce.SetTy(TypeManager::GetInvalidTy());
             return true;
         }
-        Synthesize({ctx, SynPos::EXPR_ARG}, arg->expr.get());
+        Synthesize({ctx, SynPos::EXPR_ARG}, arg->expr);
         ReplaceIdealTy(*arg->expr);
         if (!Ty::IsTyCorrect(arg->expr->GetTy())) {
             ce.SetTy(TypeManager::GetInvalidTy());
@@ -424,9 +417,6 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, CallE
 
     auto call =
         CreateRuntimeCall(ce, info, std::move(functionCall), *functionCallDecl, std::move(args), *sourceExternTy);
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction && call->resolvedFunction->identifier == "functionCall" &&
-            typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
 
     ce.SetTy(sourceExternTy);
     call->SetTy(sourceExternTy);
@@ -539,6 +529,11 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeCall(const Expr& s
     call->sourceExpr = const_cast<Expr*>(&srcNode);
     call->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
     call->resolvedFunction = &decl;
+    // Sanity check shared by all runtime desugarings: a non-generic runtime call must resolve to the
+    // runtime function it was built from and produce (a subtype of) the requested return type.
+    CJC_ASSERT(info.isGeneric ||
+        (call->resolvedFunction && call->resolvedFunction->identifier == decl.identifier &&
+            typeManager.IsSubtype(call->GetTy(), &retTy)));
     return call;
 }
 
@@ -553,9 +548,6 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeIndexAccess(
     args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(indexExpr)));
 
     auto call = CreateRuntimeCall(srcNode, info, std::move(indexAccess), *indexAccessDecl, std::move(args), ty);
-    CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction && call->resolvedFunction->identifier == "indexAccess" &&
-            typeManager.IsSubtype(call->GetTy(), &ty)));
     call->SetTy(&ty);
     return call;
 }

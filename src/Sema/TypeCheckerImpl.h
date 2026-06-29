@@ -1770,6 +1770,14 @@ private:
      * Assumption: type of @p nodeExpr is Extern<T>
      */
     bool CoerceToExtern(ASTContext& ctx, AST::Ty& target, AST::Expr& nodeExpr);
+    /**
+     * @brief Probe @p expr, interpreted as a value, for an `Extern<T>` type. If it has not already
+     * been synthesized to a correct extern type, synthesize it with diagnostics suppressed; on a
+     * non-extern result the probe is discarded (its type-check cache is cleared) so the regular,
+     * non-extern path can run cleanly. Returns the `Extern<T>` type, or nullptr if @p expr is not
+     * `Extern<T>`.
+     */
+    Ptr<AST::Ty> ProbeExternBaseTy(ASTContext& ctx, AST::Expr& expr);
     /** @brief Desugar `e.foo = v` (for `e: Extern<T>`) into `T.memberUpdate(e, "foo", v)`. */
     bool TryDesugarExternMemberUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     /** @brief Desugar `e[idx] = v` (for `e: Extern<T>`) into `T.indexUpdate(e, idx, v)`. */
