@@ -4,12 +4,6 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-/**
- * @file
- *
- * This file implements the functions to check decl attributes.
- */
-
 #include "TypeCheckerImpl.h"
 
 #include "DiagSuppressor.h"
