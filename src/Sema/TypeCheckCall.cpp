@@ -2406,6 +2406,13 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
     ctx.targetTypeMap[ma->baseExpr] = TypeManager::GetQuestTy();
     Synthesize({ctx, SynPos::EXPR_ARG}, ma);
     ctx.targetTypeMap[ma->baseExpr] = nullptr;
+    // A dynamic extern member access used as a call callee (`e.foo(args)` for `e: Extern<T>`) is
+    // desugared during the synthesis above into the `Extern<T>` value `T.memberAccess(e, "foo")`
+    // (it has no real member target). The enclosing call is then handled as a value call by the
+    // later `TryDesugarFunctionCall`, so report the base as well-typed here.
+    if (ma->desugarExpr && Ty::IsTyCorrect(ma->GetTy()) && TypeIsExtern(*ma->GetTy())) {
+        return true;
+    }
     if (ma->GetTy() && ma->GetTy()->IsNothing()) {
         return true;
     } else if (!ma->target && ma->targets.empty()) {
@@ -2969,9 +2976,6 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
     if (!ce.baseFunc) {
         return false;
     }
-    if (TryDesugarFunctionCall(ctx, ce)) {
-        return Ty::IsTyCorrect(ce.GetTy());
-    }
 
     bool prevCheckTrue =
         ce.callKind != CallKind::CALL_INVALID && Ty::IsTyCorrect(ce.GetTy()) && typeManager.GetUnsolvedTyVars().empty();
@@ -2993,6 +2997,10 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
     }
     if (!Ty::IsTyCorrect(ce.baseFunc->GetTy())) {
         return false;
+    }
+
+    if (TryDesugarFunctionCall(ctx, ce)) {
+        return Ty::IsTyCorrect(ce.GetTy());
     }
     if (ce.baseFunc->GetTy()->IsNothing()) {
         return SynArgsOfNothingBaseExpr(ctx, ce);

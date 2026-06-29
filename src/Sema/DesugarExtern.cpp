@@ -99,8 +99,8 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ty& targetTy,
 // automatically: the inner member access `...f1` is synthesized first and, being itself an extern
 // member access, is replaced by its own `T.memberAccess(...)` desugaring. `CloneEffectiveExpr` then
 // picks up that desugared form as the base, producing nested `T.memberAccess` calls.
-// `e.foo = v` (left value) is handled by `TryDesugarExternMemberUpdate`, and `e.foo(args...)` by
-// `TryDesugarFunctionCall`, so both cases are deferred here.
+// `e.foo = v` (left value) is the target of an assignment and is desugared into `T.memberUpdate(...)`
+// by `TryDesugarExternMemberUpdate`, so that case is deferred here.
 bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(MemberAccess& ma)
 {
     CJC_NULLPTR_CHECK(ma.baseExpr);
@@ -120,11 +120,10 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(MemberAccess& ma
         ma.SetTy(sourceExternTy);
         return true;
     }
-    // As the callee of a call, the member access is desugared together with the call into
-    // `T.functionCall(T.memberAccess(...), [args...])` by `TryDesugarFunctionCall`.
-    if (ma.callOrPattern) {
-        return false;
-    }
+    // As the callee of a call (`e.foo(args...)`), the member access still desugars here into the
+    // `Extern<T>` value `T.memberAccess(e, "foo")`; the enclosing call is then desugared as a value
+    // call into `T.functionCall(T.memberAccess(e, "foo"), [args...])` by `TryDesugarFunctionCall`,
+    // mirroring how a subscript callee `e[idx](args...)` is handled via `TryDesugarExternIndexAccess`.
 
     auto info = ResolveExternRuntime(*sourceExternTy);
 
