@@ -343,7 +343,6 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr&
         return ae.desugarExpr->GetTy();
     }
     CJC_ASSERT(ae.leftValue && ae.rightExpr);
-    ae.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
     if (TryDesugarExternIndexUpdate(ctx, ae)) {
         return ae.GetTy();
     }
@@ -352,6 +351,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr&
     if (auto ret = InferAssignExprCheckCaseOverloading(ctx, ae, diagsForOverload)) {
         return *ret;
     }
+    ae.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
     if (ae.leftValue->astKind == ASTKind::WILDCARD_EXPR) {
         if (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ae.rightExpr.get()))) {
             Ptr<Ty> rightTy = typeManager.ReplaceIdealTy(ae.rightExpr->GetTy());
