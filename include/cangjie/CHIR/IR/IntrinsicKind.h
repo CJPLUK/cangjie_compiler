@@ -80,6 +80,9 @@ static const std::string CPOINTER_ADD_NAME = "addPointer";
 static const std::string CSTRING_CONVERT_CSTR_TO_PTR_NAME = "convertCStr2Ptr";
 static const std::string BIT_CAST_NAME = "bitCast";
 
+// Extern getPayload
+static const std::string GET_PAYLOAD_NAME = "getPayload";
+
 /*
  * Used for the mock framework purpuses, to match concrete types of type parameters to the defined stubs
  * The intrinsic doesn't have a declaration and for its call,
@@ -114,7 +117,6 @@ static const std::string OBJECT_REFEQ_NAME = "intrinsicRefEq";
 static const std::string RAW_ARRAY_REFEQ_NAME = "intrinsicRefEqRawArray"; // cjnative only
 static const std::string FUNC_REFEQ_NAME = "intrinsicRefEqFunc"; // cjnative only
 static const std::string OBJECT_ZERO_VALUE_NAME = "zeroValue";
-static const std::string GET_PAYLOAD_NAME = "getPayload";
 
 static const std::string IS_THREAD_OBJECT_INITED_NAME = "isThreadObjectInited";
 static const std::string GET_THREAD_OBJECT_NAME = "getThreadObject";
@@ -350,6 +352,8 @@ enum IntrinsicKind : uint16_t {
 
     VARRAY_SET,
     VARRAY_GET,
+
+    GET_PAYLOAD, // Extern getPayload
 
     // About Future
     FUTURE_INIT,
@@ -621,8 +625,6 @@ enum IntrinsicKind : uint16_t {
 
     // cjnative only
     EXCLUSIVE_SCOPE,
-
-    GET_PAYLOAD,
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
