@@ -111,6 +111,12 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(MemberAccess& ma
     // As a left value, the member access is the target of an assignment and is desugared into
     // `T.memberUpdate(...)` by `TryDesugarExternMemberUpdate`.
     if (ma.TestAttr(Attribute::LEFT_VALUE)) {
+        if (auto baseRef = DynamicCast<RefExpr*>(ma.baseExpr.get()); baseRef && baseRef->isThis) {
+            // `this.payload` (part of `this.payload = payload`) in the core library is a normal field
+            // access on `Extern` itself, not a dynamic member access, and must be left alone.
+            CJC_ASSERT(ma.field == "payload");
+            return false;
+        }
         ma.SetTy(sourceExternTy);
         return true;
     }
@@ -211,6 +217,12 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
     // available without re-synthesizing here.
     auto sourceExternTy = ma->baseExpr->GetTy();
     if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(*sourceExternTy)) {
+        return false;
+    }
+    if (auto baseRef = DynamicCast<RefExpr*>(ma->baseExpr.get()); baseRef && baseRef->isThis) {
+        // `this.payload = payload` in the core library is a normal field assignment on `Extern`
+        // itself, not a dynamic member update, and must be left alone.
+        CJC_ASSERT(ma->field == "payload");
         return false;
     }
 
