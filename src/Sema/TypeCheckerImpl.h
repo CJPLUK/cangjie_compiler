@@ -1783,7 +1783,7 @@ private:
     /** @brief Desugar `e[idx] = v` (for `e: Extern<T>`) into `T.indexUpdate(e, idx, v)`. */
     bool TryDesugarExternIndexUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     /** @brief Desugar a read `e.foo` (for `e: Extern<T>`) into `T.memberAccess(e, "foo")`. */
-    bool TryDesugarExternMemberAccess(AST::MemberAccess& ma);
+    bool TryDesugarExternMemberAccess(ASTContext& ctx, AST::MemberAccess& ma);
     /** @brief Desugar a read `e[idx]` (for `e: Extern<T>`) into `T.indexAccess(e, idx)`. */
     bool TryDesugarExternIndexAccess(AST::SubscriptExpr& se);
     /** @brief Desugar a call `e(args...)` (for `e: Extern<T>`) into `T.functionCall(e, [args...])`. */

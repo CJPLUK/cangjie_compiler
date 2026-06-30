@@ -112,24 +112,43 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ty& targetTy,
 // picks up that desugared form as the base, producing nested `T.memberAccess` calls.
 // `e.foo = v` (left value) is the target of an assignment and is desugared into `T.memberUpdate(...)`
 // by `TryDesugarExternMemberUpdate`, so that case is deferred here.
-bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(MemberAccess& ma)
+bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx, MemberAccess& ma)
 {
     CJC_NULLPTR_CHECK(ma.baseExpr);
     auto sourceExternTy = ma.baseExpr->GetTy();
     if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(*sourceExternTy)) {
         return false;
     }
+    // A static member access on the `Extern` type itself (e.g. `Extern<T>.getPayload(...)`) is a real
+    // static reference, not a dynamic member access on an `Extern` value, and must not be desugared:
+    // the base is a type, so desugaring would leave the `Extern<T>` type reference as a runtime value
+    // argument. Such an access is identified by its base referring to a type declaration.
+    if (auto baseTarget = ma.baseExpr->GetTarget(); baseTarget && baseTarget->IsTypeDecl()) {
+        return false;
+    }
     // As a left value, the member access is the target of an assignment and is desugared into
     // `T.memberUpdate(...)` by `TryDesugarExternMemberUpdate`.
     if (ma.TestAttr(Attribute::LEFT_VALUE)) {
         if (auto baseRef = DynamicCast<RefExpr*>(ma.baseExpr.get()); baseRef && baseRef->isThis) {
-            // `this.payload` (part of `this.payload = payload`) in the core library is a normal field
-            // access on `Extern` itself, not a dynamic member access, and must be left alone.
+            // `this.payload = payload` in `Extern`'s constructor is a normal field write on `Extern`
+            // itself, not a dynamic member update, and must be left alone.
             CJC_ASSERT(ma.field == "payload");
             return false;
         }
         ma.SetTy(sourceExternTy);
         return true;
+    }
+    // `e.payload` read in the body of the static `getPayload` helper of the core `Extern` struct is a
+    // normal read of the private `payload` field, not a dynamic member access, and must be left alone
+    // -- mirroring the `this.payload` handling above. It is identified by the function the expression
+    // belongs to (obtained from the current scope) being a member of the core `Extern` struct.
+    if (ma.field == "payload") {
+        auto curFuncBody = GetCurFuncBody(ctx, ma.scopeName);
+        auto externDecl = importManager.GetCoreDecl<StructDecl>("Extern");
+        if (curFuncBody && curFuncBody->funcDecl && externDecl &&
+            curFuncBody->funcDecl->outerDecl.get() == externDecl) {
+            return false;
+        }
     }
     // As the callee of a call (`e.foo(args...)`), the member access still desugars here into the
     // `Extern<T>` value `T.memberAccess(e, "foo")`; the enclosing call is then desugared as a value
