@@ -683,7 +683,6 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {RAW_ARRAY_REFEQ_NAME, RAW_ARRAY_REFEQ},
 
     {OBJECT_ZERO_VALUE_NAME, OBJECT_ZERO_VALUE},
-    {GET_PAYLOAD_NAME, GET_PAYLOAD},
 
     {SOURCE_FILE_NAME, SOURCE_FILE},
     {SOURCE_LINE_NAME, SOURCE_LINE},
