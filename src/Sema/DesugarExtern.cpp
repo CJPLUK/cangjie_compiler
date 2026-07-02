@@ -602,7 +602,9 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::BuildForcedCastCall(
 static void StripTypesForRecheck(Ptr<Node> root)
 {
     Walker(root, [](Ptr<Node> n) -> VisitAction {
-        n->SetTy(nullptr);
+        // Reset to the initial (unchecked) type rather than null: SetTy asserts non-null
+        // in debug builds, and the initial ty is what an un-type-checked node carries.
+        n->SetTy(Ty::GetInitialTy());
         if (auto ex = DynamicCast<Expr*>(n.get())) {
             ex->desugarExpr = nullptr;
         }
