@@ -829,8 +829,6 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
         case VARRAY_GET:
             ret = IntrinsicKind_VARRAY_GET;
             break;
-        case GET_PAYLOAD:
-            ret = IntrinsicKind_GET_PAYLOAD;
             break;
         case FUTURE_INIT:
             ret = IntrinsicKind_FUTURE_INIT;

@@ -817,9 +817,6 @@ IntrinsicKind DeSerialize(const PackageFormat::IntrinsicKind& kind)
         case IntrinsicKind_VARRAY_GET:
             ret = VARRAY_GET;
             break;
-        case IntrinsicKind_GET_PAYLOAD:
-            ret = GET_PAYLOAD;
-            break;
         // About Future
         case IntrinsicKind_FUTURE_INIT:
             ret = FUTURE_INIT;

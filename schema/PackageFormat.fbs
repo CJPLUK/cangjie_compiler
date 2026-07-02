@@ -666,9 +666,6 @@ enum IntrinsicKind: uint16 {
   VARRAY_SET,
   VARRAY_GET,
 
-  // Extern getPayload
-  GET_PAYLOAD,
-
   // About Future
   FUTURE_INIT,
 
