@@ -11,6 +11,7 @@
  */
 
 #include "Diags.h"
+#include "DiagSuppressor.h"
 #include "JoinAndMeet.h"
 #include "SearchSymbol.h"
 #include "TypeCheckUtil.h"
@@ -893,6 +894,24 @@ void TypeChecker::TypeCheckerImpl::SubstituteTypeAliasForAlias(TypeAliasDecl& ta
     Walker(&tad, resolveTypes).Walk();
 }
 
+// Resolve the speculative forced-cast target `U` of `(U)...` during name resolution.
+// `U` may legitimately not be a type (e.g. `(consume)(e)`), so it is resolved under
+// diagnostic suppression and marked visited so the generic handling does not re-resolve
+// it unsuppressed.
+void TypeChecker::TypeCheckerImpl::PreCheckAmbiguousForcedCastType(
+    ASTContext& ctx, AmbiguousForcedCastExpr& afce, unsigned walkerID)
+{
+    if (!afce.type) {
+        return;
+    }
+    auto ds = DiagSuppressor(diag);
+    SetTypeTy(ctx, *afce.type);
+    if (Ty::IsTyCorrect(afce.type->GetTy())) {
+        ds.ReportDiag();
+    }
+    afce.type->visitedByWalkerID = walkerID;
+}
+
 void TypeChecker::TypeCheckerImpl::ResolveNames(ASTContext& ctx)
 {
     auto id = Walker::GetNextWalkerID();
@@ -916,6 +935,10 @@ void TypeChecker::TypeCheckerImpl::ResolveNames(ASTContext& ctx)
                 }
                 return VisitAction::WALK_CHILDREN;
             }
+            case ASTKind::AMBIGUOUS_FORCED_CAST_EXPR:
+                PreCheckAmbiguousForcedCastType(
+                    ctx, *StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(node), id);
+                return VisitAction::WALK_CHILDREN;
             default:
                 break;
         }

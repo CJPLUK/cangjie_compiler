@@ -981,6 +981,19 @@ void Collector::BuildSymbolTable(ASTContext& ctx, Ptr<Node> node, bool buildTrie
             BuildSymbolTable(ctx, pe->expr.get(), buildTrie);
             break;
         }
+        case ASTKind::AMBIGUOUS_FORCED_CAST_EXPR: {
+            auto afce = StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(node);
+            if (afce->type) {
+                BuildSymbolTable(ctx, afce->type.get(), buildTrie);
+            }
+            if (afce->leftExpr) {
+                BuildSymbolTable(ctx, afce->leftExpr.get(), buildTrie);
+            }
+            if (afce->rightExpr) {
+                BuildSymbolTable(ctx, afce->rightExpr.get(), buildTrie);
+            }
+            break;
+        }
         case ASTKind::QUOTE_EXPR: {
             auto qe = StaticAs<ASTKind::QUOTE_EXPR>(node);
             CollectQuoteExpr(ctx, *qe, buildTrie);

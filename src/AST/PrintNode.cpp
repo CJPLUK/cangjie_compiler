@@ -981,6 +981,17 @@ void PrintParenExpr(unsigned indent, const ParenExpr& parenExpr, std::ostream& s
     PrintIndent(stream, indent, "}");
 }
 
+void PrintAmbiguousForcedCastExpr(
+    unsigned indent, const AmbiguousForcedCastExpr& afce, std::ostream& stream = std::cout)
+{
+    PrintIndent(stream, indent, "AmbiguousForcedCastExpr {");
+    PrintBasic(indent + ONE_INDENT, afce, stream);
+    PrintNode(afce.type.get(), indent + ONE_INDENT, "type: ", stream);
+    PrintNode(afce.leftExpr.get(), indent + ONE_INDENT, "leftExpr: ", stream);
+    PrintNode(afce.rightExpr.get(), indent + ONE_INDENT, "rightExpr: ", stream);
+    PrintIndent(stream, indent, "}");
+}
+
 void PrintLambdaExpr(unsigned indent, const LambdaExpr& expr, std::ostream& stream = std::cout)
 {
     PrintIndent(stream, indent, "LambdaExpr {");
@@ -1547,6 +1558,7 @@ void PrintNode(Ptr<const Node> node, unsigned indent, const std::string& additio
         [&indent, &stream](const FuncArg& expr) { PrintFuncArg(indent, expr, stream); },
         [&indent, &stream](const CallExpr& expr) { PrintCallExpr(indent, expr, stream); },
         [&indent, &stream](const ParenExpr& parenExpr) { PrintParenExpr(indent, parenExpr, stream); },
+        [&indent, &stream](const AmbiguousForcedCastExpr& afce) { PrintAmbiguousForcedCastExpr(indent, afce, stream); },
         [&indent, &stream](const LambdaExpr& expr) { PrintLambdaExpr(indent, expr, stream); },
         [&indent, &stream](const LitConstExpr& expr) { PrintLitConstExpr(indent, expr, stream); },
         [&indent, &stream](const InterpolationExpr& expr) { PrintInterpolationExpr(indent, expr, stream); },

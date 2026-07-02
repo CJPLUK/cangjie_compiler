@@ -59,6 +59,8 @@ enum class ExprKind : uint8_t {
 
 const std::vector<TokenKind>& GetTypeFirst();
 
+class ParserScope;
+
 class ParserImpl final {
 public:
     ParserImpl(unsigned int fileID, const std::string& input, DiagnosticEngine& diag, SourceManager& sm,
@@ -643,6 +645,10 @@ private:
      */
     OwnedPtr<AST::Expr> ParseLeftParenExpr();
     OwnedPtr<AST::Expr> ParseLeftParenExprInKind(ExprKind ek);
+    OwnedPtr<AST::Type> TryParseForcedCastType();
+    OwnedPtr<AST::Expr> FinishParenExpr(const Position& leftParenPos, OwnedPtr<AST::Expr> expr);
+    OwnedPtr<AST::Expr> ParseForcedCastTail(
+        ExprKind ek, const Position& leftParenPos, OwnedPtr<AST::Type> typeCandidate);
     OwnedPtr<AST::TupleLit> ParseTupleLitForParenExpr(const Position& leftParenPos);
     OwnedPtr<AST::TupleLit> ParseTupleLitForParenExprComma(const Position& leftParenPos, OwnedPtr<AST::Expr> expr);
     /**
@@ -1133,20 +1139,28 @@ public:
           oldSkipToken(parser.lastToken),
           oldLastToken(parser.lastToken),
           oldLastNoneNLToken(parser.lastNoneNLToken),
-          oldNewlineSkipped(parser.newlineSkipped)
+          oldNewlineSkipped(parser.newlineSkipped),
+          oldBracketsStack(parser.bracketsStack)
     {
-        parser.lexer->SetResetPoint();
+        parser.lexer->PushResetPoint();
     }
     void ResetParserScope()
     {
         ref->lookahead = oldLookAhead;
         ref->lastToken = oldSkipToken;
-        ref->lexer->Reset();
+        ref->lexer->RestoreResetPoint();
         ref->lastToken = oldLastToken;
         ref->lastNoneNLToken = oldLastNoneNLToken;
         ref->newlineSkipped = oldNewlineSkipped;
+        // The bracket-matching stack is mutated while speculatively advancing (e.g. a
+        // trial ParseType that skips a ')'); rewinding the token position must also
+        // rewind it, or delimiter diagnostics for the rest of the file are corrupted.
+        ref->bracketsStack = oldBracketsStack;
     }
-    ~ParserScope() = default;
+    ~ParserScope()
+    {
+        ref->lexer->DropResetPoint();
+    }
 
 private:
     ParserImpl* ref;
@@ -1155,6 +1169,7 @@ private:
     Token oldLastToken;
     Token oldLastNoneNLToken;
     bool oldNewlineSkipped;
+    std::vector<TokenKind> oldBracketsStack;
 };
 
 inline AST::TypeKind LookupPrimitiveTypeKind(TokenKind kind)

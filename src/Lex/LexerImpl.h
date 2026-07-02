@@ -103,6 +103,9 @@ public:
 
     void SetResetPoint();
     void Reset();
+    void PushResetPoint();
+    void RestoreResetPoint();
+    void DropResetPoint();
     Position GetPosBase() const
     {
         return posBase;
@@ -177,6 +180,17 @@ private:
     std::vector<Token> tokens;
     size_t curToken{0};
     size_t resetToken{0};
+
+    // Stack of reset points for nested speculative parses (PushResetPoint /
+    // RestoreResetPoint / DropResetPoint), independent of the single-slot above.
+    struct ResetPoint {
+        const char* current;
+        const char* next;
+        std::list<Token> lookAheadCache;
+        unsigned lineOffsetsSize;
+        size_t tokenIndex;
+    };
+    std::vector<ResetPoint> resetPoints;
     bool enableCollect{false};
     bool enableCollectTokenStream{false};
     /// Hash function for Position using Hash32

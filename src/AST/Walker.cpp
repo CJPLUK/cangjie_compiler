@@ -761,6 +761,26 @@ VisitAction WalkerT<NodeT>::Walk(Ptr<NodeT> curNode) const
                 action = VisitAction::WALK_CHILDREN;
                 break;
             }
+            case ASTKind::AMBIGUOUS_FORCED_CAST_EXPR: {
+                auto afce = StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(curNode);
+                // Once desugared, the desugar (walked via WALK_CHILDREN) is the truth;
+                // otherwise walk the alternative children. Guard-clause keeps nesting flat.
+                if (afce->desugarExpr) {
+                    action = VisitAction::WALK_CHILDREN;
+                    break;
+                }
+                if (afce->type && Walk(afce->type.get()) == VisitAction::STOP_NOW) {
+                    return VisitAction::STOP_NOW;
+                }
+                if (afce->leftExpr && Walk(afce->leftExpr.get()) == VisitAction::STOP_NOW) {
+                    return VisitAction::STOP_NOW;
+                }
+                if (afce->rightExpr && Walk(afce->rightExpr.get()) == VisitAction::STOP_NOW) {
+                    return VisitAction::STOP_NOW;
+                }
+                action = VisitAction::WALK_CHILDREN;
+                break;
+            }
             case ASTKind::LAMBDA_EXPR: {
                 auto le = StaticAs<ASTKind::LAMBDA_EXPR>(curNode);
                 if (Walk(le->funcBody.get()) == VisitAction::STOP_NOW) {

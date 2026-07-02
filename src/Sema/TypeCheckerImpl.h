@@ -790,6 +790,13 @@ private:
     Ptr<AST::Ty> SynBuiltinUnaryExpr(ASTContext& ctx, AST::UnaryExpr& ue);
     Ptr<AST::Ty> SynParenExpr(const CheckerContext& ctx, AST::ParenExpr& pe);
     bool ChkParenExpr(ASTContext& ctx, AST::Ty& target, AST::ParenExpr& pe);
+    Ptr<AST::Ty> SynAmbiguousForcedCastExpr(const CheckerContext& ctx, AST::AmbiguousForcedCastExpr& afce);
+    bool ChkAmbiguousForcedCastExpr(ASTContext& ctx, AST::Ty& target, AST::AmbiguousForcedCastExpr& afce);
+    OwnedPtr<AST::CallExpr> BuildForcedCastCall(
+        AST::AmbiguousForcedCastExpr& afce, Ptr<AST::Ty> targetTy, Ptr<AST::Ty> operandTy);
+    Ptr<AST::Ty> DesugarAmbiguousOrdinaryCall(
+        const CheckerContext& ctx, AST::AmbiguousForcedCastExpr& afce, bool typeValid);
+    void PreCheckAmbiguousForcedCastType(ASTContext& ctx, AST::AmbiguousForcedCastExpr& afce, unsigned walkerID);
     Ptr<AST::Ty> SynAssignExpr(ASTContext& ctx, AST::AssignExpr& ae);
     Ptr<AST::Ty> SynMultipleAssignExpr(ASTContext& ctx, AST::AssignExpr& ae);
     bool ChkAssignExpr(ASTContext& ctx, AST::Ty& target, AST::AssignExpr& ae);

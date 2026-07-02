@@ -53,6 +53,18 @@ void Lexer::Reset()
 {
     impl->Reset();
 }
+void Lexer::PushResetPoint()
+{
+    impl->PushResetPoint();
+}
+void Lexer::RestoreResetPoint()
+{
+    impl->RestoreResetPoint();
+}
+void Lexer::DropResetPoint()
+{
+    impl->DropResetPoint();
+}
 const Position& Lexer::GetPosBase() const
 {
     return impl->posBase;

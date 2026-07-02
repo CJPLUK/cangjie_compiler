@@ -13,3 +13,11 @@ Ptr<Value> Translator::Visit(const AST::ParenExpr& expr)
 {
     return TranslateExprArg(*expr.expr);
 }
+
+Ptr<Value> Translator::Visit(const AST::AmbiguousForcedCastExpr& expr)
+{
+    // Sema resolves the node into desugarExpr and dispatch normally follows that;
+    // reached only defensively.
+    CJC_ASSERT(expr.desugarExpr != nullptr);
+    return TranslateExprArg(*expr.desugarExpr);
+}

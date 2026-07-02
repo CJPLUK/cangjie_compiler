@@ -126,6 +126,13 @@ public:
     void SetResetPoint();
     /// Restore to the previous state when \ref SetResetPoint is called.
     void Reset();
+    /// Push the current lookahead and read pointer onto the reset-point stack.
+    /// Independent of \ref SetResetPoint; used for nested speculative parses.
+    void PushResetPoint();
+    /// Restore to the most recent \ref PushResetPoint (does not pop; may be called repeatedly).
+    void RestoreResetPoint();
+    /// Pop the most recent reset point off the stack.
+    void DropResetPoint();
     /// get the first position of all the tokens of this Lexer.
     const Position& GetPosBase() const;
 
