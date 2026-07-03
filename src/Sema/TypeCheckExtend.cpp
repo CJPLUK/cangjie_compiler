@@ -51,11 +51,15 @@ void TypeChecker::TypeCheckerImpl::CheckExtendGenerics(const ExtendDecl& ed)
 
 void TypeChecker::TypeCheckerImpl::CheckExtendedTypeValidity(const Type& extendedType)
 {
-    if (!Ty::IsTyCorrect(extendedType.GetTy()) || extendedType.GetTy()->IsExtendable()) {
+    auto extendedTy = extendedType.GetTy();
+    if (!Ty::IsTyCorrect(extendedTy)) {
+        return;
+    }
+    if (extendedTy->IsExtendable() && !TypeIsExtern(*extendedTy)) {
         return;
     }
     // All other types are not allowed to be extended.
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_illegal_extended_type, extendedType, extendedType.GetTy()->String());
+    diag.DiagnoseRefactor(DiagKindRefactor::sema_illegal_extended_type, extendedType, extendedTy->String());
 }
 
 /**
@@ -344,7 +348,9 @@ inline bool IsExtendedASTKind(const Type& ty)
         ty.astKind == ASTKind::PRIMITIVE_TYPE || ty.astKind == ASTKind::OPTION_TYPE;
 }
 
-void UpdateExtendMap(TypeManager& typeManager, const std::unordered_set<Ptr<AST::ExtendDecl>>& extends)
+template <typename IsExternTy>
+void UpdateExtendMap(TypeManager& typeManager, const std::unordered_set<Ptr<AST::ExtendDecl>>& extends,
+    const IsExternTy& isExternTy)
 {
     // Ensure two maps are cleared correctly: `builtinTyToExtendMap` and `declToExtendMap`.
     // For multi package compilation case: clear once for all the packages.
@@ -357,7 +363,8 @@ void UpdateExtendMap(TypeManager& typeManager, const std::unordered_set<Ptr<AST:
             continue;
         }
         auto extendTy = extendDecl->extendedType->GetTy();
-        if (!Ty::IsTyCorrect(extendTy) || !extendTy->IsExtendable() || !IsExtendedASTKind(*extendDecl->extendedType)) {
+        if (!Ty::IsTyCorrect(extendTy) || !extendTy->IsExtendable() || isExternTy(*extendTy) ||
+            !IsExtendedASTKind(*extendDecl->extendedType)) {
             continue;
         }
         for (auto& interfaceType : extendDecl->inheritedTypes) {
@@ -410,7 +417,7 @@ void TypeChecker::TypeCheckerImpl::BuildExtendMap(ASTContext& ctx)
     // The matching of `common/specific extend` depends on the resolved symbol type.
     // Here is the first step after resolving the final symbol type, and also the first step in processing extendDecl.
     mpImpl->PrepareTypeCheck4CJMPExtension(*ci, scopeManager, ctx, allExtends);
-    UpdateExtendMap(typeManager, allExtends);
+    UpdateExtendMap(typeManager, allExtends, [this](Ty& ty) { return TypeIsExtern(ty); });
 }
 
 void TypeChecker::TypeCheckerImpl::BuildImportedExtendMap()
@@ -430,7 +437,7 @@ void TypeChecker::TypeCheckerImpl::BuildImportedExtendMap()
             IterateToplevelDecls(*pkg->srcPackage, emplaceExtend);
         }
     }
-    UpdateExtendMap(typeManager, allExtends);
+    UpdateExtendMap(typeManager, allExtends, [this](Ty& ty) { return TypeIsExtern(ty); });
 }
 
 void TypeChecker::TypeCheckerImpl::CheckExtendRules(const ASTContext& ctx)
