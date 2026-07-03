@@ -3000,7 +3000,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
     }
 
     if (TryDesugarFunctionCall(ctx, ce)) {
-        return Ty::IsTyCorrect(ce.GetTy());
+        return Ty::IsTyCorrect(ce.GetTy()) && (!target || typeManager.IsSubtype(ce.GetTy(), target));
     }
     if (ce.baseFunc->GetTy()->IsNothing()) {
         return SynArgsOfNothingBaseExpr(ctx, ce);
