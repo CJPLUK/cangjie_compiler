@@ -1184,7 +1184,7 @@ OwnedPtr<AST::Expr> ParserImpl::FinishParenExpr(const Position& leftParenPos, Ow
     return ret;
 }
 
-OwnedPtr<AST::Expr> ParserImpl::ParseLeftParenExprInKind(ExprKind ek)
+OwnedPtr<AST::Expr> ParserImpl::ParseLeftParenExprInKind(ExprKind ek, bool tryForcedCast)
 {
     Position leftParenPos = lastToken.Begin();
     // Reset point so the speculative forced-cast type parse below can rewind.
@@ -1204,10 +1204,14 @@ OwnedPtr<AST::Expr> ParserImpl::ParseLeftParenExprInKind(ExprKind ek)
         }
     }
 
-    if (auto typeCandidate = TryParseForcedCastType()) {
-        return ParseForcedCastTail(ek, leftParenPos, std::move(typeCandidate));
+    // Skipped for a call-form operand (tryForcedCast == false) so `(U)(args)`'s `(args)`
+    // stays a plain group; see ParseForcedCastTail for why.
+    if (tryForcedCast) {
+        if (auto typeCandidate = TryParseForcedCastType()) {
+            return ParseForcedCastTail(ek, leftParenPos, std::move(typeCandidate));
+        }
+        contentScope.ResetParserScope();
     }
-    contentScope.ResetParserScope();
 
     // Not identifier.
     OwnedPtr<Expr> expr = ParseExpr(
@@ -1237,10 +1241,11 @@ OwnedPtr<AST::Expr> ParserImpl::ParseForcedCastTail(
     // Operand, parsed once and shared by both readings.
     OwnedPtr<Expr> operand;
     if (isCallForm) {
-        // Call form `(U)(args)`: capture only the immediate `(args)`; trailing postfix
-        // binds to the resolved node, so `(f)(a)(b)` is `((f a) b)`.
+        // Call form `(U)(args)`: parse only the immediate `(args)` with the cast attempt off,
+        // so trailing postfix binds to the resolved node — `(X)(Y)(Z)` is `((X)(Y))(Z)`,
+        // left-associative like an ordinary call chain.
         (void)Skip(TokenKind::LPAREN);
-        operand = ParseLeftParenExprInKind(ExprKind::ALL);
+        operand = ParseLeftParenExprInKind(ExprKind::ALL, false);
     } else {
         // Juxtaposition `(U)e` absorbs trailing postfix into the operand: `(U)e.f` is
         // `(U)(e.f)`.

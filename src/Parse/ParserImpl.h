@@ -644,7 +644,7 @@ private:
      * - TupleLiteral -- a tuple
      */
     OwnedPtr<AST::Expr> ParseLeftParenExpr();
-    OwnedPtr<AST::Expr> ParseLeftParenExprInKind(ExprKind ek);
+    OwnedPtr<AST::Expr> ParseLeftParenExprInKind(ExprKind ek, bool tryForcedCast = true);
     OwnedPtr<AST::Type> TryParseForcedCastType();
     OwnedPtr<AST::Expr> FinishParenExpr(const Position& leftParenPos, OwnedPtr<AST::Expr> expr);
     OwnedPtr<AST::Expr> ParseForcedCastTail(
