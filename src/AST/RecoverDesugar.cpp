@@ -75,7 +75,7 @@ void RecoverToSubscriptExpr(SubscriptExpr& se)
     // Recover to SubscriptExpr.
     if (auto callExpr = DynamicCast<CallExpr*>(se.desugarExpr.get()); callExpr) {
         RecoverToCallExpr(*callExpr);
-        // Extern index access is desugared as Runtime.indexAccess(receiver, index), not as the normal
+        // Extern index access is desugared as ForeignRuntime.indexedAccess(receiver, index), not as the normal
         // operator form receiver.[](index). The original SubscriptExpr still owns the correct base/index
         // children, so just drop the generated runtime call instead of recovering from its receiver+index args.
         if (callExpr->TestAttr(Attribute::EXTERN_DESUGAR)) {
