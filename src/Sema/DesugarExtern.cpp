@@ -18,6 +18,17 @@ using namespace TypeCheckUtil;
 using namespace AST;
 using namespace Sema;
 
+static const std::string EXTERN_TO_EXTERN = "toExtern";
+static const std::string EXTERN_FROM_EXTERN = "fromExtern";
+static const std::string EXTERN_MEMBER_ACCESS = "memberAccess";
+static const std::string EXTERN_MEMBER_UPDATE = "memberUpdate";
+static const std::string EXTERN_INDEX_ACCESS = "indexAccess";
+static const std::string EXTERN_INDEX_UPDATE = "indexUpdate";
+static const std::string EXTERN_FUNCTION_CALL = "functionCall";
+static const std::string EXTERN_PAYLOAD_FIELD = "payload";
+static const std::string EXTERN_TYPE_EXTERN = "Extern";
+static const std::string EXTERN_TYPE_RUNTIME = "Runtime";
+
 OwnedPtr<Expr> CloneEffectiveExpr(Expr& expr)
 {
     OwnedPtr<Expr> cloned;
@@ -34,7 +45,7 @@ OwnedPtr<Expr> CloneEffectiveExpr(Expr& expr)
 
 OwnedPtr<LitConstExpr> CreateStringLit(ImportManager& importManager, const std::string& value)
 {
-    auto stringDecl = importManager.GetCoreDecl<StructDecl>("String");
+    auto stringDecl = importManager.GetCoreDecl<StructDecl>(STD_LIB_STRING);
     CJC_ASSERT(stringDecl);
     return CreateLitConstExpr(LitConstKind::STRING, value, stringDecl->GetTy(), true);
 }
@@ -93,7 +104,7 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ty& targetTy,
     // pin its type argument to `R` and give the member access the instantiated function type
     // `(R) -> Extern<T>`.
     Ptr<FuncDecl> toExternDecl = nullptr;
-    auto toExtern = CreateRuntimeMemberAccess(nodeExpr, info, "toExtern", toExternDecl);
+    auto toExtern = CreateRuntimeMemberAccess(nodeExpr, info, EXTERN_TO_EXTERN, toExternDecl);
     toExtern->instTys.clear();
     toExtern->instTys.emplace_back(sourceTy);
     toExtern->SetTy(typeManager.GetFunctionTy({sourceTy}, &targetTy));
@@ -133,7 +144,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
         if (auto baseRef = DynamicCast<RefExpr*>(ma.baseExpr.get()); baseRef && baseRef->isThis) {
             // `this.payload = payload` in `Extern`'s constructor is a normal field write on `Extern`
             // itself, not a dynamic member update, and must be left alone.
-            CJC_ASSERT(ma.field == "payload");
+            CJC_ASSERT(ma.field == EXTERN_PAYLOAD_FIELD);
             return false;
         }
         ma.SetTy(sourceExternTy);
@@ -143,9 +154,9 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     // normal read of the private `payload` field, not a dynamic member access, and must be left alone
     // -- mirroring the `this.payload` handling above. It is identified by the function the expression
     // belongs to (obtained from the current scope) being a member of the core `Extern` struct.
-    if (ma.field == "payload") {
+    if (ma.field == EXTERN_PAYLOAD_FIELD) {
         auto curFuncBody = GetCurFuncBody(ctx, ma.scopeName);
-        auto externDecl = importManager.GetCoreDecl<StructDecl>("Extern");
+        auto externDecl = importManager.GetCoreDecl<StructDecl>(EXTERN_TYPE_EXTERN);
         if (curFuncBody && curFuncBody->funcDecl && externDecl &&
             curFuncBody->funcDecl->outerDecl.get() == externDecl) {
             return false;
@@ -159,7 +170,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     auto info = ResolveExternRuntime(*sourceExternTy);
 
     Ptr<FuncDecl> memberAccessDecl = nullptr;
-    auto memberAccess = CreateRuntimeMemberAccess(ma, info, "memberAccess", memberAccessDecl);
+    auto memberAccess = CreateRuntimeMemberAccess(ma, info, EXTERN_MEMBER_ACCESS, memberAccessDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(*ma.baseExpr)));
@@ -249,7 +260,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
     if (auto baseRef = DynamicCast<RefExpr*>(ma->baseExpr.get()); baseRef && baseRef->isThis) {
         // `this.payload = payload` in the core library is a normal field assignment on `Extern`
         // itself, not a dynamic member update, and must be left alone.
-        CJC_ASSERT(ma->field == "payload");
+        CJC_ASSERT(ma->field == EXTERN_PAYLOAD_FIELD);
         return false;
     }
 
@@ -265,7 +276,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
     auto info = ResolveExternRuntime(*sourceExternTy);
 
     Ptr<FuncDecl> memberUpdateDecl = nullptr;
-    auto memberUpdate = CreateRuntimeMemberAccess(ae, info, "memberUpdate", memberUpdateDecl);
+    auto memberUpdate = CreateRuntimeMemberAccess(ae, info, EXTERN_MEMBER_UPDATE, memberUpdateDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(*ma->baseExpr)));
@@ -351,7 +362,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
 
     Ptr<FuncDecl> indexUpdateDecl = nullptr;
-    auto indexUpdate = CreateRuntimeMemberAccess(ae, info, "indexUpdate", indexUpdateDecl);
+    auto indexUpdate = CreateRuntimeMemberAccess(ae, info, EXTERN_INDEX_UPDATE, indexUpdateDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateExternDesugarArg(std::move(receiver)));
@@ -416,7 +427,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, CallE
     }
 
     // Build the `Array<Any>` literal holding the arguments.
-    auto arrayDecl = importManager.GetCoreDecl<StructDecl>("Array");
+    auto arrayDecl = importManager.GetCoreDecl<StructDecl>(STD_LIB_ARRAY);
     CJC_ASSERT(arrayDecl);
     auto arrayTy = typeManager.GetStructTy(*arrayDecl, {typeManager.GetAnyTy()});
     auto arrayLit = CreateArrayLit(std::move(elements), arrayTy);
@@ -427,7 +438,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, CallE
 
     // Build `T.functionCall(callee, argsArray)`.
     Ptr<FuncDecl> functionCallDecl = nullptr;
-    auto functionCall = CreateRuntimeMemberAccess(ce, info, "functionCall", functionCallDecl);
+    auto functionCall = CreateRuntimeMemberAccess(ce, info, EXTERN_FUNCTION_CALL, functionCallDecl);
 
     OwnedPtr<Expr> calleeExpr = CloneEffectiveExpr(*base);
 
@@ -447,7 +458,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, CallE
 bool TypeChecker::TypeCheckerImpl::TypeIsExtern(Ty& ty)
 {
     // Extern declaration always exists
-    auto externDecl = importManager.GetCoreDecl<StructDecl>("Extern");
+    auto externDecl = importManager.GetCoreDecl<StructDecl>(EXTERN_TYPE_EXTERN);
     CJC_ASSERT(externDecl);
 
     // Check if the type of the actual target is valid, and is Extern. If not, externification is unnecessary
@@ -457,7 +468,7 @@ bool TypeChecker::TypeCheckerImpl::TypeIsExtern(Ty& ty)
 
 Ptr<FuncDecl> TypeChecker::TypeCheckerImpl::GetRuntimeFuncDecl(const std::string& name)
 {
-    auto runtimeDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
+    auto runtimeDecl = importManager.GetCoreDecl<InterfaceDecl>(EXTERN_TYPE_RUNTIME);
     CJC_ASSERT(runtimeDecl);
     for (auto& member : runtimeDecl->GetMemberDecls()) {
         if (member && member->identifier == name) {
@@ -506,7 +517,7 @@ OwnedPtr<MemberAccess> TypeChecker::TypeCheckerImpl::CreateRuntimeMemberAccess(
         member->baseExpr = std::move(runtimeRef);
         member->field = runtimeFuncName;
         decl = GetRuntimeFuncDecl(runtimeFuncName);
-        auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
+        auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>(EXTERN_TYPE_RUNTIME);
         CJC_ASSERT(runtimeInterfaceDecl);
         CJC_ASSERT(decl);
         auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {info.runtimeTy});
@@ -561,7 +572,7 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeIndexAccess(
     const Expr& srcNode, const ExternRuntimeInfo& info, OwnedPtr<Expr> baseExpr, Expr& indexExpr, Ty& ty)
 {
     Ptr<FuncDecl> indexAccessDecl = nullptr;
-    auto indexAccess = CreateRuntimeMemberAccess(srcNode, info, "indexAccess", indexAccessDecl);
+    auto indexAccess = CreateRuntimeMemberAccess(srcNode, info, EXTERN_INDEX_ACCESS, indexAccessDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateExternDesugarArg(std::move(baseExpr)));
@@ -579,7 +590,7 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::BuildForcedCastCall(
 {
     auto info = ResolveExternRuntime(*operandTy);
     Ptr<FuncDecl> decl = nullptr;
-    auto member = CreateRuntimeMemberAccess(afce, info, "fromExtern", decl);
+    auto member = CreateRuntimeMemberAccess(afce, info, EXTERN_FROM_EXTERN, decl);
     if (!decl) {
         return nullptr;
     }
