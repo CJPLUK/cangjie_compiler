@@ -1164,7 +1164,9 @@ OwnedPtr<MemberAccess> TypeChecker::TypeCheckerImpl::GetHelperFrameMethod(
     re->SetTy(frameClassTy);
 
     auto memberFunc = CreateMemberAccess(std::move(re), methodName);
-    memberFunc->instTys = std::move(typeArgs);
+    memberFunc->instTys = typeArgs;
+    TypeSubst genericSubst = GenerateTypeMapping(*memberFunc->target, typeArgs);
+    memberFunc->SetTy(typeManager.GetInstantiatedTy(memberFunc->GetTy(), genericSubst));
     CJC_ASSERT(memberFunc->target);
     memberFunc->targets.emplace_back(StaticCast<FuncDecl*>(memberFunc->target));
 
@@ -1192,12 +1194,8 @@ void TypeChecker::TypeCheckerImpl::DesugarPerform(AST::PerformExpr& pe)
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(std::move(pe.expr)));
-    perfMethod->SetTy(typeManager.GetFunctionTy({cmdTy}, resultTy));
-    auto funcDecl = StaticCast<FuncDecl*>(perfMethod->target);
-    auto subst = GenerateTypeMapping(*funcDecl, {cmdTy, resultTy});
-    perfMethod->SetTy(typeManager.GetInstantiatedTy(perfMethod->GetTy(), subst));
-    perfMethod->instTys = {cmdTy, resultTy};
-    auto perfCall = CreateCallExpr(std::move(perfMethod), std::move(args), funcDecl, resultTy);
+    auto perfCall =
+        CreateCallExpr(std::move(perfMethod), std::move(args), nullptr, resultTy, CallKind::CALL_DECLARED_FUNCTION);
     // Checking for a call expr may get rid of some desugarings
     DesugarForPropDecl(*perfCall);
 
@@ -1224,14 +1222,15 @@ void TypeChecker::TypeCheckerImpl::DesugarResume(ASTContext& ctx, AST::ResumeExp
 
 /*
     From: resume res with val
-    To: res.proceed(val)
+    To: HandlerFrame.proceed(res, val)
     (And similar for resume throwing)
 
     Note that the resumption variable needs to be casted to an InternalResumption
 */
 void TypeChecker::TypeCheckerImpl::DesugarDeferredResume([[maybe_unused]] ASTContext& ctx, AST::ResumeExpr& re)
 {
-    auto argTy = re.withExpr ? re.withExpr->GetTy() : TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    auto resTy = re.withExpr ? re.withExpr->GetTy() : TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    auto retTy = re.GetTy();
     auto resumeFnName = "proceed";
     if (re.throwingExpr) {
         // Check whether we're throwing an error or an exception -- the base type
@@ -1244,7 +1243,7 @@ void TypeChecker::TypeCheckerImpl::DesugarDeferredResume([[maybe_unused]] ASTCon
             resumeFnName = "failErr";
         }
     }
-    OwnedPtr<Expr> resumeFn = GetHelperFrameMethod(re, resumeFnName, {argTy});
+    OwnedPtr<Expr> resumeFn = GetHelperFrameMethod(re, resumeFnName, {resTy, retTy});
 
     // Unique name per resume to avoid duplicate declaration when a handler has multiple resumes
     // the resumption expr (string repr) are kept in the variable name for friendlier debugging.
@@ -1257,15 +1256,14 @@ void TypeChecker::TypeCheckerImpl::DesugarDeferredResume([[maybe_unused]] ASTCon
     outerBlock->SetTy(re.GetTy());
 
     // Create `let $resumption_<resumptionSuffix>_<timestamp> = resumption`
-    {
-        auto resVarDecl = CreateVarDecl(resumptionVarName, std::move(re.expr));
-        ctx.AddDeclName(std::make_pair(resumptionVarName, resVarDecl->scopeName), *resVarDecl);
-        resVarDecl->SetTy(ResumptionToInternalResumptionTy(resVarDecl->initializer->GetTy()));
-        outerBlock->body.emplace_back(std::move(resVarDecl));
-    }
-    auto& resVarDecl = *RawStaticCast<VarDecl*>(outerBlock->body.back().get());
-    auto resRef = CreateRefExpr(resVarDecl);
+    auto resVarDecl = CreateVarDecl(resumptionVarName, std::move(re.expr));
+    ctx.AddDeclName(std::make_pair(resumptionVarName, resVarDecl->scopeName), *resVarDecl);
+    resVarDecl->SetTy(ResumptionToInternalResumptionTy(resVarDecl->initializer->GetTy()));
+
+    // Create a reference to $resumption_<resumptionSuffix>_<timestamp> before moving its declaration.
+    auto resRef = CreateRefExpr(*resVarDecl);
     AST::CopyNodeScopeInfo(resRef, &re);
+    outerBlock->body.emplace_back(std::move(resVarDecl));
 
     // create function call of Frame
     std::vector<OwnedPtr<FuncArg>> args;
@@ -1276,12 +1274,11 @@ void TypeChecker::TypeCheckerImpl::DesugarDeferredResume([[maybe_unused]] ASTCon
         args.emplace_back(CreateFuncArg(std::move(re.throwingExpr)));
     } else {
         // Create a Unit argument if one is not explicitly provided, i.e. `resume r`
-        args.emplace_back(CreateFuncArg(AST::CreateUnitExpr(argTy)));
+        args.emplace_back(CreateFuncArg(AST::CreateUnitExpr(resTy)));
     }
 
-    auto resumeCall = AST::CreateCallExpr(std::move(resumeFn), std::move(args));
-    auto typecheckOk = ChkCallExpr(ctx, re.GetTy(), *resumeCall);
-    CJC_ASSERT(typecheckOk);
+    auto resumeCall =
+        AST::CreateCallExpr(std::move(resumeFn), std::move(args), nullptr, retTy, CallKind::CALL_DECLARED_FUNCTION);
     // Checking for a call expr may get rid of some desugarings
     DesugarForPropDecl(*resumeCall);
 
