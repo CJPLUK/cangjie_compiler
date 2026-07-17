@@ -1787,11 +1787,11 @@ private:
     Ptr<AST::Ty> ProbeExternBaseTy(ASTContext& ctx, AST::Expr& expr);
     /** @brief Desugar `e.foo = v` (for `e: Extern<T>`) into `T.memberUpdate(e, "foo", v)`. */
     bool TryDesugarExternMemberUpdate(ASTContext& ctx, AST::AssignExpr& ae);
-    /** @brief Desugar `e[idx] = v` (for `e: Extern<T>`) into `T.indexUpdate(e, idx, v)`. */
+    /** @brief Desugar `e[idx] = v` (for `e: Extern<T>`) into `T.indexedUpdate(e, idx, v)`. */
     bool TryDesugarExternIndexUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     /** @brief Desugar a read `e.foo` (for `e: Extern<T>`) into `T.memberAccess(e, "foo")`. */
     bool TryDesugarExternMemberAccess(ASTContext& ctx, AST::MemberAccess& ma);
-    /** @brief Desugar a read `e[idx]` (for `e: Extern<T>`) into `T.indexAccess(e, idx)`. */
+    /** @brief Desugar a read `e[idx]` (for `e: Extern<T>`) into `T.indexedAccess(e, idx)`. */
     bool TryDesugarExternIndexAccess(AST::SubscriptExpr& se);
     /** @brief Desugar a call `e(args...)` (for `e: Extern<T>`) into `T.functionCall(e, [args...])`. */
     bool TryDesugarFunctionCall(ASTContext& ctx, AST::CallExpr& ce);
@@ -1815,7 +1815,7 @@ private:
     OwnedPtr<AST::RefExpr> CreateExternRuntimeRef(const AST::Node& srcNode, const ExternRuntimeInfo& info);
     /**
      * @brief Build the `T.<runtimeFuncName>` member access used as the callee of a runtime desugaring
-     * (e.g. `memberAccess`, `memberUpdate`, `indexAccess`, `indexUpdate`, `functionCall`).
+     * (e.g. `memberAccess`, `memberUpdate`, `indexedAccess`, `indexedUpdate`, `functionCall`).
      * @c outDecl receives the resolved runtime @c FuncDecl.
      */
     OwnedPtr<AST::MemberAccess> CreateRuntimeMemberAccess(
@@ -1828,7 +1828,7 @@ private:
         OwnedPtr<AST::MemberAccess> member, AST::FuncDecl& decl, std::vector<OwnedPtr<AST::FuncArg>> args,
         AST::Ty& retTy);
     /**
-     * @brief Build a single runtime index read `T.indexAccess(base, index)` of type @p ty. Used to
+     * @brief Build a single runtime index read `T.indexedAccess(base, index)` of type @p ty. Used to
      * chain the read part of both `e[i...]` and `e[i...] = v` desugarings.
      */
     OwnedPtr<AST::CallExpr> CreateRuntimeIndexAccess(const AST::Expr& srcNode, const ExternRuntimeInfo& info,

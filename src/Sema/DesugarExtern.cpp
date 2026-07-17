@@ -22,12 +22,12 @@ static const std::string EXTERN_TO_EXTERN = "toExtern";
 static const std::string EXTERN_FROM_EXTERN = "fromExtern";
 static const std::string EXTERN_MEMBER_ACCESS = "memberAccess";
 static const std::string EXTERN_MEMBER_UPDATE = "memberUpdate";
-static const std::string EXTERN_INDEX_ACCESS = "indexAccess";
-static const std::string EXTERN_INDEX_UPDATE = "indexUpdate";
+static const std::string EXTERN_INDEXED_ACCESS = "indexedAccess";
+static const std::string EXTERN_INDEXED_UPDATE = "indexedUpdate";
 static const std::string EXTERN_FUNCTION_CALL = "functionCall";
 static const std::string EXTERN_PAYLOAD_FIELD = "payload";
 static const std::string EXTERN_TYPE_EXTERN = "Extern";
-static const std::string EXTERN_TYPE_RUNTIME = "Runtime";
+static const std::string EXTERN_TYPE_RUNTIME = "ForeignRuntime";
 
 OwnedPtr<Expr> CloneEffectiveExpr(Expr& expr)
 {
@@ -185,7 +185,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     return true;
 }
 
-// `e[idx]` -> `T.indexAccess(e, idx)` for `e: Extern<T>`.
+// `e[idx]` -> `T.indexedAccess(e, idx)` for `e: Extern<T>`.
 // The base and indices have already been synthesized by `ChkSubscriptExpr` before this is called,
 // so any nested extern member/index accesses contained in the base are already desugared and are
 // picked up here via `CloneEffectiveExpr`. Chains such as `a.b.e[idx]` (where only `a.b.e` is
@@ -193,7 +193,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
 // call (`e[idx](args...)`) or the target of an assignment (`e[idx] = v`) is handled by
 // `TryDesugarFunctionCall` / `TryDesugarExternIndexUpdate` respectively: in those cases this
 // desugaring still runs for the read part and the enclosing rule reuses the desugared form.
-// Multiple indices `e[i1, i2, ...]` are chained into nested `indexAccess` calls, matching the
+// Multiple indices `e[i1, i2, ...]` are chained into nested `indexedAccess` calls, matching the
 // handling in `TryDesugarExternIndexUpdate`.
 bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(SubscriptExpr& se)
 {
@@ -212,7 +212,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(SubscriptExpr& se
 
     // The base and indices were synthesized by `ChkSubscriptExpr` without replacing ideal types
     // (e.g. the literal `0` in `e[0]` still carries an ideal integer type). Each index is passed to
-    // `indexAccess` as an `Any` argument, so it must be given its concrete type before being cloned
+    // `indexedAccess` as an `Any` argument, so it must be given its concrete type before being cloned
     // into the desugared call; otherwise post-typecheck AST validation rejects the ideal-typed node.
     ReplaceIdealTy(*se.baseExpr);
     for (auto& indexExpr : se.indexExprs) {
@@ -221,7 +221,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(SubscriptExpr& se
 
     auto info = ResolveExternRuntime(*sourceExternTy);
 
-    // Build `T.indexAccess(base, idx)` once per index, chaining when there is more than one.
+    // Build `T.indexedAccess(base, idx)` once per index, chaining when there is more than one.
     OwnedPtr<Expr> accessExpr = CloneEffectiveExpr(*se.baseExpr);
     for (auto& indexExpr : se.indexExprs) {
         accessExpr = CreateRuntimeIndexAccess(se, info, std::move(accessExpr), *indexExpr, *sourceExternTy);
@@ -292,7 +292,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
     return true;
 }
 
-// `e[idx] = v` -> `T.indexUpdate(e, idx, v)` for `e: Extern<T>`.
+// `e[idx] = v` -> `T.indexedUpdate(e, idx, v)` for `e: Extern<T>`.
 // Unlike `TryDesugarExternMemberUpdate`, this runs from `SynAssignExpr` *before* the left value is
 // type-checked, so the subscript base and indices are synthesized here. The base type is probed
 // with diagnostics suppressed: if it is not `Extern<T>`, the probe is discarded and `false` is
@@ -301,10 +301,10 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
 // diagnostics enabled.
 // Chains such as `a.b.e[idx] = v`, `e.f1[idx] = v`, `a()[idx] = v` and `b["k"][idx] = v` are handled
 // by the base: synthesizing it desugars any nested extern member/index/call access first, and
-// `CloneEffectiveExpr` then picks up that desugared form as the receiver of `indexUpdate`
-// (e.g. `e.f1[idx] = v` becomes `T.indexUpdate(T.memberAccess(e, "f1"), idx, v)`).
+// `CloneEffectiveExpr` then picks up that desugared form as the receiver of `indexedUpdate`
+// (e.g. `e.f1[idx] = v` becomes `T.indexedUpdate(T.memberAccess(e, "f1"), idx, v)`).
 // Multiple indices `e[i1, ..., iN] = v` desugar into
-// `T.indexUpdate(T.indexAccess(...T.indexAccess(e, i1)..., i(N-1)), iN, v)`, matching the read-side
+// `T.indexedUpdate(T.indexedAccess(...T.indexedAccess(e, i1)..., i(N-1)), iN, v)`, matching the read-side
 // chaining in `TryDesugarExternIndexAccess`.
 bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, AssignExpr& ae)
 {
@@ -328,7 +328,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
 
     // Committed to the extern desugaring. Synthesize the indices and the right-hand side value (so
     // that nested extern expressions get desugared) and pin their ideal types before they are cloned
-    // as the `Any` arguments to `indexAccess` / `indexUpdate`; otherwise post-typecheck AST
+    // as the `Any` arguments to `indexedAccess` / `indexedUpdate`; otherwise post-typecheck AST
     // validation rejects the ideal-typed nodes.
     for (auto& indexExpr : se->indexExprs) {
         if (!indexExpr) {
@@ -352,8 +352,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
 
     auto info = ResolveExternRuntime(*sourceExternTy);
 
-    // Receiver of the final `indexUpdate`: the base, with all but the last index applied via
-    // `T.indexAccess(base, idx)` (the read part of the chain).
+    // Receiver of the final `indexedUpdate`: the base, with all but the last index applied via
+    // `T.indexedAccess(base, idx)` (the read part of the chain).
     OwnedPtr<Expr> receiver = CloneEffectiveExpr(*se->baseExpr);
     for (size_t i = 0; i + 1 < se->indexExprs.size(); ++i) {
         receiver = CreateRuntimeIndexAccess(*se, info, std::move(receiver), *se->indexExprs[i], *sourceExternTy);
@@ -361,15 +361,15 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
 
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
 
-    Ptr<FuncDecl> indexUpdateDecl = nullptr;
-    auto indexUpdate = CreateRuntimeMemberAccess(ae, info, EXTERN_INDEX_UPDATE, indexUpdateDecl);
+    Ptr<FuncDecl> indexedUpdateDecl = nullptr;
+    auto indexedUpdate = CreateRuntimeMemberAccess(ae, info, EXTERN_INDEXED_UPDATE, indexedUpdateDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateExternDesugarArg(std::move(receiver)));
     args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(*se->indexExprs.back())));
     args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(*ae.rightExpr)));
 
-    auto call = CreateRuntimeCall(ae, info, std::move(indexUpdate), *indexUpdateDecl, std::move(args), *unitTy);
+    auto call = CreateRuntimeCall(ae, info, std::move(indexedUpdate), *indexedUpdateDecl, std::move(args), *unitTy);
 
     ae.SetTy(unitTy);
     call->SetTy(unitTy);
@@ -572,13 +572,13 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeIndexAccess(
     const Expr& srcNode, const ExternRuntimeInfo& info, OwnedPtr<Expr> baseExpr, Expr& indexExpr, Ty& ty)
 {
     Ptr<FuncDecl> indexAccessDecl = nullptr;
-    auto indexAccess = CreateRuntimeMemberAccess(srcNode, info, EXTERN_INDEX_ACCESS, indexAccessDecl);
+    auto indexedAccess = CreateRuntimeMemberAccess(srcNode, info, EXTERN_INDEXED_ACCESS, indexAccessDecl);
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateExternDesugarArg(std::move(baseExpr)));
     args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(indexExpr)));
 
-    auto call = CreateRuntimeCall(srcNode, info, std::move(indexAccess), *indexAccessDecl, std::move(args), ty);
+    auto call = CreateRuntimeCall(srcNode, info, std::move(indexedAccess), *indexAccessDecl, std::move(args), ty);
     call->SetTy(&ty);
     return call;
 }
