@@ -11,7 +11,6 @@
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
-#include "cangjie/AST/Walker.h"
 
 namespace Cangjie {
 using namespace TypeCheckUtil;
@@ -608,48 +607,23 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::BuildForcedCastCall(
     return call;
 }
 
-// Strip cached types/desugars from a cloned subtree so the enclosing call re-checks
-// it cleanly (ASTCloner copies types).
-static void StripTypesForRecheck(Ptr<Node> root)
-{
-    Walker(root, [](Ptr<Node> n) -> VisitAction {
-        // Reset to the initial (unchecked) type rather than null: SetTy asserts non-null
-        // in debug builds, and the initial ty is what an un-type-checked node carries.
-        n->SetTy(Ty::GetInitialTy());
-        if (auto ex = DynamicCast<Expr*>(n.get())) {
-            ex->desugarExpr = nullptr;
-        }
-        return VisitAction::WALK_CHILDREN;
-    }).Walk();
-}
-
-// Ordinary reading `U(args)` of a `(U)(args)` whose forced cast did not apply (call
-// form only). When `U` is a type the operand was already synthesised as a cast probe,
-// so its args are taken as freshly re-typed clones; otherwise the pristine operand is
-// moved in (also the deeply nested path, where cloning would be exponential).
+// Ordinary reading `U(args)` of a `(U)(args)` whose `U` does not resolve to a type
+// (call form only). A type-valued `U` always selects forced-cast semantics, even when
+// its operand is not Extern, so only the pristine ordinary-call operand reaches here.
 Ptr<Ty> TypeChecker::TypeCheckerImpl::DesugarAmbiguousOrdinaryCall(
-    const CheckerContext& ctx, AmbiguousForcedCastExpr& afce, bool typeValid)
+    const CheckerContext& ctx, AmbiguousForcedCastExpr& afce)
 {
-    bool freshen = typeValid;
-    auto take = [freshen](OwnedPtr<Expr>& e) -> OwnedPtr<Expr> {
-        if (!freshen) {
-            return std::move(e);
-        }
-        auto cloned = ASTCloner::Clone(e.get());
-        StripTypesForRecheck(cloned.get());
-        return cloned;
-    };
     std::vector<OwnedPtr<FuncArg>> args;
     auto& operand = afce.rightExpr;
     if (operand->astKind == ASTKind::TUPLE_LIT) {
         for (auto& child : StaticAs<ASTKind::TUPLE_LIT>(operand.get())->children) {
-            args.emplace_back(CreateFuncArg(take(child)));
+            args.emplace_back(CreateFuncArg(std::move(child)));
         }
     } else if (operand->astKind == ASTKind::PAREN_EXPR) {
-        args.emplace_back(CreateFuncArg(take(StaticAs<ASTKind::PAREN_EXPR>(operand.get())->expr)));
+        args.emplace_back(CreateFuncArg(std::move(StaticAs<ASTKind::PAREN_EXPR>(operand.get())->expr)));
     } else if (!(operand->astKind == ASTKind::LIT_CONST_EXPR &&
                    StaticAs<ASTKind::LIT_CONST_EXPR>(operand.get())->kind == LitConstKind::UNIT)) {
-        args.emplace_back(CreateFuncArg(take(operand)));
+        args.emplace_back(CreateFuncArg(std::move(operand)));
     }
     auto call = CreateCallExpr(std::move(afce.leftExpr), std::move(args));
     CopyBasicInfo(&afce, call.get());
@@ -659,13 +633,6 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::DesugarAmbiguousOrdinaryCall(
     if (Ty::IsTyCorrect(ty)) {
         afce.SetTy(ty);
         return ty;
-    }
-    // `U(args)` did not type-check. If `U` is a type this was a malformed forced cast
-    // (a type-name call like `Foo(1)` fails silently here), so drop the dead call and
-    // report cleanly; otherwise the call already emitted its own error.
-    if (typeValid) {
-        afce.desugarExpr = nullptr;
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_forced_cast_expr, afce);
     }
     afce.SetTy(TypeManager::GetInvalidTy());
     return TypeManager::GetInvalidTy();
@@ -718,25 +685,23 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAmbiguousForcedCastExpr(
                 return targetTy;
             }
         }
-    }
-
-    // Ordinary reading `U(args)` (call form only). When `U` is a type the operand
-    // was already synthesised above (cast probe), so its args are taken as freshly
-    // re-typed clones, else overload resolution silently keeps a pre-checked arg.
-    // When `U` is not a type the operand is pristine and moved in — also the deeply
-    // nested path, where cloning would be exponential (a real type only appears at
-    // shallow, bounded cast sites).
-    if (isCall && afce.leftExpr && afce.rightExpr) {
-        return DesugarAmbiguousOrdinaryCall(ctx, afce, typeValid);
-    }
-
-    // Juxtaposition `(U)e` with no ordinary reading: a malformed forced cast when `U`
-    // is a type, otherwise let the operand's own diagnostics surface.
-    if (typeValid) {
+        // Once `U` resolves to a type this syntax is unconditionally a forced cast.
+        // In particular, `(U)(args)` must not fall back to the constructor spelling
+        // `U(args)` when the operand is not Extern.
         diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_forced_cast_expr, afce);
-    } else {
-        (void)Synthesize(ctx, afce.rightExpr.get());
+        afce.SetTy(TypeManager::GetInvalidTy());
+        return TypeManager::GetInvalidTy();
     }
+
+    // Ordinary reading `U(args)` (call form only) is available only when `U` does
+    // not resolve to a type. The pristine operand is moved into the call.
+    if (isCall && afce.leftExpr && afce.rightExpr) {
+        return DesugarAmbiguousOrdinaryCall(ctx, afce);
+    }
+
+    // Juxtaposition `(U)e` with no ordinary reading and a non-type `U`: let the
+    // operand's own diagnostics surface.
+    (void)Synthesize(ctx, afce.rightExpr.get());
     afce.SetTy(TypeManager::GetInvalidTy());
     return TypeManager::GetInvalidTy();
 }
