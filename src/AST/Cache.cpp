@@ -17,21 +17,26 @@ using namespace Cangjie;
 using namespace AST;
 
 namespace Cangjie::AST {
-TargetCache CollectTargets(const Node& node)
+TargetCache CollectTargets(const Node& node, const std::function<bool(Ty&)>& isExternTy)
 {
     if (auto farg = DynamicCast<const FuncArg*>(&node)) {
-        return CollectTargets(*farg->expr);
+        return CollectTargets(*farg->expr, isExternTy);
     }
-    if (auto target1 = node.GetTarget()) {
-        if (auto ma = DynamicCast<const MemberAccess*>(&node);
-               ma && ma->baseExpr && ma->baseExpr->IsReferenceExpr()) {
-            auto target2 = ma->baseExpr->GetTarget();
-            return std::make_pair(target1, target2);
-        } else {
-            return std::make_pair(target1, nullptr);
+    Ptr<Decl> target1 = node.GetTarget();
+    // `RestoreTargets` always writes the member-access base target back, so it must be captured here.
+    // Normally that only happens when the access itself resolved to a target; additionally capture it
+    // for a dynamic `Extern` member access (`e.foo`, read or assignment target), which has no member
+    // target of its own. Otherwise the early `{target1, null}` result would make `RestoreTargets` wipe
+    // the resolved base reference's target on a cache restore, leaving `e` unresolved for the deferred
+    // extern desugaring / CHIR. The `Extern` test keeps this special case off every other access.
+    if (auto ma = DynamicCast<const MemberAccess*>(&node); ma && ma->baseExpr && ma->baseExpr->IsReferenceExpr()) {
+        auto baseTy = ma->baseExpr->GetTy();
+        bool externBase = baseTy && isExternTy && isExternTy(*baseTy);
+        if (target1 || externBase) {
+            return std::make_pair(target1, ma->baseExpr->GetTarget());
         }
     }
-    return std::make_pair(nullptr, nullptr);
+    return std::make_pair(target1, nullptr);
 }
 
 void RestoreTargets(Node& node, const TargetCache& targets)

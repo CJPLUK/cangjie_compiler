@@ -343,7 +343,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr&
         return ae.desugarExpr->GetTy();
     }
     CJC_ASSERT(ae.leftValue && ae.rightExpr);
-    if (TryDesugarExternIndexUpdate(ctx, ae)) {
+    if (TypeCheckExternIndexUpdate(ctx, ae)) {
         return ae.GetTy();
     }
     std::vector<Diagnostic> diagsForOverload;
@@ -363,7 +363,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr&
         return ae.GetTy();
     }
     auto lTy = Synthesize({ctx, SynPos::LEFT_VALUE}, ae.leftValue.get());
-    if (TryDesugarExternMemberUpdate(ctx, ae)) {
+    if (TypeCheckExternMemberUpdate(ctx, ae)) {
         return ae.GetTy();
     }
     if (lTy->IsInvalid()) {

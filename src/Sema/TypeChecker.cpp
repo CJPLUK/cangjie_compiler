@@ -1510,7 +1510,7 @@ Ptr<AST::Ty> TypeChecker::TypeCheckerImpl::SynthesizeAndCache(
     ctx.Ctx().typeCheckCache[node].synCache[key] = {.successful = ret && Ty::IsTyCorrect(ret) && dc.NoError(),
         .result = ret,
         .diags = std::move(dc),
-        .targets = CollectTargets(*node)};
+        .targets = CollectTargets(*node, [this](Ty& ty) { return TypeIsExtern(ty); })};
     return ret;
 }
 
@@ -1520,8 +1520,10 @@ bool TypeChecker::TypeCheckerImpl::CheckAndCache(ASTContext& ctx, Ptr<Ty> target
     dc.ToExclude(ctx.diag);
     bool ret = Check(ctx, target, node);
     dc.BackUp(ctx.diag);
-    ctx.typeCheckCache[node].chkCache[key] = {
-        .successful = ret, .result = node->GetTy(), .diags = std::move(dc), .targets = CollectTargets(*node)};
+    ctx.typeCheckCache[node].chkCache[key] = {.successful = ret,
+        .result = node->GetTy(),
+        .diags = std::move(dc),
+        .targets = CollectTargets(*node, [this](Ty& ty) { return TypeIsExtern(ty); })};
     return ret;
 }
 

@@ -551,7 +551,7 @@ void TypeChecker::TypeCheckerImpl::InferMemberAccess(ASTContext& ctx, MemberAcce
     }
     SetIsNotAlone(*ma.baseExpr);
     auto targetOfBase = GetBaseDeclInMemberAccess(ctx, ma);
-    if (ma.baseExpr && Ty::IsTyCorrect(ma.baseExpr->GetTy()) && TryDesugarExternMemberAccess(ctx, ma)) {
+    if (ma.baseExpr && Ty::IsTyCorrect(ma.baseExpr->GetTy()) && TypeCheckExternMemberAccess(ctx, ma)) {
         return;
     }
     TryInitializeBaseSum(ctx, ma);

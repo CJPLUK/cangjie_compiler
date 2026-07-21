@@ -1789,48 +1789,29 @@ private:
     // Each of these recognizes a dynamic Extern operation during type checking: it assigns the
     // resulting type and, when lowering is required, tags the node with `EXTERN_PENDING_DESUGAR`
     // (or `EXTERN_PENDING_COERCE`). The actual `Runtime` call is *not* built here; it is produced
-    // later by the matching `DesugarExtern*` builder during the DESUGAR_AFTER_SEMA stage.
+    // later by the matching `DesugarExtern*` builder during the DESUGAR_AFTER_SEMA stage, in the same
+    // way `is`/`as`/`range` and the other after-typecheck desugarings work.
     /** @brief Type-check `e.foo = v` (for `e: Extern<T>`) as a deferred `T.memberUpdate(...)`. */
-    bool TryDesugarExternMemberUpdate(ASTContext& ctx, AST::AssignExpr& ae);
+    bool TypeCheckExternMemberUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     /** @brief Type-check `e[idx] = v` (for `e: Extern<T>`) as a deferred `T.indexedUpdate(...)`. */
-    bool TryDesugarExternIndexUpdate(ASTContext& ctx, AST::AssignExpr& ae);
+    bool TypeCheckExternIndexUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     /** @brief Type-check a read `e.foo` (for `e: Extern<T>`) as a deferred `T.memberAccess(...)`. */
-    bool TryDesugarExternMemberAccess(ASTContext& ctx, AST::MemberAccess& ma);
+    bool TypeCheckExternMemberAccess(ASTContext& ctx, AST::MemberAccess& ma);
     /** @brief Type-check a read `e[idx]` (for `e: Extern<T>`) as a deferred `T.indexedAccess(...)`. */
-    bool TryDesugarExternIndexAccess(AST::SubscriptExpr& se);
+    bool TypeCheckExternIndexAccess(AST::SubscriptExpr& se);
     /** @brief Type-check a call `e(args...)` (for `e: Extern<T>`) as a deferred `T.functionCall(...)`. */
-    bool TryDesugarFunctionCall(ASTContext& ctx, AST::CallExpr& ce);
+    bool TypeCheckExternFunctionCall(ASTContext& ctx, AST::CallExpr& ce);
     // --- Extern: lowering side (DESUGAR_AFTER_SEMA) ---------------------------------------------
-    // Frozen clone of an extern node tagged `EXTERN_PENDING_DESUGAR`/`EXTERN_PENDING_COERCE` during type
-    // checking, captured while the node's operands are fully resolved and consumed in DESUGAR_AFTER_SEMA
-    // to build the `Runtime` call. See `SnapshotExternNode` for why the live node cannot be used there.
-    struct ExternDesugarSnapshot {
-        OwnedPtr<AST::Expr> clone;
-        Ptr<AST::Ty> coerceSourceTy{nullptr};
-        // Maps each tagged extern node inside `clone` back to the live node it was cloned from. A nested
-        // extern node is *not* re-lowered from the (possibly stale) clone subtree; instead its own clean
-        // `desugarExpr` -- built earlier in the bottom-up live walk from its own snapshot -- is transplanted.
-        // This is required because an intervening call's compatibility check can null the targets of a
-        // nested extern node's operands after this outer snapshot was taken.
-        std::unordered_map<Ptr<const AST::Node>, Ptr<const AST::Expr>> cloneToLive;
-    };
-    /** @brief Lower every `EXTERN_PENDING_*`-tagged node in @p pkg, bottom-up, into `Runtime` calls. */
-    void DesugarExternInPackage(AST::Package& pkg);
     /**
-     * @brief Record a frozen clone of a just-type-checked extern node so that the DESUGAR_AFTER_SEMA
-     * stage can build its `Runtime` call from operands whose targets are still valid.
+     * @brief Lower every `EXTERN_PENDING_*`-tagged node in @p pkg into its `Runtime` call.
      *
-     * The desugaring is deferred to a separate pass, but the normal type checker legitimately clears
-     * and re-checks argument subtrees after an extern node is tagged (e.g. `CheckCallCompatible`
-     * calls `Clear()` on call arguments and then restores them from cache without re-synthesizing).
-     * That wipes the resolved targets of the tagged node's operands, so building the `Runtime` call
-     * later from the *live* node would produce references with null targets. Snapshotting the node
-     * here, while its operands are fully resolved, decouples the lowering from those later mutations.
-     * @p coerceSourceTy is the source type `R` for an `EXTERN_PENDING_COERCE` node, else nullptr.
+     * Runs at the start of the DESUGAR_AFTER_SEMA stage, before any other desugaring or generic
+     * instantiation observes the extern nodes. The walk is post-order so a node is lowered only after
+     * the nested extern sub-expressions it contains, whose freshly built `desugarExpr` is then picked
+     * up as an operand via `CloneEffectiveExpr` -- exactly like the other after-typecheck desugarings,
+     * which also build straight from the live, fully type-checked AST.
      */
-    void SnapshotExternNode(AST::Expr& node, Ptr<AST::Ty> coerceSourceTy = nullptr);
-    /** @brief Lower, bottom-up, all `EXTERN_PENDING_*` marks inside the (frozen) snapshot subtree @p root. */
-    void DesugarExternSnapshot(const ExternDesugarSnapshot& snapshot);
+    void DesugarExternInPackage(AST::Package& pkg);
     /** @brief Build `T.memberAccess(e, "foo")` for a tagged read member access. */
     void DesugarExternMemberAccess(AST::MemberAccess& ma);
     /** @brief Build the `T.indexedAccess(...)` chain for a tagged read subscript. */
@@ -1893,11 +1874,11 @@ private:
     ScopeManager scopeManager;
     std::unordered_map<Ptr<AST::File>, std::unordered_set<Ptr<AST::Decl>>> mainFunctionMap;
     std::unordered_map<Ptr<const AST::FuncDecl>, bool> inoutCache;
-    // Frozen clone of each extern node tagged `EXTERN_PENDING_DESUGAR`/`EXTERN_PENDING_COERCE` during
-    // type checking, keyed by the live node. Captured while the node's operands are fully resolved and
-    // consumed by `DesugarExternInPackage` to build the `Runtime` call in the DESUGAR_AFTER_SEMA stage.
-    // See `SnapshotExternNode` for why the live node cannot be used directly at that point.
-    std::unordered_map<Ptr<const AST::Node>, ExternDesugarSnapshot> externSnapshots;
+    // Source type `R` of each `EXTERN_PENDING_COERCE` node (a value of type `R` coerced to `Extern<T>`),
+    // keyed by the live node and recorded during type checking by `CoerceToExtern`. It is needed by
+    // `DesugarExternCoerce` to instantiate `T.toExtern<R>(x)` because the node's own type has been
+    // overwritten to `Extern<T>` by then. Cleared once the package has been desugared.
+    std::unordered_map<Ptr<const AST::Node>, Ptr<AST::Ty>> externCoerceSourceTy;
     Triple::BackendType backendType;
     // outermost @Derpecated declaration
     Ptr<AST::Node> deprecatedContext = nullptr;

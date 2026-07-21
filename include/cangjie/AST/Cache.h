@@ -13,6 +13,8 @@
 #ifndef CANGJIE_AST_CACHE_H
 #define CANGJIE_AST_CACHE_H
 
+#include <functional>
+
 #include "cangjie/AST/Types.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
@@ -75,7 +77,9 @@ struct MemSigHash {
 // Collect and restore necessary target decls in the sub-tree.
 // Most targets are needed only after post-check, when they are filled by the normal procedure.
 // Currently, this cache is only for checking enum constructor without type args.
-TargetCache CollectTargets(const AST::Node& node);
+// @p isExternTy tells whether a type is the core `Extern` type; a dynamic `Extern` member access has
+// no member target of its own but its base reference target must still be preserved across the cache.
+TargetCache CollectTargets(const AST::Node& node, const std::function<bool(AST::Ty&)>& isExternTy);
 void RestoreTargets(AST::Node& node, const TargetCache& targets);
 } // namespace Cangjie
 

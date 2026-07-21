@@ -2409,7 +2409,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
     // A dynamic extern member access used as a call callee (`e.foo(args)` for `e: Extern<T>`) is
     // type-checked during the synthesis above into the `Extern<T>` value `T.memberAccess(e, "foo")`
     // (it has no real member target) and tagged for deferred desugaring. The enclosing call is then
-    // handled as a value call by the later `TryDesugarFunctionCall`, so report the base as
+    // handled as a value call by the later `TypeCheckExternFunctionCall`, so report the base as
     // well-typed here.
     if (ma->TestAttr(Attribute::EXTERN_PENDING_DESUGAR) && Ty::IsTyCorrect(ma->GetTy()) &&
         TypeIsExtern(*ma->GetTy())) {
@@ -3001,7 +3001,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
         return false;
     }
 
-    if (TryDesugarFunctionCall(ctx, ce)) {
+    if (TypeCheckExternFunctionCall(ctx, ce)) {
         return Ty::IsTyCorrect(ce.GetTy()) && (!target || typeManager.IsSubtype(ce.GetTy(), target));
     }
     if (ce.baseFunc->GetTy()->IsNothing()) {
