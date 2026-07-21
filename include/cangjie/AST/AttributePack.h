@@ -690,6 +690,23 @@ enum class Attribute {
     EXTERN_DESUGAR,
 
     /**
+     * Mark a surface node (member access / subscript / call / assignment / forced cast) that was
+     * type-checked as a dynamic Extern operation during Sema and whose lowering into the
+     * corresponding `Runtime` call is deferred to the DESUGAR_AFTER_SEMA stage.
+     * W: Sema (type check)
+     * R: Sema (desugar after type check)
+     */
+    EXTERN_PENDING_DESUGAR,
+
+    /**
+     * Mark a node whose value must be coerced into `Extern<T>` (via `T.toExtern`). The coercion is
+     * type-checked during Sema and built during the DESUGAR_AFTER_SEMA stage.
+     * W: Sema (type check)
+     * R: Sema (desugar after type check)
+     */
+    EXTERN_PENDING_COERCE,
+
+    /**
      * Mark whether a class is a registry companion class generated for every impl class.
      * W: Sema.
      * R: Sema.

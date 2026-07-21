@@ -2407,10 +2407,12 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
     Synthesize({ctx, SynPos::EXPR_ARG}, ma);
     ctx.targetTypeMap[ma->baseExpr] = nullptr;
     // A dynamic extern member access used as a call callee (`e.foo(args)` for `e: Extern<T>`) is
-    // desugared during the synthesis above into the `Extern<T>` value `T.memberAccess(e, "foo")`
-    // (it has no real member target). The enclosing call is then handled as a value call by the
-    // later `TryDesugarFunctionCall`, so report the base as well-typed here.
-    if (ma->desugarExpr && Ty::IsTyCorrect(ma->GetTy()) && TypeIsExtern(*ma->GetTy())) {
+    // type-checked during the synthesis above into the `Extern<T>` value `T.memberAccess(e, "foo")`
+    // (it has no real member target) and tagged for deferred desugaring. The enclosing call is then
+    // handled as a value call by the later `TryDesugarFunctionCall`, so report the base as
+    // well-typed here.
+    if (ma->TestAttr(Attribute::EXTERN_PENDING_DESUGAR) && Ty::IsTyCorrect(ma->GetTy()) &&
+        TypeIsExtern(*ma->GetTy())) {
         return true;
     }
     if (ma->GetTy() && ma->GetTy()->IsNothing()) {

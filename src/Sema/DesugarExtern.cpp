@@ -92,11 +92,26 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ty& targetTy,
         return true;
     }
 
-    // Runtime type `T` of `Extern<T>`.
-    auto info = ResolveExternRuntime(targetTy);
+    // Coercion required. Assign the target `Extern<T>` type now and tag the node; the
+    // `T.toExtern<R>(x)` lowering is deferred to `DesugarExternCoerce`. A frozen snapshot (carrying the
+    // source type `R` needed to instantiate `toExtern<R>`) is taken while `x`'s operands are resolved.
+    nodeExpr.SetTy(&targetTy);
+    nodeExpr.EnableAttr(Attribute::EXTERN_PENDING_COERCE);
+    SnapshotExternNode(nodeExpr, sourceTy);
+    return true;
+}
 
-    // Grab the effective inner expression (the desugared form if `nodeExpr` was itself desugared)
-    // as the argument to `toExtern`.
+void TypeChecker::TypeCheckerImpl::DesugarExternCoerce(Expr& nodeExpr, Ptr<Ty> sourceTy)
+{
+    auto targetTy = nodeExpr.GetTy();
+    CJC_ASSERT(Ty::IsTyCorrect(targetTy) && TypeIsExtern(*targetTy));
+    CJC_ASSERT(Ty::IsTyCorrect(sourceTy));
+
+    // Runtime type `T` of `Extern<T>`.
+    auto info = ResolveExternRuntime(*targetTy);
+
+    // Grab the effective inner expression (the desugared form if `nodeExpr` was itself desugared, e.g.
+    // a nested extern access built earlier in this bottom-up pass) as the argument to `toExtern`.
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateExternDesugarArg(CloneEffectiveExpr(nodeExpr), sourceTy));
 
@@ -107,14 +122,12 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ty& targetTy,
     auto toExtern = CreateRuntimeMemberAccess(nodeExpr, info, EXTERN_TO_EXTERN, toExternDecl);
     toExtern->instTys.clear();
     toExtern->instTys.emplace_back(sourceTy);
-    toExtern->SetTy(typeManager.GetFunctionTy({sourceTy}, &targetTy));
+    toExtern->SetTy(typeManager.GetFunctionTy({sourceTy}, targetTy));
 
-    auto call = CreateRuntimeCall(nodeExpr, info, std::move(toExtern), *toExternDecl, std::move(args), targetTy);
+    auto call = CreateRuntimeCall(nodeExpr, info, std::move(toExtern), *toExternDecl, std::move(args), *targetTy);
 
-    nodeExpr.SetTy(&targetTy);
-    call->SetTy(&targetTy);
+    call->SetTy(targetTy);
     nodeExpr.desugarExpr = std::move(call);
-    return true;
 }
 
 // `e.foo` -> `T.memberAccess(e, "foo")` for `e: Extern<T>`.
@@ -138,8 +151,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     if (auto baseTarget = ma.baseExpr->GetTarget(); baseTarget && baseTarget->IsTypeDecl()) {
         return false;
     }
-    // As a left value, the member access is the target of an assignment and is desugared into
-    // `T.memberUpdate(...)` by `TryDesugarExternMemberUpdate`.
+    // As a left value, the member access is the target of an assignment and is lowered into
+    // `T.memberUpdate(...)` by the enclosing assignment's desugaring. Only assign the type here.
     if (ma.TestAttr(Attribute::LEFT_VALUE)) {
         if (auto baseRef = DynamicCast<RefExpr*>(ma.baseExpr.get()); baseRef && baseRef->isThis) {
             // `this.payload = payload` in `Extern`'s constructor is a normal field write on `Extern`
@@ -162,11 +175,22 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
             return false;
         }
     }
-    // As the callee of a call (`e.foo(args...)`), the member access still desugars here into the
-    // `Extern<T>` value `T.memberAccess(e, "foo")`; the enclosing call is then desugared as a value
-    // call into `T.functionCall(T.memberAccess(e, "foo"), [args...])` by `TryDesugarFunctionCall`,
-    // mirroring how a subscript callee `e[idx](args...)` is handled via `TryDesugarExternIndexAccess`.
+    // Dynamic extern member read. Assign the `Extern<T>` type now and tag the node; the
+    // `T.memberAccess(e, "foo")` lowering is deferred to `DesugarExternMemberAccess`. When the access
+    // is the callee of a call (`e.foo(args...)`), the enclosing call is likewise typed as an extern
+    // value call by `TryDesugarFunctionCall` and lowered into
+    // `T.functionCall(T.memberAccess(e, "foo"), [args...])`.
+    ma.SetTy(sourceExternTy);
+    ma.EnableAttr(Attribute::EXTERN_PENDING_DESUGAR);
+    SnapshotExternNode(ma);
+    return true;
+}
 
+void TypeChecker::TypeCheckerImpl::DesugarExternMemberAccess(MemberAccess& ma)
+{
+    CJC_NULLPTR_CHECK(ma.baseExpr);
+    auto sourceExternTy = ma.baseExpr->GetTy();
+    CJC_ASSERT(Ty::IsTyCorrect(sourceExternTy) && TypeIsExtern(*sourceExternTy));
     auto info = ResolveExternRuntime(*sourceExternTy);
 
     Ptr<FuncDecl> memberAccessDecl = nullptr;
@@ -179,10 +203,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     auto call =
         CreateRuntimeCall(ma, info, std::move(memberAccess), *memberAccessDecl, std::move(args), *sourceExternTy);
 
-    ma.SetTy(sourceExternTy);
     call->SetTy(sourceExternTy);
     ma.desugarExpr = std::move(call);
-    return true;
 }
 
 // `e[idx]` -> `T.indexedAccess(e, idx)` for `e: Extern<T>`.
@@ -209,15 +231,27 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(SubscriptExpr& se
         se.SetTy(TypeManager::GetInvalidTy());
         return true;
     }
-
-    // The base and indices were synthesized by `ChkSubscriptExpr` without replacing ideal types
-    // (e.g. the literal `0` in `e[0]` still carries an ideal integer type). Each index is passed to
-    // `indexedAccess` as an `Any` argument, so it must be given its concrete type before being cloned
-    // into the desugared call; otherwise post-typecheck AST validation rejects the ideal-typed node.
+    // The base and indices were synthesized without replacing ideal types (e.g. the literal `0` in
+    // `e[0]` still carries an ideal integer type). Each index becomes an `Any` argument to
+    // `indexedAccess`, so pin its concrete type now, before the node is snapshotted and cloned;
+    // otherwise post-typecheck AST validation rejects the ideal-typed node (both live and cloned).
     ReplaceIdealTy(*se.baseExpr);
     for (auto& indexExpr : se.indexExprs) {
         ReplaceIdealTy(*indexExpr);
     }
+    // Dynamic extern index read. Assign the type now and tag the node; the `T.indexedAccess(...)`
+    // chain is built later by `DesugarExternIndexAccess`.
+    se.SetTy(sourceExternTy);
+    se.EnableAttr(Attribute::EXTERN_PENDING_DESUGAR);
+    SnapshotExternNode(se);
+    return true;
+}
+
+void TypeChecker::TypeCheckerImpl::DesugarExternIndexAccess(SubscriptExpr& se)
+{
+    CJC_NULLPTR_CHECK(se.baseExpr);
+    auto sourceExternTy = se.baseExpr->GetTy();
+    CJC_ASSERT(Ty::IsTyCorrect(sourceExternTy) && TypeIsExtern(*sourceExternTy));
 
     auto info = ResolveExternRuntime(*sourceExternTy);
 
@@ -227,10 +261,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(SubscriptExpr& se
         accessExpr = CreateRuntimeIndexAccess(se, info, std::move(accessExpr), *indexExpr, *sourceExternTy);
     }
 
-    se.SetTy(sourceExternTy);
     accessExpr->SetTy(sourceExternTy);
     se.desugarExpr = std::move(accessExpr);
-    return true;
 }
 // `e.foo = v` -> `T.memberUpdate(e, "foo", v)` for `e: Extern<T>`.
 // Chains such as `e.f1.f2 = v` and `a.b.e.f1 = v` (where only the inner sub-expression is
@@ -251,8 +283,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
     }
 
     // The left value (and therefore its base expression) has already been synthesized by
-    // `SynAssignExpr` before reaching this point, so the base's type and any desugaring are
-    // available without re-synthesizing here.
+    // `SynAssignExpr` before reaching this point, so the base's type is available here.
     auto sourceExternTy = ma->baseExpr->GetTy();
     if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(*sourceExternTy)) {
         return false;
@@ -264,14 +295,29 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
         return false;
     }
 
-    // Synthesize the right-hand side value so that nested extern expressions get desugared, and pin
-    // its ideal type before it is cloned as the `Any` argument to `memberUpdate`.
+    // Synthesize the right-hand side value (so it is type-checked) and pin its ideal type.
     Synthesize({ctx, SynPos::EXPR_ARG}, ae.rightExpr);
     ReplaceIdealTy(*ae.rightExpr);
     if (!Ty::IsTyCorrect(ae.rightExpr->GetTy())) {
         ae.SetTy(TypeManager::GetInvalidTy());
         return true;
     }
+
+    // Dynamic extern member update. Assign the `Unit` type now and tag the assignment; the
+    // `T.memberUpdate(e, "foo", v)` lowering is deferred to `DesugarExternMemberUpdate`.
+    ae.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    ae.EnableAttr(Attribute::EXTERN_PENDING_DESUGAR);
+    SnapshotExternNode(ae);
+    return true;
+}
+
+void TypeChecker::TypeCheckerImpl::DesugarExternMemberUpdate(AssignExpr& ae)
+{
+    auto ma = DynamicCast<MemberAccess*>(ae.leftValue.get());
+    CJC_NULLPTR_CHECK(ma);
+    CJC_NULLPTR_CHECK(ma->baseExpr);
+    auto sourceExternTy = ma->baseExpr->GetTy();
+    CJC_ASSERT(Ty::IsTyCorrect(sourceExternTy) && TypeIsExtern(*sourceExternTy));
 
     auto info = ResolveExternRuntime(*sourceExternTy);
 
@@ -286,10 +332,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     auto call = CreateRuntimeCall(ae, info, std::move(memberUpdate), *memberUpdateDecl, std::move(args), *unitTy);
 
-    ae.SetTy(unitTy);
     call->SetTy(unitTy);
     ae.desugarExpr = std::move(call);
-    return true;
 }
 
 // `e[idx] = v` -> `T.indexedUpdate(e, idx, v)` for `e: Extern<T>`.
@@ -350,6 +394,22 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
         return true;
     }
 
+    // Dynamic extern index update. Assign the `Unit` type now and tag the assignment; the
+    // `T.indexedUpdate(...)` chain is built later by `DesugarExternIndexUpdate`.
+    ae.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    ae.EnableAttr(Attribute::EXTERN_PENDING_DESUGAR);
+    SnapshotExternNode(ae);
+    return true;
+}
+
+void TypeChecker::TypeCheckerImpl::DesugarExternIndexUpdate(AssignExpr& ae)
+{
+    auto se = DynamicCast<SubscriptExpr*>(ae.leftValue.get());
+    CJC_NULLPTR_CHECK(se);
+    CJC_NULLPTR_CHECK(se->baseExpr);
+    auto sourceExternTy = se->baseExpr->GetTy();
+    CJC_ASSERT(Ty::IsTyCorrect(sourceExternTy) && TypeIsExtern(*sourceExternTy));
+
     auto info = ResolveExternRuntime(*sourceExternTy);
 
     // Receiver of the final `indexedUpdate`: the base, with all but the last index applied via
@@ -371,10 +431,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
 
     auto call = CreateRuntimeCall(ae, info, std::move(indexedUpdate), *indexedUpdateDecl, std::move(args), *unitTy);
 
-    ae.SetTy(unitTy);
     call->SetTy(unitTy);
     ae.desugarExpr = std::move(call);
-    return true;
 }
 
 // `e(args...)` -> `T.functionCall(e, argsArray)` for `e: Extern<T>`.
@@ -406,12 +464,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, CallE
         return false;
     }
 
-    auto sourceExternTy = baseTy;
-    auto info = ResolveExternRuntime(*sourceExternTy);
-
-    // Synthesize the user-provided arguments (so that nested extern expressions get desugared too)
-    // and collect them as the elements of the `Array<Any>` passed to `functionCall`.
-    std::vector<OwnedPtr<Expr>> elements;
+    // Synthesize the user-provided arguments (so that they are type-checked) and pin their ideal
+    // types before they are later cloned as the elements of the `Array<Any>` passed to `functionCall`.
     for (auto& arg : ce.args) {
         if (!arg || !arg->expr) {
             ce.SetTy(TypeManager::GetInvalidTy());
@@ -423,6 +477,29 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, CallE
             ce.SetTy(TypeManager::GetInvalidTy());
             return true;
         }
+    }
+
+    // Dynamic extern value call. Assign the `Extern<T>` type now and tag the call; the
+    // `T.functionCall(callee, [args...])` lowering is deferred to `DesugarExternFunctionCall`.
+    ce.SetTy(baseTy);
+    ce.EnableAttr(Attribute::EXTERN_PENDING_DESUGAR);
+    SnapshotExternNode(ce);
+    return true;
+}
+
+void TypeChecker::TypeCheckerImpl::DesugarExternFunctionCall(CallExpr& ce)
+{
+    CJC_NULLPTR_CHECK(ce.baseFunc);
+    Ptr<Expr> base = ce.baseFunc.get();
+    auto sourceExternTy = base->GetTy();
+    CJC_ASSERT(Ty::IsTyCorrect(sourceExternTy) && TypeIsExtern(*sourceExternTy));
+    auto info = ResolveExternRuntime(*sourceExternTy);
+
+    // Collect the (already type-checked) arguments as the elements of the `Array<Any>`.
+    std::vector<OwnedPtr<Expr>> elements;
+    for (auto& arg : ce.args) {
+        CJC_NULLPTR_CHECK(arg);
+        CJC_NULLPTR_CHECK(arg->expr);
         elements.emplace_back(CloneEffectiveExpr(*arg->expr));
     }
 
@@ -449,10 +526,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, CallE
     auto call =
         CreateRuntimeCall(ce, info, std::move(functionCall), *functionCallDecl, std::move(args), *sourceExternTy);
 
-    ce.SetTy(sourceExternTy);
     call->SetTy(sourceExternTy);
     ce.desugarExpr = std::move(call);
-    return true;
 }
 
 bool TypeChecker::TypeCheckerImpl::TypeIsExtern(Ty& ty)
@@ -608,6 +683,18 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::BuildForcedCastCall(
     return call;
 }
 
+void TypeChecker::TypeCheckerImpl::DesugarExternForcedCast(AmbiguousForcedCastExpr& afce)
+{
+    CJC_NULLPTR_CHECK(afce.type);
+    CJC_NULLPTR_CHECK(afce.rightExpr);
+    auto targetTy = afce.type->GetTy();
+    auto operandTy = afce.rightExpr->GetTy();
+    CJC_ASSERT(Ty::IsTyCorrect(targetTy) && Ty::IsTyCorrect(operandTy) && TypeIsExtern(*operandTy));
+    auto call = BuildForcedCastCall(afce, targetTy, operandTy);
+    CJC_ASSERT(call);
+    afce.desugarExpr = std::move(call);
+}
+
 // Strip cached types/desugars from a cloned subtree so the enclosing call re-checks
 // it cleanly (ASTCloner copies types).
 static void StripTypesForRecheck(Ptr<Node> root)
@@ -674,6 +761,18 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::DesugarAmbiguousOrdinaryCall(
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAmbiguousForcedCastExpr(
     const CheckerContext& ctx, AmbiguousForcedCastExpr& afce)
 {
+    // An extern forced cast that was already type-checked (its lowering is deferred to
+    // DESUGAR_AFTER_SEMA) carries a valid type but no desugar yet; return the resolved type.
+    if (afce.TestAttr(Attribute::EXTERN_PENDING_DESUGAR) && Ty::IsTyCorrect(afce.GetTy())) {
+        // Overload resolution clones a tagged forced cast (copying the attribute) and can commit the
+        // clone into the live tree; such a clone has no snapshot of its own. Re-snapshot it here -- its
+        // operand is still resolved (the lowering that consumes it has not run yet) -- so the
+        // DESUGAR_AFTER_SEMA pass always finds a snapshot for every live tagged node.
+        if (externSnapshots.find(&afce) == externSnapshots.end()) {
+            SnapshotExternNode(afce);
+        }
+        return afce.GetTy();
+    }
     if (afce.desugarExpr) {
         if (Ty::IsTyCorrect(afce.GetTy())) {
             return afce.GetTy();
@@ -711,12 +810,21 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAmbiguousForcedCastExpr(
             StaticAs<ASTKind::LIT_CONST_EXPR>(rhs.get())->kind == LitConstKind::UNIT));
     if (typeValid) {
         auto operandTy = Synthesize(ctx, afce.rightExpr.get());
-        if (Ty::IsTyCorrect(operandTy) && TypeIsExtern(*operandTy)) {
-            if (auto call = BuildForcedCastCall(afce, targetTy, operandTy)) {
-                afce.desugarExpr = std::move(call);
-                afce.SetTy(targetTy);
-                return targetTy;
-            }
+        // A forced cast `(U)e` of an `Extern<R>` operand is a `fromExtern<U>` conversion. Assign the
+        // target type now and tag the node; the `R.fromExtern<U>(e)` lowering is deferred to
+        // `DesugarExternForcedCast`. The deferral requires a real `fromExtern` runtime member;
+        // otherwise fall through to the ordinary reading.
+        if (Ty::IsTyCorrect(operandTy) && TypeIsExtern(*operandTy) && GetRuntimeFuncDecl(EXTERN_FROM_EXTERN)) {
+            afce.SetTy(targetTy);
+            // The forced-cast reading only needs `type` and `rightExpr`; the alternative "ordinary call"
+            // interpretation `leftExpr` (`U` parsed as an expression) is now dead. Because the lowering is
+            // deferred, the un-desugared node survives to the post-typecheck AST validator, which would
+            // otherwise walk this dead `leftExpr` and reject its unresolved type. Drop it now (the old
+            // inline lowering avoided this by filling `desugarExpr` before validation).
+            afce.leftExpr = nullptr;
+            afce.EnableAttr(Attribute::EXTERN_PENDING_DESUGAR);
+            SnapshotExternNode(afce);
+            return targetTy;
         }
     }
 
@@ -739,6 +847,165 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAmbiguousForcedCastExpr(
     }
     afce.SetTy(TypeManager::GetInvalidTy());
     return TypeManager::GetInvalidTy();
+}
+
+void TypeChecker::TypeCheckerImpl::SnapshotExternNode(Expr& node, Ptr<Ty> coerceSourceTy)
+{
+    // Freeze the node while its operands are fully resolved. `SnapshotExternNode` may be called more
+    // than once for the same node (the type checker synthesizes an argument several times during
+    // overload resolution); the latest snapshot wins and is equally valid.
+    //
+    // While cloning, record every tagged extern node's live origin (`source`) against its clone
+    // (`target`). A nested tagged node inside this snapshot must be lowered from its own clean snapshot
+    // (via the live node's already-built `desugarExpr`), not from this clone, whose operands may have
+    // been invalidated by an intervening call's compatibility check after this snapshot was taken.
+    ExternDesugarSnapshot snapshot;
+    snapshot.coerceSourceTy = coerceSourceTy;
+    auto recordTagged = [&snapshot](Node& source, Node& target) {
+        auto srcExpr = DynamicCast<Expr*>(&source);
+        if (srcExpr && (srcExpr->TestAttr(Attribute::EXTERN_PENDING_DESUGAR) ||
+                           srcExpr->TestAttr(Attribute::EXTERN_PENDING_COERCE))) {
+            snapshot.cloneToLive[&target] = srcExpr;
+        }
+    };
+    snapshot.clone = ASTCloner::Clone(Ptr(&node), recordTagged);
+    externSnapshots[&node] = std::move(snapshot);
+}
+
+// Lower, bottom-up, every extern operation tagged inside the frozen snapshot subtree @p root. Because
+// the snapshot is a self-contained clone that the type checker never mutates, its operands keep the
+// targets they were resolved to during SEMA. The walk is post-order, so a node is lowered only after
+// any nested extern sub-expressions it contains, which are then picked up through their `desugarExpr`
+// by `CloneEffectiveExpr`. A structural operation and a coercion never coincide on the same node
+// (`CoerceToExtern` only coerces a non-extern value). The @p root coercion (if any) is lowered here
+// with the source type carried by the snapshot; a *nested* coercion (e.g. an `Int64` argument coerced
+// to `Extern<T>` inside a larger coerced expression) is transplanted from its own snapshot like any
+// other nested tagged node.
+void TypeChecker::TypeCheckerImpl::DesugarExternSnapshot(const ExternDesugarSnapshot& snapshot)
+{
+    Ptr<Node> root = snapshot.clone.get();
+    const auto& cloneToLive = snapshot.cloneToLive;
+    auto postVisit = [this, root, &cloneToLive](Ptr<Node> node) -> VisitAction {
+        auto expr = DynamicCast<Expr*>(node.get());
+        bool tagged = expr && (expr->TestAttr(Attribute::EXTERN_PENDING_DESUGAR) ||
+                                  expr->TestAttr(Attribute::EXTERN_PENDING_COERCE));
+        if (!tagged || expr->desugarExpr) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        // A nested tagged extern node (anything but the snapshot root) -- a structural operation *or* a
+        // coercion (e.g. an `Int64` literal argument coerced to `Extern<T>` inside a larger coerced
+        // expression) -- is lowered from its own clean snapshot: transplant a clone of the live node's
+        // already-built `desugarExpr` rather than rebuilding from this clone, whose operands may have
+        // been nulled after the snapshot was taken.
+        if (node.get() != root.get()) {
+            if (auto it = cloneToLive.find(node.get());
+                it != cloneToLive.end() && it->second && it->second->desugarExpr) {
+                expr->desugarExpr = ASTCloner::Clone(Ptr(it->second->desugarExpr.get()));
+                expr->DisableAttr(Attribute::EXTERN_PENDING_DESUGAR);
+                expr->DisableAttr(Attribute::EXTERN_PENDING_COERCE);
+                return VisitAction::WALK_CHILDREN;
+            }
+        }
+        // Only structural operations are rebuilt in this walk; a coercion (root or a nested one lacking a
+        // live desugar) is lowered by the coercion step below / by its own snapshot.
+        if (!expr->TestAttr(Attribute::EXTERN_PENDING_DESUGAR)) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        switch (node->astKind) {
+            case ASTKind::MEMBER_ACCESS:
+                DesugarExternMemberAccess(*StaticCast<MemberAccess*>(node.get()));
+                break;
+            case ASTKind::SUBSCRIPT_EXPR:
+                DesugarExternIndexAccess(*StaticCast<SubscriptExpr*>(node.get()));
+                break;
+            case ASTKind::CALL_EXPR:
+                DesugarExternFunctionCall(*StaticCast<CallExpr*>(node.get()));
+                break;
+            case ASTKind::ASSIGN_EXPR: {
+                auto ae = StaticCast<AssignExpr*>(node.get());
+                if (ae->leftValue && ae->leftValue->astKind == ASTKind::SUBSCRIPT_EXPR) {
+                    DesugarExternIndexUpdate(*ae);
+                } else {
+                    DesugarExternMemberUpdate(*ae);
+                }
+                break;
+            }
+            case ASTKind::AMBIGUOUS_FORCED_CAST_EXPR:
+                DesugarExternForcedCast(*StaticCast<AmbiguousForcedCastExpr*>(node.get()));
+                break;
+            default:
+                break;
+        }
+        expr->DisableAttr(Attribute::EXTERN_PENDING_DESUGAR);
+        return VisitAction::WALK_CHILDREN;
+    };
+    Walker(root, nullptr, postVisit).Walk();
+
+    // The coercion, if any, is the root of the snapshot and is lowered after the structural walk so
+    // that it picks up the (now desugared) inner expression as the argument of `toExtern`.
+    if (auto expr = DynamicCast<Expr*>(root.get()); expr && expr->TestAttr(Attribute::EXTERN_PENDING_COERCE)) {
+        DesugarExternCoerce(*expr, snapshot.coerceSourceTy);
+        expr->DisableAttr(Attribute::EXTERN_PENDING_COERCE);
+    }
+}
+
+// Lower every extern operation that was type-checked and tagged during SEMA into its `Runtime` call.
+// Each tagged live node was frozen by `SnapshotExternNode` while its operands were still resolved;
+// here the corresponding snapshot is desugared and its built `desugarExpr` is transferred onto the
+// live node. The live-tree walk is post-order and clears the tags, but the actual building happens on
+// the snapshot (see `SnapshotExternNode` for why the live operands cannot be used at this stage).
+void TypeChecker::TypeCheckerImpl::DesugarExternInPackage(Package& pkg)
+{
+    // No extern operations were tagged in this package: nothing to lower.
+    if (externSnapshots.empty()) {
+        return;
+    }
+    bool desugared = false;
+    auto postVisit = [this, &desugared](Ptr<Node> node) -> VisitAction {
+        auto expr = DynamicCast<Expr*>(node.get());
+        if (!expr) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        bool pending = expr->TestAttr(Attribute::EXTERN_PENDING_DESUGAR) ||
+            expr->TestAttr(Attribute::EXTERN_PENDING_COERCE);
+        if (pending && !expr->desugarExpr) {
+            auto it = externSnapshots.find(expr);
+            if (it == externSnapshots.end()) {
+                // No SEMA snapshot for this tagged node. This happens when a later pass (e.g. the
+                // property-getter desugaring in `PostTypeCheck`) clones a tagged extern node into a new
+                // subtree: the clone carries the tag but is keyed to no snapshot. Such a clone is stable
+                // -- nothing mutates its operands after it is created -- so it is safe to snapshot the
+                // live node now and lower that. (Live originals always have a SEMA snapshot.)
+                SnapshotExternNode(*expr);
+                it = externSnapshots.find(expr);
+            }
+            CJC_ASSERT(it != externSnapshots.end());
+            if (it != externSnapshots.end()) {
+                auto& snapshot = it->second;
+                DesugarExternSnapshot(snapshot);
+                expr->desugarExpr = std::move(snapshot.clone->desugarExpr);
+                externSnapshots.erase(it);
+                desugared = true;
+            }
+        }
+        expr->DisableAttr(Attribute::EXTERN_PENDING_DESUGAR);
+        expr->DisableAttr(Attribute::EXTERN_PENDING_COERCE);
+        return VisitAction::WALK_CHILDREN;
+    };
+    Walker(&pkg, nullptr, postVisit).Walk();
+    externSnapshots.clear();
+
+    // The operand subexpressions cloned into the freshly built `Runtime` calls (base, indices,
+    // right-hand side, call arguments) were frozen during SEMA, before property `get`/`set` accesses
+    // were lowered by `DesugarForPropDecl` in `PostTypeCheck`. That pass has already run and will not
+    // revisit these new subtrees, so a property access inside an extern operand (e.g. `e.f = arr.size`)
+    // would otherwise reach CHIR as a raw property member access. Re-run it over the package to lower
+    // the property accesses now living inside the extern `desugarExpr`s (already-lowered nodes are
+    // skipped, so this is idempotent for the rest of the tree). Other post-typecheck desugarings run
+    // after this point and walk into `desugarExpr`, so they cover the clones without special handling.
+    if (desugared) {
+        DesugarForPropDecl(pkg);
+    }
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkAmbiguousForcedCastExpr(

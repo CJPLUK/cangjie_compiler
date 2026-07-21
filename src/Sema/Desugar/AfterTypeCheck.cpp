@@ -569,6 +569,11 @@ void TypeChecker::TypeCheckerImpl::DesugarForPropDecl(Node& pkg)
 // Perform desugar after typecheck before generic instantiation.
 void TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx, Package& pkg)
 {
+    // Lower dynamic `Extern` operations first. During SEMA these were only type-checked and tagged;
+    // here they are turned into the corresponding `Runtime` calls, before any other desugaring or
+    // generic instantiation observes them.
+    DesugarExternInPackage(pkg);
+
     Interop::Java::JavaInteropManager jim(importManager, typeManager, diag, *ci->mangler,
         ci->invocation.globalOptions.outputJavaGenDir, ci->invocation.globalOptions.output,
         ci->invocation.globalOptions.targetInteropLanguage);

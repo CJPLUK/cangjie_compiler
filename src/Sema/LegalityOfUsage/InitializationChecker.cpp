@@ -868,6 +868,23 @@ bool InitializationChecker::CheckInitInAssignExpr(const AssignExpr& ae)
     if (ae.leftValue == nullptr || ae.rightExpr == nullptr) {
         return false; // Ignore invalid node.
     }
+    // A dynamic extern update (`e.foo = v` / `e[i] = v` for `e: Extern<T>`) is not a real assignment:
+    // it is lowered into a `T.memberUpdate(...)` / `T.indexedUpdate(...)` runtime call in the
+    // DESUGAR_AFTER_SEMA stage. The let/immutability legality of a plain assignment therefore does not
+    // apply (mirrors the `desugarExpr` short-circuit in `CheckInitInExpr`, which the old, non-deferred
+    // desugaring relied on). Only init-check the operands the runtime call will read.
+    if (ae.TestAttr(Attribute::EXTERN_PENDING_DESUGAR)) {
+        if (auto ma = DynamicCast<MemberAccess*>(ae.leftValue.get())) {
+            (void)CheckInitInExpr(ma->baseExpr.get());
+        } else if (auto se = DynamicCast<SubscriptExpr*>(ae.leftValue.get())) {
+            (void)CheckInitInExpr(se->baseExpr.get());
+            for (auto& indexExpr : se->indexExprs) {
+                (void)CheckInitInExpr(indexExpr.get());
+            }
+        }
+        (void)CheckInitInExpr(ae.rightExpr.get());
+        return true;
+    }
     // Check usage of leftValue and rightExpr.
     CheckLetFlag(ae, *ae.leftValue);
     if (ae.isCompound) {
