@@ -119,6 +119,13 @@ template <> void UpdateSingleMacroInfo<ASTKind::BINARY_EXPR>(Node& curNode, Macr
     UpdateExpr(parent->leftExpr, parent, collector);
 }
 
+template <> void UpdateSingleMacroInfo<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(Node& curNode, MacroCollector& collector)
+{
+    auto parent = StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(&curNode);
+    UpdateExpr(parent->leftExpr, parent, collector);
+    UpdateExpr(parent->rightExpr, parent, collector);
+}
+
 template <> void UpdateSingleMacroInfo<ASTKind::ENUM_DECL>(Node& curNode, MacroCollector& collector)
 {
     auto parent = StaticAs<ASTKind::ENUM_DECL>(&curNode);

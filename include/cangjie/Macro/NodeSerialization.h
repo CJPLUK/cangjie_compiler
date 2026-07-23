@@ -14,6 +14,7 @@
 #define CANGJIE_MODULES_NODESERIALIZATION_H
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -77,6 +78,10 @@ public:
     }
     uint8_t* ExportNode(); // uint8_t* -> unsafePtr in CangJie
 private:
+    using ExprSerializer = std::function<NodeFormatExpr(NodeWriter&, AstExpr)>;
+    static const ExprSerializer* FindPrimaryExprSerializer(AST::ASTKind kind);
+    static const ExprSerializer* FindSecondaryExprSerializer(AST::ASTKind kind);
+
     std::vector<uint8_t> bufferData;
     Ptr<AST::Node> nodePtr = nullptr; // nodePtr is the AST node to be serialized
     flatbuffers::Offset<NodeFormat::DeclBase> emptyDeclBase = flatbuffers::Offset<NodeFormat::DeclBase>();
@@ -119,6 +124,7 @@ private:
     flatbuffers::Offset<NodeFormat::Expr> SerializeLitConstExpr(AstExpr expr);
     flatbuffers::Offset<NodeFormat::Expr> SerializeUnaryExpr(AstExpr expr);
     flatbuffers::Offset<NodeFormat::Expr> SerializeParenExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeAmbiguousForcedCastExpr(AstExpr expr);
     flatbuffers::Offset<NodeFormat::Expr> SerializeCallExpr(const AST::Expr* expr);
     flatbuffers::Offset<NodeFormat::Expr> SerializeRefExpr(const AST::Expr* expr);
     flatbuffers::Offset<NodeFormat::Expr> SerializeReturnExpr(AstExpr expr);

@@ -156,6 +156,36 @@ TEST_F(NodeSerializationTest, UnaryExpr_Serialization)
     free(rawBuffer);
 }
 
+TEST_F(NodeSerializationTest, AmbiguousForcedCastExpr_Serialization)
+{
+    const std::string forcedCastExpr = "(Foo)handle";
+    SourceManager sm;
+    sm.AddSource("./", forcedCastExpr);
+    DiagnosticEngine diag;
+    diag.SetSourceManager(&sm);
+    Parser parser{forcedCastExpr, diag, sm};
+    auto ptr = parser.ParseExpr();
+    ASSERT_EQ(ptr->astKind, ASTKind::AMBIGUOUS_FORCED_CAST_EXPR);
+
+    NodeWriter writer(ptr.get());
+    uint8_t* rawBuffer = writer.ExportNode();
+    ASSERT_NE(rawBuffer, nullptr);
+    uint8_t* buffer = rawBuffer + 4;
+    auto fbNode = NodeFormat::GetNode(buffer);
+    ASSERT_EQ(fbNode->root_type(), NodeFormat::AnyNode_EXPR);
+    auto fbExpr = fbNode->root_as_EXPR();
+    ASSERT_EQ(fbExpr->expr_type(), NodeFormat::AnyExpr_AMBIGUOUS_FORCED_CAST_EXPR);
+    auto fbForcedCast = fbExpr->expr_as_AMBIGUOUS_FORCED_CAST_EXPR();
+    ASSERT_NE(fbForcedCast, nullptr);
+    EXPECT_EQ(fbForcedCast->type()->type_type(), NodeFormat::AnyType_REF_TYPE);
+    EXPECT_EQ(fbForcedCast->type()->type_as_REF_TYPE()->ref()->identifier()->str(), "Foo");
+    EXPECT_EQ(fbForcedCast->expr()->expr_type(), NodeFormat::AnyExpr_REF_EXPR);
+    EXPECT_EQ(fbForcedCast->expr()->expr_as_REF_EXPR()->ref()->identifier()->str(), "handle");
+    EXPECT_EQ(fbForcedCast->left_paren_pos()->column(), 1);
+    EXPECT_EQ(fbForcedCast->right_paren_pos()->column(), 5);
+    free(rawBuffer);
+}
+
 TEST_F(NodeSerializationTest, VarDecl_Serialization)
 {
     SourceManager sm;

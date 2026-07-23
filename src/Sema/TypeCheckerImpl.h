@@ -795,7 +795,7 @@ private:
     OwnedPtr<AST::CallExpr> BuildForcedCastCall(
         AST::AmbiguousForcedCastExpr& afce, Ptr<AST::Ty> targetTy, Ptr<AST::Ty> operandTy);
     Ptr<AST::Ty> DesugarAmbiguousOrdinaryCall(
-        const CheckerContext& ctx, AST::AmbiguousForcedCastExpr& afce, bool typeValid);
+        const CheckerContext& ctx, AST::AmbiguousForcedCastExpr& afce);
     void PreCheckAmbiguousForcedCastType(ASTContext& ctx, AST::AmbiguousForcedCastExpr& afce, unsigned walkerID);
     Ptr<AST::Ty> SynAssignExpr(ASTContext& ctx, AST::AssignExpr& ae);
     Ptr<AST::Ty> SynMultipleAssignExpr(ASTContext& ctx, AST::AssignExpr& ae);

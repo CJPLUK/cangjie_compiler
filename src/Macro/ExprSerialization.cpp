@@ -94,6 +94,20 @@ flatbuffers::Offset<NodeFormat::Expr> NodeWriter::SerializeParenExpr(AstExpr exp
     return NodeFormat::CreateExpr(builder, fbNodeBase, NodeFormat::AnyExpr_PAREN_EXPR, fbParenExpr.Union());
 }
 
+flatbuffers::Offset<NodeFormat::Expr> NodeWriter::SerializeAmbiguousForcedCastExpr(AstExpr expr)
+{
+    auto forcedCastExpr = RawStaticCast<const AmbiguousForcedCastExpr*>(expr);
+    auto fbNodeBase = SerializeNodeBase(forcedCastExpr);
+    auto type = SerializeType(forcedCastExpr->type.get());
+    auto leftParenPos = FlatPosCreateHelper(forcedCastExpr->leftParenPos);
+    auto operand = SerializeExpr(forcedCastExpr->rightExpr.get());
+    auto rightParenPos = FlatPosCreateHelper(forcedCastExpr->rightParenPos);
+    auto fbForcedCastExpr = NodeFormat::CreateAmbiguousForcedCastExpr(
+        builder, fbNodeBase, type, &leftParenPos, operand, &rightParenPos);
+    return NodeFormat::CreateExpr(builder, fbNodeBase, NodeFormat::AnyExpr_AMBIGUOUS_FORCED_CAST_EXPR,
+        fbForcedCastExpr.Union());
+}
+
 flatbuffers::Offset<NodeFormat::FuncArg> NodeWriter::SerializeFuncArg(AstFuncArg funcArg)
 {
     if (funcArg == nullptr) {
@@ -632,65 +646,81 @@ flatbuffers::Offset<NodeFormat::Expr> NodeWriter::SerializeArrayExpr(AstExpr exp
     return NodeFormat::CreateExpr(builder, base, NodeFormat::AnyExpr_ARRAY_EXPR, fbArrayExpr.Union());
 }
 
+const NodeWriter::ExprSerializer* NodeWriter::FindPrimaryExprSerializer(AST::ASTKind kind)
+{
+    static std::unordered_map<AST::ASTKind, ExprSerializer> serializers = {
+        {ASTKind::WILDCARD_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeWildcardExpr(expr); }},
+        {ASTKind::BINARY_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeBinaryExpr(expr); }},
+        {ASTKind::LIT_CONST_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeLitConstExpr(expr); }},
+        {ASTKind::UNARY_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeUnaryExpr(expr); }},
+        {ASTKind::PAREN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeParenExpr(expr); }},
+        {ASTKind::AMBIGUOUS_FORCED_CAST_EXPR,
+            [](NodeWriter& nw, AstExpr expr) { return nw.SerializeAmbiguousForcedCastExpr(expr); }},
+        {ASTKind::CALL_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeCallExpr(expr); }},
+        {ASTKind::REF_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeRefExpr(expr); }},
+        {ASTKind::RETURN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeReturnExpr(expr); }},
+        {ASTKind::ASSIGN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeAssignExpr(expr); }},
+        {ASTKind::MEMBER_ACCESS, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeMemberAccess(expr); }},
+        {ASTKind::IF_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeIfExpr(expr); }},
+        {ASTKind::BLOCK, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeBlockExpr(expr); }},
+        {ASTKind::LAMBDA_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeLambdaExpr(expr); }},
+        {ASTKind::TYPE_CONV_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeTypeConvExpr(expr); }},
+        {ASTKind::FOR_IN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeForInExpr(expr); }},
+        {ASTKind::ARRAY_LIT, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeArrayLit(expr); }},
+        {ASTKind::TUPLE_LIT, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeTupleLit(expr); }},
+        {ASTKind::SUBSCRIPT_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeSubscriptExpr(expr); }},
+        {ASTKind::RANGE_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeRangeExpr(expr); }},
+        {ASTKind::MATCH_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeMatchExpr(expr); }},
+        {ASTKind::TRY_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeTryExpr(expr); }},
+    };
+    auto serializer = serializers.find(kind);
+    return serializer == serializers.end() ? nullptr : &serializer->second;
+}
+
+const NodeWriter::ExprSerializer* NodeWriter::FindSecondaryExprSerializer(AST::ASTKind kind)
+{
+    static std::unordered_map<AST::ASTKind, ExprSerializer> serializers = {
+        {ASTKind::THROW_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeThrowExpr(expr); }},
+        {ASTKind::PERFORM_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializePerformExpr(expr); }},
+        {ASTKind::RESUME_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeResumeExpr(expr); }},
+        {ASTKind::JUMP_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeJumpExpr(expr); }},
+        {ASTKind::WHILE_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeWhileExpr(expr); }},
+        {ASTKind::DO_WHILE_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeDoWhileExpr(expr); }},
+        {ASTKind::INC_OR_DEC_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeIncOrDecExpr(expr); }},
+        {ASTKind::TOKEN_PART, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeTokenPart(expr); }},
+        {ASTKind::QUOTE_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeQuoteExpr(expr); }},
+        {ASTKind::IS_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeIsExpr(expr); }},
+        {ASTKind::AS_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeAsExpr(expr); }},
+        {ASTKind::SPAWN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeSpawnExpr(expr); }},
+        {ASTKind::SYNCHRONIZED_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeSynchronizedExpr(expr); }},
+        {ASTKind::OPTIONAL_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeOptionalExpr(expr); }},
+        {ASTKind::OPTIONAL_CHAIN_EXPR,
+            [](NodeWriter& nw, AstExpr expr) { return nw.SerializeOptionalChainExpr(expr); }},
+        {ASTKind::TRAIL_CLOSURE_EXPR,
+            [](NodeWriter& nw, AstExpr expr) { return nw.SerializeTrailingClosureExpr(expr); }},
+        {ASTKind::PRIMITIVE_TYPE_EXPR,
+            [](NodeWriter& nw, AstExpr expr) { return nw.SerializePrimitiveTypeExpr(expr); }},
+        {ASTKind::LET_PATTERN_DESTRUCTOR,
+            [](NodeWriter& nw, AstExpr expr) { return nw.SerializeLetPatternDestructor(expr); }},
+        {ASTKind::MACRO_EXPAND_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeMacroExpandExpr(expr); }},
+        {ASTKind::ARRAY_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeArrayExpr(expr); }},
+    };
+    auto serializer = serializers.find(kind);
+    return serializer == serializers.end() ? nullptr : &serializer->second;
+}
+
 flatbuffers::Offset<NodeFormat::Expr> NodeWriter::SerializeExpr(AstExpr expr)
 {
     if (expr == nullptr) {
         return flatbuffers::Offset<NodeFormat::Expr>();
     }
-    static std::unordered_map<AST::ASTKind, std::function<NodeFormatExpr(NodeWriter & nw, AstExpr expr)>>
-        serializeExprMap = {
-            {ASTKind::WILDCARD_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeWildcardExpr(expr); }},
-            {ASTKind::BINARY_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeBinaryExpr(expr); }},
-            {ASTKind::LIT_CONST_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeLitConstExpr(expr); }},
-            {ASTKind::UNARY_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeUnaryExpr(expr); }},
-            {ASTKind::PAREN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeParenExpr(expr); }},
-            {ASTKind::CALL_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeCallExpr(expr); }},
-            {ASTKind::REF_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeRefExpr(expr); }},
-            {ASTKind::RETURN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeReturnExpr(expr); }},
-            {ASTKind::ASSIGN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeAssignExpr(expr); }},
-            {ASTKind::MEMBER_ACCESS, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeMemberAccess(expr); }},
-            {ASTKind::IF_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeIfExpr(expr); }},
-            {ASTKind::BLOCK, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeBlockExpr(expr); }},
-            {ASTKind::LAMBDA_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeLambdaExpr(expr); }},
-            {ASTKind::TYPE_CONV_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeTypeConvExpr(expr); }},
-            {ASTKind::FOR_IN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeForInExpr(expr); }},
-            {ASTKind::ARRAY_LIT, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeArrayLit(expr); }},
-            {ASTKind::TUPLE_LIT, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeTupleLit(expr); }},
-            {ASTKind::SUBSCRIPT_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeSubscriptExpr(expr); }},
-            {ASTKind::RANGE_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeRangeExpr(expr); }},
-            {ASTKind::MATCH_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeMatchExpr(expr); }},
-            {ASTKind::TRY_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeTryExpr(expr); }},
-            {ASTKind::THROW_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeThrowExpr(expr); }},
-            {ASTKind::PERFORM_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializePerformExpr(expr); }},
-            {ASTKind::RESUME_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeResumeExpr(expr); }},
-            {ASTKind::JUMP_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeJumpExpr(expr); }},
-            {ASTKind::WHILE_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeWhileExpr(expr); }},
-            {ASTKind::DO_WHILE_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeDoWhileExpr(expr); }},
-            {ASTKind::INC_OR_DEC_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeIncOrDecExpr(expr); }},
-            {ASTKind::TOKEN_PART, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeTokenPart(expr); }},
-            {ASTKind::QUOTE_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeQuoteExpr(expr); }},
-            {ASTKind::IS_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeIsExpr(expr); }},
-            {ASTKind::AS_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeAsExpr(expr); }},
-            {ASTKind::SPAWN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeSpawnExpr(expr); }},
-            {ASTKind::SYNCHRONIZED_EXPR,
-                [](NodeWriter& nw, AstExpr expr) { return nw.SerializeSynchronizedExpr(expr); }},
-            {ASTKind::OPTIONAL_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeOptionalExpr(expr); }},
-            {ASTKind::OPTIONAL_CHAIN_EXPR,
-                [](NodeWriter& nw, AstExpr expr) { return nw.SerializeOptionalChainExpr(expr); }},
-            {ASTKind::TRAIL_CLOSURE_EXPR,
-                [](NodeWriter& nw, AstExpr expr) { return nw.SerializeTrailingClosureExpr(expr); }},
-            {ASTKind::PRIMITIVE_TYPE_EXPR,
-                [](NodeWriter& nw, AstExpr expr) { return nw.SerializePrimitiveTypeExpr(expr); }},
-            {ASTKind::LET_PATTERN_DESTRUCTOR,
-                [](NodeWriter& nw, AstExpr expr) { return nw.SerializeLetPatternDestructor(expr); }},
-            {ASTKind::MACRO_EXPAND_EXPR,
-                [](NodeWriter& nw, AstExpr expr) { return nw.SerializeMacroExpandExpr(expr); }},
-            {ASTKind::ARRAY_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeArrayExpr(expr); }},
-        };
     // Match ReplaceExpr func.
-    auto serializeFunc = serializeExprMap.find(expr->astKind);
-    if (serializeFunc != serializeExprMap.end()) {
-        return serializeFunc->second(*this, expr);
+    auto serializer = FindPrimaryExprSerializer(expr->astKind);
+    if (serializer == nullptr) {
+        serializer = FindSecondaryExprSerializer(expr->astKind);
+    }
+    if (serializer != nullptr) {
+        return (*serializer)(*this, expr);
     }
     Errorln("Expr Not Supported in Libast Yet\n");
     return flatbuffers::Offset<NodeFormat::Expr>();
