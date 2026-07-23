@@ -25,7 +25,6 @@ static const std::string EXTERN_MEMBER_UPDATE = "memberUpdate";
 static const std::string EXTERN_INDEXED_ACCESS = "indexedAccess";
 static const std::string EXTERN_INDEXED_UPDATE = "indexedUpdate";
 static const std::string EXTERN_FUNCTION_CALL = "functionCall";
-static const std::string EXTERN_PAYLOAD_FIELD = "payload";
 static const std::string EXTERN_TYPE_EXTERN = "Extern";
 static const std::string EXTERN_TYPE_RUNTIME = "ForeignRuntime";
 
@@ -124,7 +123,7 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ty& targetTy,
 // picks up that desugared form as the base, producing nested `T.memberAccess` calls.
 // `e.foo = v` (left value) is the target of an assignment and is desugared into `T.memberUpdate(...)`
 // by `TryDesugarExternMemberUpdate`, so that case is deferred here.
-bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx, MemberAccess& ma)
+bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(MemberAccess& ma)
 {
     CJC_NULLPTR_CHECK(ma.baseExpr);
     auto sourceExternTy = ma.baseExpr->GetTy();
@@ -141,26 +140,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     // As a left value, the member access is the target of an assignment and is desugared into
     // `T.memberUpdate(...)` by `TryDesugarExternMemberUpdate`.
     if (ma.TestAttr(Attribute::LEFT_VALUE)) {
-        if (auto baseRef = DynamicCast<RefExpr*>(ma.baseExpr.get()); baseRef && baseRef->isThis) {
-            // `this.payload = payload` in `Extern`'s constructor is a normal field write on `Extern`
-            // itself, not a dynamic member update, and must be left alone.
-            CJC_ASSERT(ma.field == EXTERN_PAYLOAD_FIELD);
-            return false;
-        }
         ma.SetTy(sourceExternTy);
         return true;
-    }
-    // `e.payload` read in the body of the static `getPayload` helper of the core `Extern` struct is a
-    // normal read of the private `payload` field, not a dynamic member access, and must be left alone
-    // -- mirroring the `this.payload` handling above. It is identified by the function the expression
-    // belongs to (obtained from the current scope) being a member of the core `Extern` struct.
-    if (ma.field == EXTERN_PAYLOAD_FIELD) {
-        auto curFuncBody = GetCurFuncBody(ctx, ma.scopeName);
-        auto externDecl = importManager.GetCoreDecl<StructDecl>(EXTERN_TYPE_EXTERN);
-        if (curFuncBody && curFuncBody->funcDecl && externDecl &&
-            curFuncBody->funcDecl->outerDecl.get() == externDecl) {
-            return false;
-        }
     }
     // As the callee of a call (`e.foo(args...)`), the member access still desugars here into the
     // `Extern<T>` value `T.memberAccess(e, "foo")`; the enclosing call is then desugared as a value
@@ -255,12 +236,6 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
     // available without re-synthesizing here.
     auto sourceExternTy = ma->baseExpr->GetTy();
     if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(*sourceExternTy)) {
-        return false;
-    }
-    if (auto baseRef = DynamicCast<RefExpr*>(ma->baseExpr.get()); baseRef && baseRef->isThis) {
-        // `this.payload = payload` in the core library is a normal field assignment on `Extern`
-        // itself, not a dynamic member update, and must be left alone.
-        CJC_ASSERT(ma->field == EXTERN_PAYLOAD_FIELD);
         return false;
     }
 

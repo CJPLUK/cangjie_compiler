@@ -914,6 +914,9 @@ private:
     // ====================call expr===============
     // ==================== global func or instance member func call===============
     Ptr<Value> TranslateIntrinsicCall(const AST::CallExpr& expr);
+    // Lower the `Extern<T>` payload accessor intrinsics to a direct struct field read/write.
+    Ptr<Value> TranslateGetExternIntrinsic(const AST::CallExpr& expr, const DebugLocation& loc, Type* resultTy);
+    Ptr<Value> TranslateSetExternIntrinsic(const AST::CallExpr& expr, const DebugLocation& loc);
     Ptr<Value> TranslateCStringCtorCall(const AST::CallExpr& expr);
     Ptr<Value> TranslateForeignFuncCall(const AST::CallExpr& expr);
 

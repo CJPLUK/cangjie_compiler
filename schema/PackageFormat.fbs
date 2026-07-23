@@ -1025,6 +1025,11 @@ enum IntrinsicKind: uint16 {
 
   // cjnative only
   EXCLUSIVE_SCOPE,
+
+  // Extern payload field access; lowered to a direct field read/write in AST2CHIR and never
+  // serialized, but kept in sync with the CHIR IntrinsicKind enum ordering.
+  GET_EXTERN,
+  SET_EXTERN,
 }
 
 table Expression {

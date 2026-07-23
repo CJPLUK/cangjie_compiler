@@ -80,8 +80,9 @@ static const std::string CPOINTER_ADD_NAME = "addPointer";
 static const std::string CSTRING_CONVERT_CSTR_TO_PTR_NAME = "convertCStr2Ptr";
 static const std::string BIT_CAST_NAME = "bitCast";
 
-// Extern getPayload
-static const std::string GET_PAYLOAD_NAME = "getPayload";
+// Extern payload field access
+static const std::string GET_EXTERN_NAME = "getExtern";
+static const std::string SET_EXTERN_NAME = "setExtern";
 
 /*
  * Used for the mock framework purpuses, to match concrete types of type parameters to the defined stubs
@@ -623,6 +624,11 @@ enum IntrinsicKind : uint16_t {
 
     // cjnative only
     EXCLUSIVE_SCOPE,
+
+    // Extern payload field access; never materialised as an Intrinsic node (lowered to a direct
+    // field read/write in AST2CHIR), so it does not need serialization support.
+    GET_EXTERN,
+    SET_EXTERN,
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
@@ -681,6 +687,9 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {RAW_ARRAY_REFEQ_NAME, RAW_ARRAY_REFEQ},
 
     {OBJECT_ZERO_VALUE_NAME, OBJECT_ZERO_VALUE},
+
+    {GET_EXTERN_NAME, GET_EXTERN},
+    {SET_EXTERN_NAME, SET_EXTERN},
 
     {SOURCE_FILE_NAME, SOURCE_FILE},
     {SOURCE_LINE_NAME, SOURCE_LINE},

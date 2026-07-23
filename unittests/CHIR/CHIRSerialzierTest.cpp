@@ -1730,6 +1730,12 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
         case EXCLUSIVE_SCOPE:
             ret = IntrinsicKind_EXCLUSIVE_SCOPE;
             break;
+        case GET_EXTERN:
+            ret = IntrinsicKind_GET_EXTERN;
+            break;
+        case SET_EXTERN:
+            ret = IntrinsicKind_SET_EXTERN;
+            break;
         case GET_JSLAMBDA_ADDR:
             ret = IntrinsicKind_GET_JSLAMBDA_ADDR;
             // no defalut here, due to we need use compiler to check all value be handled.
@@ -1907,7 +1913,7 @@ TEST_F(CHIRSerialzierTest, IntrinsicKindEnum)
 {
     using namespace PackageFormat;
     Cangjie::CHIR::IntrinsicKind enumBegin = NOT_INTRINSIC;
-    Cangjie::CHIR::IntrinsicKind enumEnd = EXCLUSIVE_SCOPE; // make sure this is max one we defined
+    Cangjie::CHIR::IntrinsicKind enumEnd = SET_EXTERN; // make sure this is max one we defined
 
     EXPECT_EQ(static_cast<size_t>(enumBegin), 0);
     for (size_t i = static_cast<size_t>(enumBegin); i <= static_cast<size_t>(enumEnd); i++) {

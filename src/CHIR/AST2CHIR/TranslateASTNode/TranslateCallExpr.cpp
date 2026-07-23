@@ -512,6 +512,47 @@ void Translator::BlackBoxModifyArgTypeToRef(std::vector<Value*>& args)
     }
 }
  
+// `getExtern<T>(e)` -> read of field 0 (`payload`) of the `Extern<T>` value `e`. Mirrors an ordinary
+// tuple/struct field read (see `TranslateSubscriptExpr`).
+Ptr<Value> Translator::TranslateGetExternIntrinsic(const AST::CallExpr& expr, const DebugLocation& loc, Type* resultTy)
+{
+    CJC_ASSERT(expr.args.size() == 1);
+    auto externVal = TranslateExprArg(*expr.args[0]);
+    CJC_NULLPTR_CHECK(externVal);
+    if (externVal->GetType()->IsRef()) {
+        externVal = CreateAndAppendExpression<Load>(
+            loc, StaticCast<RefType*>(externVal->GetType())->GetBaseType(), externVal, currentBlock)
+                        ->GetResult();
+    }
+    return CreateAndAppendExpression<Field>(loc, resultTy, externVal, std::vector<uint64_t>{0}, currentBlock)
+        ->GetResult();
+}
+
+// `setExtern<T>(e, payload)` -> write `payload` into field 0 (`payload`) of the `Extern<T>` object
+// referenced by `e`. `e` is translated as a left value so the write targets the object itself (in the
+// `Extern` constructor this is `this`) and not a copy, matching a normal `this.payload = v` write.
+Ptr<Value> Translator::TranslateSetExternIntrinsic(const AST::CallExpr& expr, const DebugLocation& loc)
+{
+    CJC_ASSERT(expr.args.size() == 2);
+    auto lv = TranslateExprAsLeftValue(*expr.args[0]->expr);
+    auto externRef = lv.base;
+    CJC_NULLPTR_CHECK(externRef);
+    CJC_ASSERT(lv.path.empty());
+    CJC_ASSERT(externRef->GetType()->IsRef());
+
+    auto payloadVal = TranslateExprArg(*expr.args[1]);
+    CJC_NULLPTR_CHECK(payloadVal);
+
+    auto externType = StaticCast<RefType*>(externRef->GetType())->GetBaseType();
+    auto memberType = StaticCast<CustomType*>(externType)->GetInstMemberTypeByPath(std::vector<uint64_t>{0}, builder);
+    if (payloadVal->GetType() != memberType) {
+        payloadVal = TypeCastOrBoxIfNeeded(*payloadVal, *memberType, loc);
+    }
+    CreateAndAppendExpression<StoreElementRef>(
+        loc, builder.GetUnitTy(), payloadVal, externRef, std::vector<uint64_t>{0}, currentBlock);
+    return CreateAndAppendConstantExpression<UnitLiteral>(builder.GetUnitTy(), *currentBlock)->GetResult();
+}
+
 Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
 {
     // Conditions to check if this is a call to intrinsic
@@ -544,6 +585,17 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
     } else if (auto it = packageMap.find(packageName); it != packageMap.end()) {
         CJC_ASSERT(it->second.find(identifier) != it->second.end());
         intrinsicKind = it->second.at(identifier);
+    }
+
+    // The `Extern<T>` payload accessors are lowered directly to a struct field read/write, producing
+    // exactly the CHIR of an ordinary `e.payload` read / `this.payload = v` write. This keeps the
+    // private `payload` access out of the dynamic Extern member desugaring without any special-casing
+    // in the type checker, and needs no Intrinsic node (hence no serialization/codegen support).
+    if (intrinsicKind == GET_EXTERN) {
+        return TranslateGetExternIntrinsic(expr, loc, ty);
+    }
+    if (intrinsicKind == SET_EXTERN) {
+        return TranslateSetExternIntrinsic(expr, loc);
     }
 
     // Translate arguments
