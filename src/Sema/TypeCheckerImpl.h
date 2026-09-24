@@ -905,6 +905,8 @@ private:
     bool ChkMatchCaseActions(ASTContext& ctx, Ptr<AST::Ty> target, AST::MatchCase& mc);
     bool ChkMatchCaseNoSelector(ASTContext& ctx, AST::Ty& target, AST::MatchCaseOther& mco);
     bool ChkSubscriptExpr(ASTContext& ctx, Ptr<AST::Ty> target, AST::SubscriptExpr& se);
+    /** Check the dynamic index access @p se, whose base has type @p externTy. */
+    bool ChkExternSubscript(Ptr<AST::Ty> target, AST::SubscriptExpr& se, AST::Ty& externTy);
     Ptr<AST::Ty> SynSubscriptExpr(ASTContext& ctx, AST::SubscriptExpr& se);
     bool ChkTupleAccess(ASTContext& ctx, Ptr<AST::Ty> target, AST::SubscriptExpr& se, AST::TupleTy& tupleTy);
     bool ChkVArrayAccess(ASTContext& ctx, Ptr<AST::Ty> target, AST::SubscriptExpr& se, AST::VArrayTy& varrTy);

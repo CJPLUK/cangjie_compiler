@@ -823,6 +823,12 @@ bool IsDynamicExternMemberAccess(const MemberAccess& ma)
         IsExternValue(*ma.baseExpr);
 }
 
+bool IsDynamicExternSubscript(const SubscriptExpr& se)
+{
+    return !se.desugarExpr && se.baseExpr && se.indexExprs.size() == 1 && !se.TestAttr(Attribute::LEFT_VALUE) &&
+        IsExternValue(*se.baseExpr);
+}
+
 bool IsEnumCtorWithoutTypeArgs(const Expr& expr, Ptr<const Decl> target)
 {
     if (!target || !target->TestAttr(Attribute::ENUM_CONSTRUCTOR) || !target->GetGeneric()) {

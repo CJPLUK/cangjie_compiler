@@ -232,6 +232,11 @@ bool IsExternValue(const AST::Expr& expr);
  * Left values and callees are excluded, dynamic member updates and calls are not supported yet.
  */
 bool IsDynamicExternMemberAccess(const AST::MemberAccess& ma);
+/**
+ * Whether @p se is a dynamic index access e[i], i.e. an access with a single index of any type to a value e of type
+ * Extern<T>. Left values are excluded, dynamic index updates are not supported yet.
+ */
+bool IsDynamicExternSubscript(const AST::SubscriptExpr& se);
 
 /* Utils for TypeCheckCall and TypeArgumentInference */
 bool IsEnumCtorWithoutTypeArgs(const AST::Expr& expr, Ptr<const AST::Decl> target);

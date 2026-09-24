@@ -29,6 +29,7 @@ using namespace TypeCheckUtil;
 namespace {
 const std::string EVAL_FUNC = "eval";
 const std::string EXTERN_MEMBER_ACCESS_CTOR = "ExternMemberAccess";
+const std::string EXTERN_INDEXED_ACCESS_CTOR = "ExternIndexedAccess";
 
 class ExternOperations {
 public:
@@ -59,6 +60,9 @@ private:
         }
         if (auto ma = DynamicCast<const MemberAccess*>(&expr)) {
             return IsDynamicExternMemberAccess(*ma);
+        }
+        if (auto se = DynamicCast<const SubscriptExpr*>(&expr)) {
+            return IsDynamicExternSubscript(*se);
         }
         return false;
     }
@@ -99,18 +103,28 @@ OwnedPtr<Expr> ExternOperations::BuildTree(Expr& expr)
     if (!IsDynamic(expr)) {
         return ASTCloner::Clone(Ptr(&expr));
     }
-    auto& ma = StaticCast<MemberAccess&>(expr);
-    auto ctor = LookupCtor(EXTERN_MEMBER_ACCESS_CTOR, *ma.GetTy());
-    auto receiver = BuildTree(*ma.baseExpr);
-    if (!ctor.decl || !receiver) {
+    auto& externTy = *expr.GetTy();
+    Ctor ctor;
+    std::vector<OwnedPtr<Expr>> args;
+    if (auto ma = DynamicCast<MemberAccess*>(&expr)) {
+        ctor = LookupCtor(EXTERN_MEMBER_ACCESS_CTOR, externTy);
+        if (!ctor.decl) {
+            return nullptr;
+        }
+        auto field = CreateLitConstExpr(LitConstKind::STRING, ma->field.Val(), ctor.ty->paramTys[1], true);
+        CopyBasicInfo(ma, field.get());
+        args.emplace_back(BuildTree(*ma->baseExpr));
+        args.emplace_back(std::move(field));
+    } else {
+        auto& se = StaticCast<SubscriptExpr&>(expr);
+        ctor = LookupCtor(EXTERN_INDEXED_ACCESS_CTOR, externTy);
+        args.emplace_back(BuildTree(*se.baseExpr));
+        args.emplace_back(BuildTree(*se.indexExprs[0]));
+    }
+    if (!ctor.decl || std::any_of(args.begin(), args.end(), [](auto& arg) { return !arg; })) {
         return nullptr;
     }
-    auto field = CreateLitConstExpr(LitConstKind::STRING, ma.field.Val(), ctor.ty->paramTys[1], true);
-    CopyBasicInfo(&ma, field.get());
-    std::vector<OwnedPtr<Expr>> args;
-    args.emplace_back(std::move(receiver));
-    args.emplace_back(std::move(field));
-    return CreateCtorCall(ctor, *ma.GetTy(), std::move(args), ma);
+    return CreateCtorCall(ctor, externTy, std::move(args), expr);
 }
 
 ExternOperations::Ctor ExternOperations::LookupCtor(const std::string& name, Ty& externTy)
@@ -135,7 +149,8 @@ OwnedPtr<CallExpr> ExternOperations::CreateCtorCall(
     CopyBasicInfo(&pos, ctorRef.get());
     std::vector<OwnedPtr<FuncArg>> funcArgs;
     for (size_t i = 0; i < args.size(); ++i) {
-        auto arg = CreateFuncArg(std::move(args[i]), "", ctor.ty->paramTys[i]);
+        auto argTy = args[i]->GetTy();
+        auto arg = CreateFuncArg(std::move(args[i]), "", argTy);
         CopyBasicInfo(&pos, arg.get());
         funcArgs.emplace_back(std::move(arg));
     }
