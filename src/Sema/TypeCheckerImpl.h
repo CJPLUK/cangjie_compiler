@@ -88,6 +88,12 @@ struct LookupInfo {
     bool isSetter = false;
 };
 
+/** A static function of a foreign runtime and, if it is an interface member, its instantiated interface type. */
+struct ForeignRuntimeFunc {
+    Ptr<AST::FuncDecl> decl{nullptr};
+    Ptr<AST::Ty> matchedParentTy{nullptr};
+};
+
 struct CollectDeclsInfo {
     std::vector<Ptr<AST::FuncDecl>> funcDecls;
     std::vector<Ptr<AST::FuncDecl>> initFuncDecls;
@@ -608,6 +614,14 @@ private:
     void TryDesugarForCoalescing(AST::Node& root) const;
     /** Rewrite expressions implicitly converted to Extern<T> into T.toExtern<U>(e). */
     void DesugarExternConversions(ASTContext& ctx, AST::Package& pkg);
+    /** Rewrite dynamic operations on Extern<T> values into T.eval(tree). */
+    void DesugarExternOperations(ASTContext& ctx, AST::Package& pkg);
+    /**
+     * Look up the static function @p name of the foreign runtime @p runtimeTy. A generic runtime is only known through
+     * its upper bounds, so the function is looked up in ForeignRuntime<T>.
+     */
+    ForeignRuntimeFunc LookupForeignRuntimeFunc(
+        ASTContext& ctx, AST::Ty& runtimeTy, const std::string& name, Ptr<const AST::File> file);
     void DesugarForCoalescing(AST::BinaryExpr& binaryExpr) const;
     void DesugarForInExpr(ASTContext& ctx, AST::ForInExpr& forInExpr);
     void DesugarForInCloseRange(ASTContext& ctx, AST::ForInExpr& forInExpr);

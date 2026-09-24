@@ -225,6 +225,14 @@ inline Ptr<AST::InheritableDecl> GetCurInheritableDecl(const ASTContext& ctx, co
     return sym ? DynamicCast<AST::InheritableDecl*>(sym->node) : nullptr;
 }
 
+/** Whether @p expr is a value of type std.core.Extern<T>, as opposed to a reference to the type itself. */
+bool IsExternValue(const AST::Expr& expr);
+/**
+ * Whether @p ma is a dynamic member access e.f, i.e. an access to any member f of a value e of type Extern<T>.
+ * Left values and callees are excluded, dynamic member updates and calls are not supported yet.
+ */
+bool IsDynamicExternMemberAccess(const AST::MemberAccess& ma);
+
 /* Utils for TypeCheckCall and TypeArgumentInference */
 bool IsEnumCtorWithoutTypeArgs(const AST::Expr& expr, Ptr<const AST::Decl> target);
 TyVars GetTyVars(const AST::FuncDecl& fd, const AST::CallExpr& ce, bool ignoreContext = false);

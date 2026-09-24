@@ -13,6 +13,7 @@
 
 #include "TypeCheckerImpl.h"
 
+#include "Desugar/AfterTypeCheck.h"
 #include "TypeCheckUtil.h"
 
 #include "cangjie/AST/Clone.h"
@@ -27,19 +28,38 @@ using namespace AST;
 using namespace Meta;
 using namespace TypeCheckUtil;
 
+namespace Cangjie::Sema::Desugar::AfterTypeCheck {
+OwnedPtr<MemberAccess> CreateForeignRuntimeFuncAccess(
+    Ty& runtimeTy, FuncDecl& func, Ptr<Ty> matchedParentTy, Ty& funcTy, const Node& pos)
+{
+    Ptr<Decl> runtimeDecl = runtimeTy.IsGeneric() ? Ptr<Decl>(StaticCast<GenericsTy*>(&runtimeTy)->decl)
+                                                  : Ty::GetDeclOfTy(&runtimeTy);
+    if (!runtimeDecl) {
+        return nullptr;
+    }
+    auto runtimeRef = CreateRefExpr(*runtimeDecl);
+    runtimeRef->SetTy(&runtimeTy);
+    runtimeRef->isAlone = false;
+    if (!runtimeTy.IsGeneric()) {
+        runtimeRef->instTys = runtimeTy.typeArgs;
+    }
+    CopyBasicInfo(&pos, runtimeRef.get());
+
+    auto funcAccess = CreateMemberAccess(std::move(runtimeRef), func);
+    funcAccess->EnableAttr(Attribute::IMPLICIT_ADD);
+    funcAccess->matchedParentTy = matchedParentTy;
+    funcAccess->SetTy(&funcTy);
+    return funcAccess;
+}
+} // namespace Cangjie::Sema::Desugar::AfterTypeCheck
+
 namespace {
 const std::string TO_EXTERN_FUNC = "toExtern";
-
-/** The `toExtern` function of a runtime and, if it is an interface member, its instantiated interface type. */
-struct ToExternTarget {
-    Ptr<FuncDecl> decl{nullptr};
-    Ptr<Ty> matchedParentTy{nullptr};
-};
 
 class ExternConversion {
 public:
     using NeedConversion = std::function<bool(Ty& from, Ty& to)>;
-    using TargetLookup = std::function<ToExternTarget(Ty& runtimeTy, Ptr<const File> file)>;
+    using TargetLookup = std::function<ForeignRuntimeFunc(Ty& runtimeTy, Ptr<const File> file)>;
 
     ExternConversion(TypeManager& typeManager, NeedConversion needConversion, TargetLookup lookup)
         : typeManager(typeManager), needConversion(std::move(needConversion)), lookup(std::move(lookup))
@@ -84,24 +104,15 @@ OwnedPtr<Expr> ExternConversion::CreateToExternCall(
     CJC_ASSERT(target.IsCoreExternType());
     auto runtimeTy = target.typeArgs[0];
     auto [toExtern, matchedParentTy] = lookup(*runtimeTy, file);
-    Ptr<Decl> runtimeDecl = runtimeTy->IsGeneric() ? Ptr<Decl>(StaticCast<GenericsTy*>(runtimeTy)->decl)
-                                                   : Ty::GetDeclOfTy(runtimeTy);
-    if (!toExtern || !runtimeDecl) {
+    if (!toExtern) {
         return nullptr;
     }
-    auto runtimeRef = CreateRefExpr(*runtimeDecl);
-    runtimeRef->SetTy(runtimeTy);
-    runtimeRef->isAlone = false;
-    if (!runtimeTy->IsGeneric()) {
-        runtimeRef->instTys = runtimeTy->typeArgs;
+    auto baseFunc = Sema::Desugar::AfterTypeCheck::CreateForeignRuntimeFuncAccess(
+        *runtimeTy, *toExtern, matchedParentTy, *typeManager.GetFunctionTy({&valueTy}, &target), *value);
+    if (!baseFunc) {
+        return nullptr;
     }
-    CopyBasicInfo(value.get(), runtimeRef.get());
-
-    auto baseFunc = CreateMemberAccess(std::move(runtimeRef), *toExtern);
-    baseFunc->EnableAttr(Attribute::IMPLICIT_ADD);
     baseFunc->instTys = {&valueTy};
-    baseFunc->matchedParentTy = matchedParentTy;
-    baseFunc->SetTy(typeManager.GetFunctionTy({&valueTy}, &target));
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(std::move(value)));
@@ -242,43 +253,51 @@ VisitAction ExternConversion::HandleArrayExpr(ArrayExpr& ae)
 }
 } // namespace
 
+ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
+    ASTContext& ctx, Ty& runtimeTy, const std::string& name, Ptr<const File> file)
+{
+    std::vector<Ptr<Decl>> candidates;
+    if (runtimeTy.IsGeneric()) {
+        auto foreignRuntime = importManager.GetCoreDecl<InterfaceDecl>(STD_LIB_FOREIGN_RUNTIME);
+        if (!foreignRuntime) {
+            return {};
+        }
+        candidates = foreignRuntime->GetMemberDeclPtrs();
+    } else {
+        candidates = FieldLookup(ctx, Ty::GetDeclOfTy(&runtimeTy), name, {&runtimeTy, file});
+    }
+    Ptr<FuncDecl> func = nullptr;
+    for (auto decl : candidates) {
+        auto fd = DynamicCast<FuncDecl*>(decl);
+        if (!fd || fd->identifier != name || !fd->TestAttr(Attribute::STATIC)) {
+            continue;
+        }
+        // Prefer the implementation over the abstract declaration in ForeignRuntime.
+        if (!func || (func->TestAttr(Attribute::ABSTRACT) && !fd->TestAttr(Attribute::ABSTRACT))) {
+            func = fd;
+        }
+    }
+    if (!func) {
+        return {};
+    }
+    Ptr<Ty> matchedParentTy = nullptr;
+    if (func->outerDecl && func->outerDecl->astKind == ASTKind::INTERFACE_DECL) {
+        auto promoted = promotion.Promote(runtimeTy, *func->outerDecl->GetTy());
+        if (!promoted.empty()) {
+            matchedParentTy = *promoted.begin();
+        }
+    }
+    return {func, matchedParentTy};
+}
+
 void TypeChecker::TypeCheckerImpl::DesugarExternConversions(ASTContext& ctx, Package& pkg)
 {
-    auto foreignRuntime = importManager.GetCoreDecl<InterfaceDecl>(STD_LIB_FOREIGN_RUNTIME);
-    if (!foreignRuntime) {
+    if (!importManager.GetCoreDecl<InterfaceDecl>(STD_LIB_FOREIGN_RUNTIME)) {
         return;
     }
     auto needConversion = [this](Ty& from, Ty& to) { return NeedExternConversion(from, to); };
-    auto lookup = [this, &ctx, foreignRuntime](Ty& runtimeTy, Ptr<const File> file) -> ToExternTarget {
-        std::vector<Ptr<Decl>> candidates;
-        if (runtimeTy.IsGeneric()) {
-            // The runtime is only known through its upper bounds, dispatch on ForeignRuntime<T>.
-            candidates = foreignRuntime->GetMemberDeclPtrs();
-        } else {
-            candidates = FieldLookup(ctx, Ty::GetDeclOfTy(&runtimeTy), TO_EXTERN_FUNC, {&runtimeTy, file});
-        }
-        Ptr<FuncDecl> toExtern = nullptr;
-        for (auto decl : candidates) {
-            auto fd = DynamicCast<FuncDecl*>(decl);
-            if (!fd || fd->identifier != TO_EXTERN_FUNC || !fd->TestAttr(Attribute::STATIC)) {
-                continue;
-            }
-            // Prefer the implementation over the abstract declaration in ForeignRuntime.
-            if (!toExtern || (toExtern->TestAttr(Attribute::ABSTRACT) && !fd->TestAttr(Attribute::ABSTRACT))) {
-                toExtern = fd;
-            }
-        }
-        if (!toExtern) {
-            return {};
-        }
-        Ptr<Ty> matchedParentTy = nullptr;
-        if (toExtern->outerDecl && toExtern->outerDecl->astKind == ASTKind::INTERFACE_DECL) {
-            auto promoted = promotion.Promote(runtimeTy, *toExtern->outerDecl->GetTy());
-            if (!promoted.empty()) {
-                matchedParentTy = *promoted.begin();
-            }
-        }
-        return {toExtern, matchedParentTy};
+    auto lookup = [this, &ctx](Ty& runtimeTy, Ptr<const File> file) {
+        return LookupForeignRuntimeFunc(ctx, runtimeTy, TO_EXTERN_FUNC, file);
     };
     ExternConversion(typeManager, needConversion, lookup).Run(pkg);
 }

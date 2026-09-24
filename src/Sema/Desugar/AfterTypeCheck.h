@@ -100,6 +100,12 @@ OwnedPtr<TypePattern> CreateRuntimePreparedTypePattern(
     TypeManager& typeManager, OwnedPtr<Pattern> pattern, OwnedPtr<Type>  type, Expr& selector);
 
 Ptr<Decl> LookupEnumMember(Ptr<Decl> decl, const std::string& identifier);
+/**
+ * Create the reference RT.func to the static function @p func of the foreign runtime @p runtimeTy, typed @p funcTy.
+ * @p matchedParentTy is the instantiated interface type when @p func is a member of an interface.
+ */
+OwnedPtr<MemberAccess> CreateForeignRuntimeFuncAccess(
+    Ty& runtimeTy, FuncDecl& func, Ptr<Ty> matchedParentTy, Ty& funcTy, const Node& pos);
 void RearrangeRefLoop(const Expr& src, Expr& dst, Ptr<Node> loopBody);
 
 void PostProcessFuncParam(const FuncParam& fp, const GlobalOptions& options);

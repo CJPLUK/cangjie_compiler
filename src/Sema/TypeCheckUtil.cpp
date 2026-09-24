@@ -808,6 +808,21 @@ std::vector<Ptr<Ty>> GetParamTysInArgsOrder(TypeManager& tyMgr, const CallExpr& 
     return tyInArgOrder;
 }
 
+bool IsExternValue(const Expr& expr)
+{
+    if (!Ty::IsTyCorrect(expr.GetTy()) || !expr.GetTy()->IsCoreExternType()) {
+        return false;
+    }
+    auto target = GetRealTarget(expr.GetTarget());
+    return !target || !target->IsTypeDecl();
+}
+
+bool IsDynamicExternMemberAccess(const MemberAccess& ma)
+{
+    return !ma.target && ma.baseExpr && !ma.TestAttr(Attribute::LEFT_VALUE) && !Is<CallExpr>(ma.callOrPattern) &&
+        IsExternValue(*ma.baseExpr);
+}
+
 bool IsEnumCtorWithoutTypeArgs(const Expr& expr, Ptr<const Decl> target)
 {
     if (!target || !target->TestAttr(Attribute::ENUM_CONSTRUCTOR) || !target->GetGeneric()) {
