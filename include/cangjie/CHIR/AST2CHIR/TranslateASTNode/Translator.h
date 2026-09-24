@@ -913,6 +913,10 @@ private:
     // ====================call expr===============
     // ==================== global func or instance member func call===============
     Ptr<Value> TranslateIntrinsicCall(const AST::CallExpr& expr);
+    /** Translate the intrinsic getExtern(e) of std.core into a read of the payload field of e. */
+    Ptr<Value> TranslateGetExtern(const AST::CallExpr& expr);
+    /** Translate the intrinsic setExtern(e, payload) of std.core into a write of the payload field of e. */
+    Ptr<Value> TranslateSetExtern(const AST::CallExpr& expr);
     Ptr<Value> TranslateCStringCtorCall(const AST::CallExpr& expr);
     Ptr<Value> TranslateForeignFuncCall(const AST::CallExpr& expr);
 

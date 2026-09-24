@@ -79,6 +79,8 @@ static const std::string CPOINTER_ADD_NAME = "addPointer";
 
 static const std::string CSTRING_CONVERT_CSTR_TO_PTR_NAME = "convertCStr2Ptr";
 static const std::string BIT_CAST_NAME = "bitCast";
+static const std::string GET_EXTERN_NAME = "getExtern";
+static const std::string SET_EXTERN_NAME = "setExtern";
 
 /*
  * Used for the mock framework purpuses, to match concrete types of type parameters to the defined stubs
@@ -620,6 +622,10 @@ enum IntrinsicKind : uint16_t {
 
     // cjnative only
     EXCLUSIVE_SCOPE,
+
+    // Lowered to field accesses of std.core.Extern<T> during translation, never in CHIR nor in StdxChirFormat.
+    GET_EXTERN,
+    SET_EXTERN,
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
@@ -707,6 +713,9 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {IS_SUBTYPE_TYPES_NAME, IS_SUBTYPE_TYPES},
 
     {std::string{EXCLUSIVE_SCOPE_NAME}, EXCLUSIVE_SCOPE},
+
+    {GET_EXTERN_NAME, GET_EXTERN},
+    {SET_EXTERN_NAME, SET_EXTERN},
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> overflowIntrinsicMap = {

@@ -404,6 +404,20 @@ Value* Translator::TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const
         argVal = CreateAndAppendExpression<Intrinsic>(loc, ty, callContext, currentBlock)->GetResult();
     } else {
         argVal = TranslateExprArg(*arg.expr);
+        /* A compound assignment `lhs op= v` with an overloaded `op` is desugared in Sema into `lhs = lhs'.op(v)`,
+           where the copy `lhs'` is mapped to `lhs` (see DesugarOperatorOverloadExpr). When `lhs` is a member access,
+           TranslateAssignExpr evaluates its receiver once and records a *reference* to the field for `lhs`, which
+           `lhs'` then reuses. Usually `lhs'` is the receiver of the call `.op`, which accepts a reference.
+           When `lhs` has type Extern<T>, `lhs'.op(v)` is a dynamic call and ExternDesugaring turns it into
+               T.functionCall(T.memberAccess(lhs', "op"), [v])
+           so `lhs'` becomes an argument of a static function call, which needs the value of the field. Load it
+           from the reference here. The other mapped arguments, e.g. the indices of a compound assignment through
+           `[]`, are recorded as values, for which GetDerefedValue does nothing. */
+        CJC_ASSERT(GetMapExpr(*arg.expr) == nullptr || !argVal->GetType()->IsRef() ||
+            StaticCast<RefType*>(argVal->GetType())->GetBaseType()->IsClassOrArray() || arg.expr->GetTy()->IsCoreExternType());
+        if (GetMapExpr(*arg.expr) != nullptr) {
+            argVal = GetDerefedValue(argVal, loc);
+        }
     }
     if (expectedTy != nullptr) {
         argVal = TypeCastOrBoxIfNeeded(*argVal, *expectedTy, loc);
@@ -546,6 +560,12 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
         CJC_ASSERT(it->second.find(identifier) != it->second.end());
         intrinsicKind = it->second.at(identifier);
     }
+    if (intrinsicKind == GET_EXTERN) {
+        return TranslateGetExtern(expr);
+    }
+    if (intrinsicKind == SET_EXTERN) {
+        return TranslateSetExtern(expr);
+    }
 
     // Translate arguments
     auto args = TranslateFuncArgs(expr, nullptr, nullptr);
@@ -574,6 +594,34 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
         return CreateAndAppendExpression<Load>(ty, intriVar, currentBlock)->GetResult();
     }
     return intriVar;
+}
+
+Ptr<Value> Translator::TranslateGetExtern(const AST::CallExpr& expr)
+{
+    // The payload is the only member variable of std.core.Extern<T>.
+    const std::vector<uint64_t> path{0};
+    const auto& loc = TranslateLocation(expr);
+    CJC_ASSERT(expr.args.size() == 1U);
+    auto externVal = GetDerefedValue(TranslateExprArg(*expr.args[0]->expr), loc);
+    auto externTy = StaticCast<CustomType*>(externVal->GetType());
+    auto payloadTy = externTy->GetInstMemberTypeByPath(path, builder);
+    auto payload = CreateAndAppendExpression<Field>(loc, payloadTy, externVal, path, currentBlock)->GetResult();
+    return TypeCastOrBoxIfNeeded(*payload, *chirTy.TranslateType(*expr.GetTy()), loc);
+}
+
+Ptr<Value> Translator::TranslateSetExtern(const AST::CallExpr& expr)
+{
+    // The payload is the only member variable of std.core.Extern<T>.
+    const std::vector<uint64_t> path{0};
+    const auto& loc = TranslateLocation(expr);
+    CJC_ASSERT(expr.args.size() == 2U);
+    // The payload is written in place, so the receiver is translated as a left value, e.g. `this` in the constructor.
+    auto externRef = GenerateLeftValue(TranslateExprAsLeftValue(*expr.args[0]->expr), loc);
+    auto externTy = StaticCast<CustomType*>(StaticCast<RefType*>(externRef->GetType())->GetBaseType());
+    auto payloadTy = externTy->GetInstMemberTypeByPath(path, builder);
+    auto payload = TypeCastOrBoxIfNeeded(*TranslateExprArg(*expr.args[1]->expr), *payloadTy, loc);
+    CreateAndAppendExpression<StoreElementRef>(loc, builder.GetUnitTy(), payload, externRef, path, currentBlock);
+    return CreateAndAppendConstantExpression<UnitLiteral>(builder.GetUnitTy(), *currentBlock)->GetResult();
 }
 
 Ptr<Value> Translator::TranslateForeignFuncCall(const AST::CallExpr& expr)

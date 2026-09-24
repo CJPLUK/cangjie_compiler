@@ -308,6 +308,7 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterSema(std::vector<Ptr<AST::
     for (auto& pkg : pkgs) {
         PerformDesugarAfterTypeCheck(*ci->pkgCtxMap[pkg], *pkg);
         TryDesugarForCoalescing(*pkg);
+        DesugarExtern(*ci->pkgCtxMap[pkg], *pkg);
         AutoBoxing autoBox(typeManager);
         autoBox.AddOptionBox(*pkg);
     }

@@ -29,6 +29,12 @@ OwnedPtr<RefExpr> CreateRefValue(FuncTy& funcTy)
     (void)refExpr->ref.targets.emplace_back(decl); // for `GetFuncTargets`
     refExpr->SetTy(&funcTy);
     refExpr->instTys = enumTy.typeArgs;
+    // Explicit, so that the value is not used to infer them: it may still need a conversion to Extern<T>.
+    for (auto typeArg : enumTy.typeArgs) {
+        auto typeArgument = MakeOwned<Type>();
+        typeArgument->SetTy(typeArg);
+        refExpr->typeArguments.emplace_back(std::move(typeArgument));
+    }
     return refExpr;
 }
 
@@ -798,6 +804,10 @@ void TypeChecker::TypeCheckerImpl::CreateSetHandler(
 
             // Recover all types in the try expression
             SynthesizeWithoutRecover({ctx, SynPos::NONE}, tryExpr); // none for now
+            // A value implicitly converted to Extern<T> keeps its own type until DesugarExtern converts it.
+            if (te.GetTy()->IsCoreExternType()) {
+                tryExpr->SetTy(te.GetTy());
+            }
 
             std::vector<OwnedPtr<Cangjie::AST::Node>> nodes;
 

@@ -47,6 +47,7 @@ public:
     SubstPack typeMapping;                   /**< For generic type comparison.*/
     std::pair<std::vector<Diagnostic>, MatchingStat> diags; /**< Stashed diag msg.*/
     CstVersionID ver; /**< ID to fetch constraints generated for this candidate.*/
+    bool usesExternConversion = false; /**< Some argument is implicitly converted to Extern<T>. */
     FunctionMatchingUnit(AST::FuncDecl& f, const std::vector<Ptr<AST::Ty>>& tys, const SubstPack& map) : fd(f)
     {
         tysInArgOrder = tys;
@@ -85,6 +86,12 @@ struct LookupInfo {
     bool lookupInherit = true;
     bool lookupExtend = true;
     bool isSetter = false;
+};
+
+/** A static function of a foreign runtime and, if it is an interface member, its instantiated interface type. */
+struct ForeignRuntimeFunc {
+    Ptr<AST::FuncDecl> decl{nullptr};
+    Ptr<AST::Ty> matchedParentTy{nullptr};
 };
 
 struct CollectDeclsInfo {
@@ -174,6 +181,11 @@ private:
      * Main entry of the check mode of the type checking.
      */
     bool Check(ASTContext& ctx, Ptr<AST::Ty> target, Ptr<AST::Node> node);
+    /** Implicit conversion of an expression to an expected Extern<T>. */
+    bool NeedTryExternConversion(const AST::Ty& target, const AST::Node& node) const;
+    bool ChkWithExternConversion(ASTContext& ctx, AST::Node& node);
+    /** Whether an expression of type @p from needs T.toExtern to become @p to. */
+    bool NeedExternConversion(AST::Ty& from, AST::Ty& to);
     bool IsChecked(ASTContext& ctx, AST::Node& node) const;
     std::optional<bool> PerformBasicChecksForCheck(ASTContext& ctx, Ptr<AST::Ty> target, Ptr<AST::Node> node) const;
     /**
@@ -598,6 +610,18 @@ private:
     void PerformDesugarAfterTypeCheck(ASTContext& ctx, AST::Package& pkg);
     void GenerateMainInvoke();
     void TryDesugarForCoalescing(AST::Node& root) const;
+    /**
+     * Rewrite expressions implicitly converted to Extern<T> into T.toExtern<U>(e), and dynamic operations on
+     * Extern<T> values into direct calls to the static functions of T.
+     */
+    void DesugarExtern(ASTContext& ctx, AST::Package& pkg);
+    /**
+     * Look up the static function @p name of the foreign runtime @p runtimeTy. A generic runtime is only known through
+     * its upper bounds, so the function is looked up in ForeignRuntime<T>. The function is called in the desugaring of
+     * @p expr, which is diagnosed if the function of a non-generic runtime is not implemented.
+     */
+    ForeignRuntimeFunc LookupForeignRuntimeFunc(
+        ASTContext& ctx, AST::Ty& runtimeTy, const std::string& name, const AST::Expr& expr);
     void DesugarForCoalescing(AST::BinaryExpr& binaryExpr) const;
     void DesugarForInExpr(ASTContext& ctx, AST::ForInExpr& forInExpr);
     void DesugarForInCloseRange(ASTContext& ctx, AST::ForInExpr& forInExpr);
@@ -881,6 +905,8 @@ private:
     bool ChkMatchCaseActions(ASTContext& ctx, Ptr<AST::Ty> target, AST::MatchCase& mc);
     bool ChkMatchCaseNoSelector(ASTContext& ctx, AST::Ty& target, AST::MatchCaseOther& mco);
     bool ChkSubscriptExpr(ASTContext& ctx, Ptr<AST::Ty> target, AST::SubscriptExpr& se);
+    /** Check the dynamic index access @p se, whose base has type @p externTy. */
+    bool ChkExternSubscript(Ptr<AST::Ty> target, AST::SubscriptExpr& se, AST::Ty& externTy);
     Ptr<AST::Ty> SynSubscriptExpr(ASTContext& ctx, AST::SubscriptExpr& se);
     bool ChkTupleAccess(ASTContext& ctx, Ptr<AST::Ty> target, AST::SubscriptExpr& se, AST::TupleTy& tupleTy);
     bool ChkVArrayAccess(ASTContext& ctx, Ptr<AST::Ty> target, AST::SubscriptExpr& se, AST::VArrayTy& varrTy);
@@ -917,6 +943,8 @@ private:
     bool ChkVariadicCallExpr(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce,
         const std::vector<Ptr<AST::FuncDecl>>& candidates, std::vector<Diagnostic>& diagnostics);
     bool SynArgsOfNothingBaseExpr(ASTContext& ctx, AST::CallExpr& ce);
+    /** Check the dynamic call @p ce, whose callee is a value of type Extern<T>. */
+    bool ChkExternCall(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
     /**
      * One call expression may have multiple function candidates.
      * Filter them with parameters' conditions before legality check.
@@ -1684,6 +1712,8 @@ private:
     std::optional<Ptr<AST::Ty>> SynLiteralInBinaryExprFromRight(ASTContext& ctx, AST::BinaryExpr& be);
     Ptr<AST::Ty> SynLiteralInBinaryExprFromLeft(ASTContext& ctx, AST::BinaryExpr& be);
     void DiagnoseForSubscriptAssignExpr(ASTContext& ctx, const AST::AssignExpr& ae, std::vector<Diagnostic>& diags);
+    /** Synthesize the dynamic update e.f = v or e[i] = v on a value e of type Extern<T>, if @p ae is one. */
+    std::optional<Ptr<AST::Ty>> SynExternUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     std::optional<Ptr<AST::Ty>> InferAssignExprCheckCaseOverloading(
         ASTContext& ctx, AST::AssignExpr& ae, std::vector<Diagnostic>& diags);
     bool PreCheckCompoundAssign(
