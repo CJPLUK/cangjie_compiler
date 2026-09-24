@@ -47,6 +47,7 @@ public:
     SubstPack typeMapping;                   /**< For generic type comparison.*/
     std::pair<std::vector<Diagnostic>, MatchingStat> diags; /**< Stashed diag msg.*/
     CstVersionID ver; /**< ID to fetch constraints generated for this candidate.*/
+    bool usesExternConversion = false; /**< Some argument is implicitly converted to Extern<T>. */
     FunctionMatchingUnit(AST::FuncDecl& f, const std::vector<Ptr<AST::Ty>>& tys, const SubstPack& map) : fd(f)
     {
         tysInArgOrder = tys;
@@ -174,6 +175,11 @@ private:
      * Main entry of the check mode of the type checking.
      */
     bool Check(ASTContext& ctx, Ptr<AST::Ty> target, Ptr<AST::Node> node);
+    /** Implicit conversion of an expression to an expected Extern<T>. */
+    bool NeedTryExternConversion(const AST::Ty& target, const AST::Node& node) const;
+    bool ChkWithExternConversion(ASTContext& ctx, AST::Node& node);
+    /** Whether an expression of type @p from needs T.toExtern to become @p to. */
+    bool NeedExternConversion(AST::Ty& from, AST::Ty& to);
     bool IsChecked(ASTContext& ctx, AST::Node& node) const;
     std::optional<bool> PerformBasicChecksForCheck(ASTContext& ctx, Ptr<AST::Ty> target, Ptr<AST::Node> node) const;
     /**
@@ -598,6 +604,8 @@ private:
     void PerformDesugarAfterTypeCheck(ASTContext& ctx, AST::Package& pkg);
     void GenerateMainInvoke();
     void TryDesugarForCoalescing(AST::Node& root) const;
+    /** Rewrite expressions implicitly converted to Extern<T> into T.toExtern<U>(e). */
+    void DesugarExternConversions(ASTContext& ctx, AST::Package& pkg);
     void DesugarForCoalescing(AST::BinaryExpr& binaryExpr) const;
     void DesugarForInExpr(ASTContext& ctx, AST::ForInExpr& forInExpr);
     void DesugarForInCloseRange(ASTContext& ctx, AST::ForInExpr& forInExpr);

@@ -1455,7 +1455,19 @@ OwnedPtr<FunctionMatchingUnit> TypeChecker::TypeCheckerImpl::CheckCandidate(
             return nullptr;
         }
     }
-    return candidate.stat.argNameValid ? MakeOwned<FunctionMatchingUnit>(fd, paramTyInArgOrder, typeMapping) : nullptr;
+    if (!candidate.stat.argNameValid) {
+        return nullptr;
+    }
+    auto fmu = MakeOwned<FunctionMatchingUnit>(fd, paramTyInArgOrder, typeMapping);
+    for (size_t i = 0; i < paramTyInArgOrder.size(); ++i) {
+        auto paramTy = typeManager.ApplySubstPack(paramTyInArgOrder[i], typeMapping);
+        auto argTy = ce.args[i]->GetTy();
+        if (argTy && paramTy && !paramTy->HasPlaceholder() && NeedExternConversion(*argTy, *paramTy)) {
+            fmu->usesExternConversion = true;
+            break;
+        }
+    }
+    return fmu;
 }
 
 std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::ReorderCallArgument(
@@ -2151,6 +2163,11 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckMatchResult(ASTCon
     if (legals.empty()) {
         CheckEmptyMatchResult(diag, ce, illegals);
         return {};
+    }
+    // Candidates matching without implicit conversions to Extern<T> are preferred over those needing them.
+    auto usesExternConversion = [](const OwnedPtr<FunctionMatchingUnit>& fmu) { return fmu->usesExternConversion; };
+    if (!std::all_of(legals.cbegin(), legals.cend(), usesExternConversion)) {
+        legals.erase(std::remove_if(legals.begin(), legals.end(), usesExternConversion), legals.end());
     }
     // Only one legal target.
     uint64_t id;

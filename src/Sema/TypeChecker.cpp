@@ -1080,10 +1080,37 @@ std::optional<bool> TypeChecker::TypeCheckerImpl::PerformBasicChecksForCheck(
     return {};
 }
 
+bool TypeChecker::TypeCheckerImpl::NeedTryExternConversion(const Ty& target, const Node& node) const
+{
+    return target.IsCoreExternType() && !target.HasPlaceholder() && Is<Expr>(&node);
+}
+
+bool TypeChecker::TypeCheckerImpl::NeedExternConversion(Ty& from, Ty& to)
+{
+    return Ty::IsTyCorrect(&from) && Ty::IsTyCorrect(&to) && to.IsCoreExternType() && !from.IsNothing() &&
+        !typeManager.IsSubtype(&from, &to);
+}
+
+/**
+ * Any well-typed expression is accepted wherever Extern<T> is expected. Its own type U is synthesized and kept as the
+ * type of the node, so that DesugarExternConversions can later rewrite it into T.toExtern<U>(e) when U is not
+ * Extern<T>.
+ */
+bool TypeChecker::TypeCheckerImpl::ChkWithExternConversion(ASTContext& ctx, Node& node)
+{
+    ctx.targetTypeMap[&node] = nullptr;
+    bool isWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, &node)) && ReplaceIdealTy(node);
+    node.SetTy(typeManager.TryGreedySubst(node.GetTy()));
+    return isWellTyped && Ty::IsTyCorrect(node.GetTy()) && !node.GetTy()->HasPlaceholder();
+}
+
 bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
 {
     if (auto res = PerformBasicChecksForCheck(ctx, target, node)) {
         return *res;
+    }
+    if (NeedTryExternConversion(*typeManager.TryGreedySubst(target), *node)) {
+        return ChkWithExternConversion(ctx, *node);
     }
     ctx.typeCheckCache[node].lastKey = GetCacheKeyForChk(ctx, node, target);
     ASTContext* curCtx = &ctx;

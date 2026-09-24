@@ -99,6 +99,8 @@ inline constexpr const char EFFECT_PACKAGE_NAME[] = "stdx.effect";
 
 // Standard library class name
 inline const std::string STD_LIB_ARRAY = "Array";
+inline const std::string STD_LIB_EXTERN = "Extern";
+inline const std::string STD_LIB_FOREIGN_RUNTIME = "ForeignRuntime";
 inline const std::string STD_LIB_FUTURE = "Future";
 inline const std::string STD_LIB_MONITOR = "Monitor";
 inline const std::string STD_LIB_MUTEX = "Mutex";

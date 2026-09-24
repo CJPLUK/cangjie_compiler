@@ -457,6 +457,16 @@ bool Ty::IsCoreOptionType() const
         enumTy.declPtr->identifier == STD_LIB_OPTION && enumTy.typeArgs.size() == 1;
 }
 
+bool Ty::IsCoreExternType() const
+{
+    if (!this->IsEnum()) {
+        return false;
+    }
+    auto& enumTy = *RawStaticCast<const EnumTy*>(this);
+    return enumTy.declPtr && enumTy.declPtr->fullPackageName == CORE_PACKAGE_NAME &&
+        enumTy.declPtr->identifier == STD_LIB_EXTERN && enumTy.typeArgs.size() == 1;
+}
+
 bool Ty::IsFunc() const
 {
     return kind == TypeKind::TYPE_FUNC;
