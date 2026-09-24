@@ -805,6 +805,45 @@ std::vector<Ptr<Ty>> GetParamTysInArgsOrder(TypeManager& tyMgr, const CallExpr& 
     return tyInArgOrder;
 }
 
+bool IsExternValue(const Expr& expr)
+{
+    if (!Ty::IsTyCorrect(expr.GetTy()) || !expr.GetTy()->IsCoreExternType()) {
+        return false;
+    }
+    auto target = GetRealTarget(expr.GetTarget());
+    return !target || !target->IsTypeDecl();
+}
+
+bool IsDynamicExternMemberAccess(const MemberAccess& ma)
+{
+    return !ma.target && ma.baseExpr && !ma.TestAttr(Attribute::LEFT_VALUE) && IsExternValue(*ma.baseExpr);
+}
+
+bool IsDynamicExternSubscript(const SubscriptExpr& se)
+{
+    return !se.desugarExpr && se.baseExpr && !se.indexExprs.empty() && !se.TestAttr(Attribute::LEFT_VALUE) &&
+        IsExternValue(*se.baseExpr);
+}
+
+bool IsDynamicExternUpdate(const AssignExpr& ae)
+{
+    if (ae.desugarExpr || !ae.leftValue || !ae.rightExpr) {
+        return false;
+    }
+    if (auto ma = DynamicCast<const MemberAccess*>(ae.leftValue.get())) {
+        return !ma->target && ma->baseExpr && IsExternValue(*ma->baseExpr);
+    }
+    if (auto se = DynamicCast<const SubscriptExpr*>(ae.leftValue.get())) {
+        return !se->desugarExpr && se->baseExpr && !se->indexExprs.empty() && IsExternValue(*se->baseExpr);
+    }
+    return false;
+}
+
+bool IsDynamicExternCall(const CallExpr& ce)
+{
+    return !ce.desugarExpr && ce.baseFunc && IsExternValue(*ce.baseFunc);
+}
+
 bool IsEnumCtorWithoutTypeArgs(const Expr& expr, Ptr<const Decl> target)
 {
     if (!target || !target->TestAttr(Attribute::ENUM_CONSTRUCTOR) || !target->GetGeneric()) {

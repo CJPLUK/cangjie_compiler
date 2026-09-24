@@ -745,14 +745,17 @@ void InitializationChecker::CheckLetFlagInMemberAccess(const Expr& ae, const Mem
             }
         }
     }
-    // Do not allow assignments of fields of 'let' struct instance
+    // Do not allow assignments of fields of 'let' struct instance. A dynamic update e.f = v on a value e of type
+    // Extern<T> does not modify e.
     if (auto re = DynamicCast<RefExpr*>(ma.baseExpr.get()); re) {
-        if (auto vd = DynamicCast<VarDecl*>(re->ref.target); vd && !vd->isVar && MayBeStructTy(*vd)) {
+        if (auto vd = DynamicCast<VarDecl*>(re->ref.target);
+            vd && !vd->isVar && MayBeStructTy(*vd) && !vd->GetTy()->IsCoreExternType()) {
             DiagCannotAssignToImmutable(diag, ae, *re);
         }
     }
     if (auto m = DynamicCast<MemberAccess*>(ma.baseExpr.get()); m) {
-        if (auto vd = DynamicCast<VarDecl*>(m->target); vd && MayBeStructTy(*vd)) {
+        if (auto vd = DynamicCast<VarDecl*>(m->target);
+            vd && MayBeStructTy(*vd) && !vd->GetTy()->IsCoreExternType()) {
             if (!vd->isVar) {
                 DiagCannotAssignToImmutable(diag, ae, ma);
             } else {

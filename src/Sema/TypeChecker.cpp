@@ -719,6 +719,19 @@ CacheKey GetCacheKeyForChk(const ASTContext& ctx, Ptr<const Node> node, Ptr<Ty> 
         .target = target, .isDesugared = IsNodeDesugared(node), .diagKey = DiagnosticCache::ExtractKey(ctx.diag)};
 }
 
+/**
+ * Whether @p node is never implicitly converted to Extern<T> as a whole. An if, match, try, block or parenthesized
+ * expression checks the expressions giving its value against its own target, e.g. the branches of an if or the last
+ * expression of a block, so that the conversion applies to them. Loops have no such expressions and are always Unit.
+ * A synchronized expression is converted as a whole, so that the conversion runs after the lock is released.
+ */
+bool IsControlFlowExpr(const Node& node)
+{
+    return node.IsLoopExpr() ||
+        Utils::In(node.astKind,
+            {ASTKind::IF_EXPR, ASTKind::MATCH_EXPR, ASTKind::TRY_EXPR, ASTKind::BLOCK, ASTKind::PAREN_EXPR});
+}
+
 void RestoreCached(ASTContext& ctx, Ptr<Node> node, CacheEntry& cache, bool recoverDiag = true)
 {
     if (Ty::IsInitialTy(node->GetTy())) {
@@ -1075,6 +1088,30 @@ std::optional<bool> TypeChecker::TypeCheckerImpl::PerformBasicChecksForCheck(
     return {};
 }
 
+bool TypeChecker::TypeCheckerImpl::NeedTryExternConversion(const Ty& target, const Node& node) const
+{
+    return target.IsCoreExternType() && !target.HasPlaceholder() && Is<Expr>(&node);
+}
+
+bool TypeChecker::TypeCheckerImpl::NeedExternConversion(Ty& from, Ty& to)
+{
+    return Ty::IsTyCorrect(&from) && Ty::IsTyCorrect(&to) && to.IsCoreExternType() && !from.IsNothing() &&
+        !typeManager.IsSubtype(&from, &to);
+}
+
+/**
+ * Any well-typed expression is accepted wherever Extern<T> is expected. Its own type U is synthesized and kept as the
+ * type of the node, so that DesugarExtern can later rewrite it into T.toExtern<U>(e) when U is not
+ * Extern<T>.
+ */
+bool TypeChecker::TypeCheckerImpl::ChkWithExternConversion(ASTContext& ctx, Node& node)
+{
+    ctx.targetTypeMap[&node] = nullptr;
+    bool isWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, &node)) && ReplaceIdealTy(node);
+    node.SetTy(typeManager.TryGreedySubst(node.GetTy()));
+    return isWellTyped && Ty::IsTyCorrect(node.GetTy()) && !node.GetTy()->HasPlaceholder();
+}
+
 bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
 {
     if (auto res = PerformBasicChecksForCheck(ctx, target, node)) {
@@ -1109,6 +1146,8 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
             ReplaceIdealTy(*node);
             chkRet = typeManager.IsSubtype(node->GetTy(), realTarget);
         }
+    } else if (NeedTryExternConversion(*realTarget, *node) && !IsControlFlowExpr(*node)) {
+        chkRet = ChkWithExternConversion(*curCtx, *node);
     } else {
         switch (node->astKind) {
             case ASTKind::IF_EXPR: {
