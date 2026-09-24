@@ -229,7 +229,7 @@ inline Ptr<AST::InheritableDecl> GetCurInheritableDecl(const ASTContext& ctx, co
 bool IsExternValue(const AST::Expr& expr);
 /**
  * Whether @p ma is a dynamic member access e.f, i.e. an access to any member f of a value e of type Extern<T>.
- * Left values and callees are excluded, dynamic member updates and calls are not supported yet.
+ * Left values are excluded, dynamic member updates are not supported yet.
  */
 bool IsDynamicExternMemberAccess(const AST::MemberAccess& ma);
 /**
@@ -237,6 +237,11 @@ bool IsDynamicExternMemberAccess(const AST::MemberAccess& ma);
  * Extern<T>. Left values are excluded, dynamic index updates are not supported yet.
  */
 bool IsDynamicExternSubscript(const AST::SubscriptExpr& se);
+/**
+ * Whether @p ce is a dynamic call e(a1, ..., an), i.e. a call with arguments of any type to a value e of type Extern<T>.
+ * This includes e.f(a1, ..., an), whose callee e.f is a dynamic member access.
+ */
+bool IsDynamicExternCall(const AST::CallExpr& ce);
 
 /* Utils for TypeCheckCall and TypeArgumentInference */
 bool IsEnumCtorWithoutTypeArgs(const AST::Expr& expr, Ptr<const AST::Decl> target);

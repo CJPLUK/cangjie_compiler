@@ -30,6 +30,7 @@ namespace {
 const std::string EVAL_FUNC = "eval";
 const std::string EXTERN_MEMBER_ACCESS_CTOR = "ExternMemberAccess";
 const std::string EXTERN_INDEXED_ACCESS_CTOR = "ExternIndexedAccess";
+const std::string EXTERN_FUNCTION_CALL_CTOR = "ExternFunctionCall";
 
 class ExternOperations {
 public:
@@ -64,6 +65,9 @@ private:
         if (auto se = DynamicCast<const SubscriptExpr*>(&expr)) {
             return IsDynamicExternSubscript(*se);
         }
+        if (auto ce = DynamicCast<const CallExpr*>(&expr)) {
+            return IsDynamicExternCall(*ce);
+        }
         return false;
     }
 
@@ -75,6 +79,7 @@ private:
 
     void Desugar(Expr& expr);
     OwnedPtr<Expr> BuildTree(Expr& expr);
+    OwnedPtr<Expr> BuildArgs(CallExpr& ce, Ty& arrayTy);
     Ctor LookupCtor(const std::string& name, Ty& externTy);
     static OwnedPtr<CallExpr> CreateCtorCall(
         const Ctor& ctor, Ty& externTy, std::vector<OwnedPtr<Expr>> args, const Node& pos);
@@ -115,16 +120,43 @@ OwnedPtr<Expr> ExternOperations::BuildTree(Expr& expr)
         CopyBasicInfo(ma, field.get());
         args.emplace_back(BuildTree(*ma->baseExpr));
         args.emplace_back(std::move(field));
-    } else {
-        auto& se = StaticCast<SubscriptExpr&>(expr);
+    } else if (auto se = DynamicCast<SubscriptExpr*>(&expr)) {
         ctor = LookupCtor(EXTERN_INDEXED_ACCESS_CTOR, externTy);
-        args.emplace_back(BuildTree(*se.baseExpr));
-        args.emplace_back(BuildTree(*se.indexExprs[0]));
+        args.emplace_back(BuildTree(*se->baseExpr));
+        args.emplace_back(BuildTree(*se->indexExprs[0]));
+    } else {
+        auto& ce = StaticCast<CallExpr&>(expr);
+        ctor = LookupCtor(EXTERN_FUNCTION_CALL_CTOR, externTy);
+        if (!ctor.decl) {
+            return nullptr;
+        }
+        args.emplace_back(BuildTree(*ce.baseFunc));
+        args.emplace_back(BuildArgs(ce, *ctor.ty->paramTys[1]));
     }
     if (!ctor.decl || std::any_of(args.begin(), args.end(), [](auto& arg) { return !arg; })) {
         return nullptr;
     }
     return CreateCtorCall(ctor, externTy, std::move(args), expr);
+}
+
+OwnedPtr<Expr> ExternOperations::BuildArgs(CallExpr& ce, Ty& arrayTy)
+{
+    std::vector<OwnedPtr<Expr>> elements;
+    for (auto& arg : ce.args) {
+        auto element = BuildTree(*arg->expr);
+        if (!element) {
+            return nullptr;
+        }
+        elements.emplace_back(std::move(element));
+    }
+    auto arrayLit = CreateArrayLit(std::move(elements), &arrayTy);
+    AddArrayLitConstructor(*arrayLit);
+    if (!arrayLit->initFunc) {
+        return nullptr;
+    }
+    CopyBasicInfo(&ce, arrayLit.get());
+    arrayLit->EnableAttr(Attribute::IMPLICIT_ADD);
+    return arrayLit;
 }
 
 ExternOperations::Ctor ExternOperations::LookupCtor(const std::string& name, Ty& externTy)

@@ -819,14 +819,18 @@ bool IsExternValue(const Expr& expr)
 
 bool IsDynamicExternMemberAccess(const MemberAccess& ma)
 {
-    return !ma.target && ma.baseExpr && !ma.TestAttr(Attribute::LEFT_VALUE) && !Is<CallExpr>(ma.callOrPattern) &&
-        IsExternValue(*ma.baseExpr);
+    return !ma.target && ma.baseExpr && !ma.TestAttr(Attribute::LEFT_VALUE) && IsExternValue(*ma.baseExpr);
 }
 
 bool IsDynamicExternSubscript(const SubscriptExpr& se)
 {
     return !se.desugarExpr && se.baseExpr && se.indexExprs.size() == 1 && !se.TestAttr(Attribute::LEFT_VALUE) &&
         IsExternValue(*se.baseExpr);
+}
+
+bool IsDynamicExternCall(const CallExpr& ce)
+{
+    return !ce.desugarExpr && ce.baseFunc && IsExternValue(*ce.baseFunc);
 }
 
 bool IsEnumCtorWithoutTypeArgs(const Expr& expr, Ptr<const Decl> target)

@@ -943,6 +943,8 @@ private:
     bool ChkVariadicCallExpr(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce,
         const std::vector<Ptr<AST::FuncDecl>>& candidates, std::vector<Diagnostic>& diagnostics);
     bool SynArgsOfNothingBaseExpr(ASTContext& ctx, AST::CallExpr& ce);
+    /** Check the dynamic call @p ce, whose callee is a value of type Extern<T>. */
+    bool ChkExternCall(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
     /**
      * One call expression may have multiple function candidates.
      * Filter them with parameters' conditions before legality check.

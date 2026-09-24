@@ -2425,6 +2425,8 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
     ctx.targetTypeMap[ma->baseExpr] = nullptr;
     if (ma->GetTy() && ma->GetTy()->IsNothing()) {
         return true;
+    } else if (IsDynamicExternMemberAccess(*ma)) {
+        return true;
     } else if (!ma->target && ma->targets.empty()) {
         // 'varr' is VArray type, 'varr.size()' is illegitimate, 'size' of VArray is a property.
         if (Is<VArrayTy>(ma->baseExpr->GetTy()) && ma->field == "size") {
@@ -3011,6 +3013,9 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
     if (ce.baseFunc->GetTy()->IsNothing()) {
         return SynArgsOfNothingBaseExpr(ctx, ce);
     }
+    if (IsDynamicExternCall(ce)) {
+        return ChkExternCall(ctx, target, ce);
+    }
     // Check ToTokens interface implementation.
     if (ce.needCheckToTokens) {
         CheckToTokensImpCallExpr(ce);
@@ -3097,6 +3102,37 @@ bool TypeChecker::TypeCheckerImpl::SynArgsOfNothingBaseExpr(ASTContext& ctx, Cal
     });
     ce.SetTy(isWellTyped ? RawStaticCast<Ty*>(TypeManager::GetNothingTy()) : TypeManager::GetInvalidTy());
     return isWellTyped;
+}
+
+bool TypeChecker::TypeCheckerImpl::ChkExternCall(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce)
+{
+    auto externTy = ce.baseFunc->GetTy();
+    bool isWellTyped = true;
+    // The arguments are passed to the foreign runtime as Array<Any>, so they may have any type but cannot be named.
+    for (auto& arg : ce.args) {
+        if (!arg->name.Empty()) {
+            diag.Diagnose(*arg, DiagKind::sema_unsupport_named_argument);
+            isWellTyped = false;
+        }
+        if (arg->withInout) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_can_only_used_in_cfunc_calling, *arg);
+            isWellTyped = false;
+        }
+        bool argWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, arg.get())) &&
+            ReplaceIdealTy(*arg->expr) && ReplaceIdealTy(*arg);
+        isWellTyped = argWellTyped && isWellTyped;
+    }
+    if (!isWellTyped) {
+        ce.SetTy(TypeManager::GetInvalidTy());
+        return false;
+    }
+    if (target && !typeManager.IsSubtype(externTy, target)) {
+        DiagMismatchedTypesWithFoundTy(diag, ce, *target, *externTy);
+        ce.SetTy(TypeManager::GetInvalidTy());
+        return false;
+    }
+    ce.SetTy(externTy);
+    return true;
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkFunctionCallExpr(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce)
