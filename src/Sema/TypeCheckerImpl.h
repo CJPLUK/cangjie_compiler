@@ -173,8 +173,10 @@ private:
     bool SynthesizeAndReplaceIdealTy(const CheckerContext& ctx, AST::Node& node);
     /**
      * Main entry of the check mode of the type checking.
+     * @param allowToExternConv Whether @p node may have any type when @p target is Extern<T>, to be converted with
+     * T.toExtern later. Only set in the positions where the implicit conversion applies.
      */
-    bool Check(ASTContext& ctx, Ptr<AST::Ty> target, Ptr<AST::Node> node);
+    bool Check(ASTContext& ctx, Ptr<AST::Ty> target, Ptr<AST::Node> node, bool allowToExternConv = false);
     /** Implicit conversion of an expression to an expected Extern<T>. */
     bool NeedTryExternConversion(const AST::Ty& target, const AST::Node& node) const;
     bool ChkWithExternConversion(ASTContext& ctx, AST::Node& node);

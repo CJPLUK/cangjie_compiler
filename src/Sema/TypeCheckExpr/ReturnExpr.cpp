@@ -33,7 +33,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynReturnExpr(ASTContext& ctx, ReturnExpr&
         if (isInConstructor) {
             isWellTyped = CheckReturnInConstructors(ctx, re) && isWellTyped;
         } else {
-            isWellTyped = Check(ctx, retTy, re.expr.get());
+            isWellTyped = Check(ctx, retTy, re.expr.get(), true);
         }
         if (isWellTyped) {
             ctx.targetTypeMap[re.expr.get()] = re.expr->GetTy();

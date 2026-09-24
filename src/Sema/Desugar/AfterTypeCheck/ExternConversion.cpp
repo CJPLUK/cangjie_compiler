@@ -54,11 +54,6 @@ public:
                 [this](CallExpr& ce) { return HandleCallExpr(ce); },
                 [this](const ReturnExpr& re) { return HandleReturnExpr(re); },
                 [this](const FuncBody& fb) { return HandleFuncBody(fb); },
-                [this](const IfExpr& ie) { return HandleIfExpr(ie); },
-                [this](const TryExpr& te) { return HandleTryExpr(te); },
-                [this](const MatchExpr& me) { return HandleMatchExpr(me); },
-                [this](const ArrayLit& lit) { return HandleArrayLit(lit); },
-                [this](const TupleLit& tl) { return HandleTupleLit(tl); },
                 [this](ArrayExpr& ae) { return HandleArrayExpr(ae); },
                 []() { return VisitAction::WALK_CHILDREN; });
         };
@@ -76,11 +71,6 @@ private:
     VisitAction HandleCallExpr(CallExpr& ce);
     VisitAction HandleReturnExpr(const ReturnExpr& re);
     VisitAction HandleFuncBody(const FuncBody& fb);
-    VisitAction HandleIfExpr(const IfExpr& ie);
-    VisitAction HandleTryExpr(const TryExpr& te);
-    VisitAction HandleMatchExpr(const MatchExpr& me);
-    VisitAction HandleArrayLit(const ArrayLit& lit);
-    VisitAction HandleTupleLit(const TupleLit& tl);
     VisitAction HandleArrayExpr(ArrayExpr& ae);
 
     TypeManager& typeManager;
@@ -230,78 +220,6 @@ VisitAction ExternConversion::HandleFuncBody(const FuncBody& fb)
     auto retTy = RawStaticCast<FuncTy*>(fb.GetTy())->retTy;
     if (retTy && retTy->IsCoreExternType()) {
         TryConvertBlock(*fb.body, *retTy);
-    }
-    return VisitAction::WALK_CHILDREN;
-}
-
-VisitAction ExternConversion::HandleIfExpr(const IfExpr& ie)
-{
-    if (!Ty::IsTyCorrect(ie.GetTy()) || !ie.GetTy()->IsCoreExternType() || !ie.thenBody) {
-        return VisitAction::WALK_CHILDREN;
-    }
-    TryConvertBlock(*ie.thenBody, *ie.GetTy());
-    if (auto block = DynamicCast<Block*>(ie.elseBody.get())) {
-        TryConvertBlock(*block, *ie.GetTy());
-    } else if (auto elseIf = DynamicCast<IfExpr*>(ie.elseBody.get())) {
-        TryConvert(*elseIf, *ie.GetTy());
-    }
-    return VisitAction::WALK_CHILDREN;
-}
-
-VisitAction ExternConversion::HandleTryExpr(const TryExpr& te)
-{
-    if (!Ty::IsTyCorrect(te.GetTy()) || !te.GetTy()->IsCoreExternType()) {
-        return VisitAction::WALK_CHILDREN;
-    }
-    if (te.tryBlock) {
-        TryConvertBlock(*te.tryBlock, *te.GetTy());
-    }
-    for (auto& catchBlock : te.catchBlocks) {
-        TryConvertBlock(*catchBlock, *te.GetTy());
-    }
-    return VisitAction::WALK_CHILDREN;
-}
-
-VisitAction ExternConversion::HandleMatchExpr(const MatchExpr& me)
-{
-    if (!Ty::IsTyCorrect(me.GetTy()) || !me.GetTy()->IsCoreExternType()) {
-        return VisitAction::WALK_CHILDREN;
-    }
-    for (auto& matchCase : me.matchCases) {
-        if (matchCase->exprOrDecls) {
-            TryConvertBlock(*matchCase->exprOrDecls, *me.GetTy());
-        }
-    }
-    for (auto& caseOther : me.matchCaseOthers) {
-        if (caseOther->exprOrDecls) {
-            TryConvertBlock(*caseOther->exprOrDecls, *me.GetTy());
-        }
-    }
-    return VisitAction::WALK_CHILDREN;
-}
-
-VisitAction ExternConversion::HandleArrayLit(const ArrayLit& lit)
-{
-    if (!Ty::IsTyCorrect(lit.GetTy()) || lit.GetTy()->typeArgs.size() != 1 || !lit.GetTy()->typeArgs[0]) {
-        return VisitAction::WALK_CHILDREN;
-    }
-    auto elemTy = lit.GetTy()->typeArgs[0];
-    for (auto& child : lit.children) {
-        TryConvert(*child, *elemTy);
-    }
-    return VisitAction::WALK_CHILDREN;
-}
-
-VisitAction ExternConversion::HandleTupleLit(const TupleLit& tl)
-{
-    auto tupleTy = DynamicCast<TupleTy*>(tl.GetTy());
-    if (!tupleTy || tupleTy->typeArgs.size() != tl.children.size()) {
-        return VisitAction::WALK_CHILDREN;
-    }
-    for (size_t i = 0; i < tl.children.size(); ++i) {
-        if (tupleTy->typeArgs[i]) {
-            TryConvert(*tl.children[i], *tupleTy->typeArgs[i]);
-        }
     }
     return VisitAction::WALK_CHILDREN;
 }

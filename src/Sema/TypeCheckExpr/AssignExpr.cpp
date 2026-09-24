@@ -392,7 +392,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr&
         IsSingleByteStringLiteral(*ae.rightExpr)) {
         ae.rightExpr->SetTy(ae.leftValue->GetTy());
         ChkLitConstExprRange(StaticCast<LitConstExpr&>(*ae.rightExpr));
-    } else if (!Check(ctx, lTy, ae.rightExpr.get())) {
+    } else if (!Check(ctx, lTy, ae.rightExpr.get(), true)) {
         if (ae.ShouldDiagnose() && !CanSkipDiag(*ae.rightExpr)) {
             (void)diag.Diagnose(ae, DiagKind::sema_type_incompatible, "assignment");
         }

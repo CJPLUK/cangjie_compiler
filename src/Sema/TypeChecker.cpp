@@ -144,7 +144,7 @@ bool TypeChecker::TypeCheckerImpl::CheckBodyRetType(ASTContext& ctx, FuncBody& f
             // Errors should be already reported during the synthesis.
             isWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::UNUSED}, fb.body.get()));
         } else if (NeedCheckBodyReturn(fb)) {
-            isWellTyped = Check(ctx, fb.retType->GetTy(), fb.body.get());
+            isWellTyped = Check(ctx, fb.retType->GetTy(), fb.body.get(), true);
             if (!isWellTyped && fb.body->body.empty()) {
                 DiagMismatchedTypes(diag, *fb.body, *fb.retType, "return type");
             }
@@ -510,7 +510,7 @@ bool TypeChecker::TypeCheckerImpl::ChkFuncArg(ASTContext& ctx, Ty& target, FuncA
     if (fa.withInout) {
         return ChkFuncArgWithInout(ctx, target, fa);
     }
-    if (!Check(ctx, &target, fa.expr.get())) {
+    if (!Check(ctx, &target, fa.expr.get(), true)) {
         fa.SetTy(TypeManager::GetInvalidTy());
         return false;
     }
@@ -1104,12 +1104,12 @@ bool TypeChecker::TypeCheckerImpl::ChkWithExternConversion(ASTContext& ctx, Node
     return isWellTyped && Ty::IsTyCorrect(node.GetTy()) && !node.GetTy()->HasPlaceholder();
 }
 
-bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
+bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node, bool allowToExternConv)
 {
     if (auto res = PerformBasicChecksForCheck(ctx, target, node)) {
         return *res;
     }
-    if (NeedTryExternConversion(*typeManager.TryGreedySubst(target), *node)) {
+    if (allowToExternConv && NeedTryExternConversion(*typeManager.TryGreedySubst(target), *node)) {
         return ChkWithExternConversion(ctx, *node);
     }
     ctx.typeCheckCache[node].lastKey = GetCacheKeyForChk(ctx, node, target);
