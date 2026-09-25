@@ -612,10 +612,11 @@ private:
     void PerformDesugarAfterTypeCheck(ASTContext& ctx, AST::Package& pkg);
     void GenerateMainInvoke();
     void TryDesugarForCoalescing(AST::Node& root) const;
-    /** Rewrite expressions implicitly converted to Extern<T> into T.toExtern<U>(e). */
-    void DesugarExternConversions(ASTContext& ctx, AST::Package& pkg);
-    /** Rewrite dynamic operations on Extern<T> values into T.eval(tree). */
-    void DesugarExternOperations(ASTContext& ctx, AST::Package& pkg);
+    /**
+     * Rewrite expressions implicitly converted to Extern<T> into T.toExtern<U>(e), and dynamic operations on
+     * Extern<T> values into T.eval(tree).
+     */
+    void DesugarExtern(ASTContext& ctx, AST::Package& pkg);
     /**
      * Look up the static function @p name of the foreign runtime @p runtimeTy. A generic runtime is only known through
      * its upper bounds, so the function is looked up in ForeignRuntime<T>. The function is called for @p pos, which is

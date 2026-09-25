@@ -1093,7 +1093,7 @@ bool TypeChecker::TypeCheckerImpl::NeedExternConversion(Ty& from, Ty& to)
 
 /**
  * Any well-typed expression is accepted wherever Extern<T> is expected. Its own type U is synthesized and kept as the
- * type of the node, so that DesugarExternConversions can later rewrite it into T.toExtern<U>(e) when U is not
+ * type of the node, so that DesugarExtern can later rewrite it into T.toExtern<U>(e) when U is not
  * Extern<T>.
  */
 bool TypeChecker::TypeCheckerImpl::ChkWithExternConversion(ASTContext& ctx, Node& node)
