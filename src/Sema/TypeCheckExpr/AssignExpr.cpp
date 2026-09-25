@@ -318,18 +318,6 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynExternUpdate(ASTContext&
             ds.ReportDiag();
         }
     }
-    if (ae.isCompound) {
-        // Compound assignment to a dynamic access is not supported.
-        if (!IsExternValue(*base)) {
-            return {};
-        }
-        Synthesize({ctx, SynPos::EXPR_ARG}, ae.rightExpr.get());
-        if (ae.ShouldDiagnose()) {
-            (void)diag.Diagnose(ae, DiagKind::sema_type_incompatible, "compound assignment expression");
-        }
-        ae.SetTy(TypeManager::GetInvalidTy());
-        return {ae.GetTy()};
-    }
     if (!IsDynamicExternUpdate(ae)) {
         return {};
     }

@@ -238,8 +238,9 @@ bool IsDynamicExternMemberAccess(const AST::MemberAccess& ma);
  */
 bool IsDynamicExternSubscript(const AST::SubscriptExpr& se);
 /**
- * Whether @p ae is a dynamic update e.f = v or e[i1, ..., in] = v, i.e. an assignment to a member or to indices of a
- * value e of type Extern<T>. The base of the left value must have been type checked.
+ * Whether @p ae is a dynamic update e.f = v or e[i1, ..., in] = v, or a dynamic compound assignment e.f op= v or
+ * e[i1, ..., in] op= v, i.e. an assignment to a member or to indices of a value e of type Extern<T>. The base of the
+ * left value must have been type checked.
  */
 bool IsDynamicExternUpdate(const AST::AssignExpr& ae);
 /**

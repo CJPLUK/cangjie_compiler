@@ -830,7 +830,7 @@ bool IsDynamicExternSubscript(const SubscriptExpr& se)
 
 bool IsDynamicExternUpdate(const AssignExpr& ae)
 {
-    if (ae.isCompound || ae.desugarExpr || !ae.leftValue || !ae.rightExpr) {
+    if (ae.desugarExpr || !ae.leftValue || !ae.rightExpr) {
         return false;
     }
     if (auto ma = DynamicCast<const MemberAccess*>(ae.leftValue.get())) {

@@ -33,6 +33,7 @@ const std::string EXTERN_INDEXED_ACCESS_CTOR = "ExternIndexedAccess";
 const std::string EXTERN_MEMBER_UPDATE_CTOR = "ExternMemberUpdate";
 const std::string EXTERN_INDEXED_UPDATE_CTOR = "ExternIndexedUpdate";
 const std::string EXTERN_FUNCTION_CALL_CTOR = "ExternFunctionCall";
+const std::string EXTERN_COMPOUND_ASSIGNMENT_CTOR = "ExternCompoundAssignment";
 
 class ExternOperations {
 public:
@@ -46,6 +47,9 @@ public:
     {
         std::function<VisitAction(Ptr<Node>)> preVisit = [this](Ptr<Node> node) -> VisitAction {
             auto expr = DynamicCast<Expr*>(node);
+            if (auto ae = DynamicCast<AssignExpr*>(expr)) {
+                PrepareStaticCompoundAssignment(*ae);
+            }
             if (!expr || !IsDynamic(*expr)) {
                 return VisitAction::WALK_CHILDREN;
             }
@@ -82,8 +86,25 @@ private:
         Ptr<FuncTy> ty{nullptr};
     };
 
+    /** Whether evaluating @p expr more than once has no observable effect. */
+    static bool IsSideEffectFree(const Expr& expr)
+    {
+        auto target = expr.GetTarget();
+        bool isPureTarget = target &&
+            (target->IsTypeDecl() || target->astKind == ASTKind::PACKAGE_DECL ||
+                (Is<VarDecl>(target) && !Is<PropDecl>(target)));
+        if (expr.astKind == ASTKind::REF_EXPR) {
+            return isPureTarget;
+        }
+        auto ma = DynamicCast<const MemberAccess*>(&expr);
+        return ma && isPureTarget && ma->baseExpr && IsSideEffectFree(*ma->baseExpr);
+    }
+
+    void PrepareStaticCompoundAssignment(AssignExpr& ae);
     void Desugar(Expr& expr);
     OwnedPtr<Expr> BuildTree(Expr& expr);
+    OwnedPtr<Expr> BuildOperation(Expr& expr, Ty& externTy);
+    OwnedPtr<Expr> BuildCompoundAssignment(AssignExpr& ae, Ty& externTy);
     OwnedPtr<Expr> BuildArgs(CallExpr& ce, Ty& arrayTy);
     Ctor LookupCtor(const std::string& name, Ty& externTy);
     static OwnedPtr<CallExpr> CreateCtorCall(
@@ -105,6 +126,47 @@ void ExternOperations::Desugar(Expr& expr)
     Run(*expr.desugarExpr);
 }
 
+/**
+ * A compound assignment lhs op= v whose statically resolved left value lhs has type Extern<T> is type checked as
+ * lhs = lhs'.op(v), where the copy lhs' is mapped to lhs so that the receiver of lhs is evaluated once. lhs' becomes
+ * a leaf of the tree of the dynamic call and is read as a value, while the mapping yields a reference to lhs. So lhs'
+ * is either evaluated again, if that has no effect, or the receiver of lhs is stored in a variable:
+ * {
+ *     let tmp = base
+ *     tmp.x = tmp.x.op(v)
+ * }
+ */
+void ExternOperations::PrepareStaticCompoundAssignment(AssignExpr& ae)
+{
+    auto inner = ae.isCompound ? DynamicCast<AssignExpr*>(ae.desugarExpr.get()) : nullptr;
+    auto ce = inner ? DynamicCast<CallExpr*>(inner->rightExpr.get()) : nullptr;
+    auto callee = ce && IsDynamic(*ce) ? DynamicCast<MemberAccess*>(ce->baseFunc.get()) : nullptr;
+    if (!callee || !callee->baseExpr || callee->baseExpr->mapExpr != inner->leftValue.get()) {
+        return;
+    }
+    auto& copy = *callee->baseExpr;
+    copy.mapExpr = nullptr;
+    auto lhs = DynamicCast<MemberAccess*>(inner->leftValue.get());
+    if (!lhs || !lhs->baseExpr || IsSideEffectFree(*lhs->baseExpr)) {
+        return;
+    }
+    auto vd = CreateVarDecl(V_COMPILER, std::move(lhs->baseExpr));
+    vd->fullPackageName = ae.GetFullPackageName();
+    CopyBasicInfo(vd->initializer.get(), vd.get());
+    lhs->baseExpr = CreateRefExpr(*vd, *vd->initializer);
+    CopyBasicInfo(vd->initializer.get(), lhs->baseExpr.get());
+    auto& copyAccess = StaticCast<MemberAccess&>(copy);
+    copyAccess.baseExpr = CreateRefExpr(*vd, *vd->initializer);
+    CopyBasicInfo(vd->initializer.get(), copyAccess.baseExpr.get());
+    std::vector<OwnedPtr<Node>> nodes;
+    nodes.emplace_back(std::move(vd));
+    nodes.emplace_back(std::move(ae.desugarExpr));
+    auto block = CreateBlock(std::move(nodes), ae.GetTy());
+    CopyBasicInfo(&ae, block.get());
+    AddCurFile(*block, ae.curFile);
+    ae.desugarExpr = std::move(block);
+}
+
 OwnedPtr<Expr> ExternOperations::BuildTree(Expr& expr)
 {
     if (auto pe = DynamicCast<ParenExpr*>(&expr); pe && pe->expr && IsDynamic(*pe->expr)) {
@@ -113,9 +175,16 @@ OwnedPtr<Expr> ExternOperations::BuildTree(Expr& expr)
     if (!IsDynamic(expr)) {
         return ASTCloner::Clone(Ptr(&expr));
     }
-    auto& externTy = *expr.GetTy();
+    return BuildOperation(expr, *expr.GetTy());
+}
+
+OwnedPtr<Expr> ExternOperations::BuildOperation(Expr& expr, Ty& externTy)
+{
     // An update is built like the access to its left value, with the assigned value as an extra argument.
     auto ae = DynamicCast<AssignExpr*>(&expr);
+    if (ae && ae->isCompound) {
+        return BuildCompoundAssignment(*ae, externTy);
+    }
     auto& access = ae ? *ae->leftValue : expr;
     Ctor ctor;
     std::vector<OwnedPtr<Expr>> args;
@@ -161,6 +230,28 @@ OwnedPtr<Expr> ExternOperations::BuildTree(Expr& expr)
         return nullptr;
     }
     return CreateCtorCall(ctor, externTy, std::move(args), expr);
+}
+
+OwnedPtr<Expr> ExternOperations::BuildCompoundAssignment(AssignExpr& ae, Ty& externTy)
+{
+    auto ctor = LookupCtor(EXTERN_COMPOUND_ASSIGNMENT_CTOR, externTy);
+    if (!ctor.decl) {
+        return nullptr;
+    }
+    // e.f op= v is built from the access e.f and the binary operator op, without '='.
+    auto target = BuildOperation(*ae.leftValue, externTy);
+    auto op = CreateLitConstExpr(LitConstKind::STRING,
+        TOKENS[static_cast<int>(COMPOUND_ASSIGN_EXPR_MAP.at(ae.op))], ctor.ty->paramTys[1], true);
+    CopyBasicInfo(&ae, op.get());
+    auto value = BuildTree(*ae.rightExpr);
+    if (!target || !value) {
+        return nullptr;
+    }
+    std::vector<OwnedPtr<Expr>> args;
+    args.emplace_back(std::move(target));
+    args.emplace_back(std::move(op));
+    args.emplace_back(std::move(value));
+    return CreateCtorCall(ctor, externTy, std::move(args), ae);
 }
 
 OwnedPtr<Expr> ExternOperations::BuildArgs(CallExpr& ce, Ty& arrayTy)
