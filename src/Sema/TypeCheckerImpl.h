@@ -618,10 +618,11 @@ private:
     void DesugarExternOperations(ASTContext& ctx, AST::Package& pkg);
     /**
      * Look up the static function @p name of the foreign runtime @p runtimeTy. A generic runtime is only known through
-     * its upper bounds, so the function is looked up in ForeignRuntime<T>.
+     * its upper bounds, so the function is looked up in ForeignRuntime<T>. The function is called for @p pos, which is
+     * diagnosed if the function of a non-generic runtime is not implemented.
      */
     ForeignRuntimeFunc LookupForeignRuntimeFunc(
-        ASTContext& ctx, AST::Ty& runtimeTy, const std::string& name, Ptr<const AST::File> file);
+        ASTContext& ctx, AST::Ty& runtimeTy, const std::string& name, const AST::Expr& pos);
     void DesugarForCoalescing(AST::BinaryExpr& binaryExpr) const;
     void DesugarForInExpr(ASTContext& ctx, AST::ForInExpr& forInExpr);
     void DesugarForInCloseRange(ASTContext& ctx, AST::ForInExpr& forInExpr);

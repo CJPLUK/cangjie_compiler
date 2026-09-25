@@ -59,7 +59,7 @@ const std::string TO_EXTERN_FUNC = "toExtern";
 class ExternConversion {
 public:
     using NeedConversion = std::function<bool(Ty& from, Ty& to)>;
-    using TargetLookup = std::function<ForeignRuntimeFunc(Ty& runtimeTy, Ptr<const File> file)>;
+    using TargetLookup = std::function<ForeignRuntimeFunc(Ty& runtimeTy, const Expr& pos)>;
 
     ExternConversion(TypeManager& typeManager, NeedConversion needConversion, TargetLookup lookup)
         : typeManager(typeManager), needConversion(std::move(needConversion)), lookup(std::move(lookup))
@@ -84,7 +84,7 @@ public:
 private:
     bool TryConvert(Expr& expr, Ty& target);
     void TryConvertBlock(Block& block, Ty& target);
-    OwnedPtr<Expr> CreateToExternCall(OwnedPtr<Expr> value, Ty& valueTy, Ty& target, Ptr<const File> file);
+    OwnedPtr<Expr> CreateToExternCall(OwnedPtr<Expr> value, Ty& valueTy, Ty& target, const Expr& pos);
 
     VisitAction HandleVarDecl(const VarDecl& vd);
     VisitAction HandleAssignExpr(const AssignExpr& ae);
@@ -99,11 +99,11 @@ private:
 };
 
 OwnedPtr<Expr> ExternConversion::CreateToExternCall(
-    OwnedPtr<Expr> value, Ty& valueTy, Ty& target, Ptr<const File> file)
+    OwnedPtr<Expr> value, Ty& valueTy, Ty& target, const Expr& pos)
 {
     CJC_ASSERT(target.IsCoreExternType());
     auto runtimeTy = target.typeArgs[0];
-    auto [toExtern, matchedParentTy] = lookup(*runtimeTy, file);
+    auto [toExtern, matchedParentTy] = lookup(*runtimeTy, pos);
     if (!toExtern) {
         return nullptr;
     }
@@ -128,7 +128,7 @@ bool ExternConversion::TryConvert(Expr& expr, Ty& target)
         return false;
     }
     auto value = expr.desugarExpr ? std::move(expr.desugarExpr) : ASTCloner::Clone(Ptr(&expr));
-    auto ce = CreateToExternCall(std::move(value), *valueTy, target, expr.curFile);
+    auto ce = CreateToExternCall(std::move(value), *valueTy, target, expr);
     if (!ce) {
         return false;
     }
@@ -255,7 +255,7 @@ VisitAction ExternConversion::HandleArrayExpr(ArrayExpr& ae)
 } // namespace
 
 ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
-    ASTContext& ctx, Ty& runtimeTy, const std::string& name, Ptr<const File> file)
+    ASTContext& ctx, Ty& runtimeTy, const std::string& name, const Expr& pos)
 {
     std::vector<Ptr<Decl>> candidates;
     if (runtimeTy.IsGeneric()) {
@@ -265,7 +265,7 @@ ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
         }
         candidates = foreignRuntime->GetMemberDeclPtrs();
     } else {
-        candidates = FieldLookup(ctx, Ty::GetDeclOfTy(&runtimeTy), name, {&runtimeTy, file});
+        candidates = FieldLookup(ctx, Ty::GetDeclOfTy(&runtimeTy), name, {&runtimeTy, pos.curFile});
     }
     Ptr<FuncDecl> func = nullptr;
     for (auto decl : candidates) {
@@ -280,6 +280,10 @@ ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
     }
     if (!func) {
         return {};
+    }
+    // Like a static call T.name(...) written by hand, the call must have an implementation.
+    if (!runtimeTy.IsGeneric() && func->TestAttr(Attribute::ABSTRACT)) {
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_interface_call_with_unimplemented_call, pos, "function", name);
     }
     Ptr<Ty> matchedParentTy = nullptr;
     if (func->outerDecl && func->outerDecl->astKind == ASTKind::INTERFACE_DECL) {
@@ -297,8 +301,8 @@ void TypeChecker::TypeCheckerImpl::DesugarExternConversions(ASTContext& ctx, Pac
         return;
     }
     auto needConversion = [this](Ty& from, Ty& to) { return NeedExternConversion(from, to); };
-    auto lookup = [this, &ctx](Ty& runtimeTy, Ptr<const File> file) {
-        return LookupForeignRuntimeFunc(ctx, runtimeTy, TO_EXTERN_FUNC, file);
+    auto lookup = [this, &ctx](Ty& runtimeTy, const Expr& pos) {
+        return LookupForeignRuntimeFunc(ctx, runtimeTy, TO_EXTERN_FUNC, pos);
     };
     ExternConversion(typeManager, needConversion, lookup).Run(pkg);
 }

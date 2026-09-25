@@ -37,7 +37,7 @@ const std::string EXTERN_COMPOUND_ASSIGNMENT_CTOR = "ExternCompoundAssignment";
 
 class ExternOperations {
 public:
-    using EvalLookup = std::function<ForeignRuntimeFunc(Ty& runtimeTy, Ptr<const File> file)>;
+    using EvalLookup = std::function<ForeignRuntimeFunc(Ty& runtimeTy, const Expr& pos)>;
 
     ExternOperations(TypeManager& typeManager, EvalLookup lookup) : typeManager(typeManager), lookup(std::move(lookup))
     {
@@ -312,7 +312,7 @@ OwnedPtr<CallExpr> ExternOperations::CreateEvalCall(OwnedPtr<Expr> tree, Ty& ext
 {
     CJC_ASSERT(externTy.IsCoreExternType());
     auto runtimeTy = externTy.typeArgs[0];
-    auto [eval, matchedParentTy] = lookup(*runtimeTy, pos.curFile);
+    auto [eval, matchedParentTy] = lookup(*runtimeTy, pos);
     if (!eval) {
         return nullptr;
     }
@@ -332,8 +332,8 @@ OwnedPtr<CallExpr> ExternOperations::CreateEvalCall(OwnedPtr<Expr> tree, Ty& ext
 
 void TypeChecker::TypeCheckerImpl::DesugarExternOperations(ASTContext& ctx, Package& pkg)
 {
-    auto lookup = [this, &ctx](Ty& runtimeTy, Ptr<const File> file) {
-        return LookupForeignRuntimeFunc(ctx, runtimeTy, EVAL_FUNC, file);
+    auto lookup = [this, &ctx](Ty& runtimeTy, const Expr& pos) {
+        return LookupForeignRuntimeFunc(ctx, runtimeTy, EVAL_FUNC, pos);
     };
     ExternOperations(typeManager, lookup).Run(pkg);
 }
