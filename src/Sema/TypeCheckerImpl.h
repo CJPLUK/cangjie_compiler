@@ -1713,6 +1713,8 @@ private:
     std::optional<Ptr<AST::Ty>> SynLiteralInBinaryExprFromRight(ASTContext& ctx, AST::BinaryExpr& be);
     Ptr<AST::Ty> SynLiteralInBinaryExprFromLeft(ASTContext& ctx, AST::BinaryExpr& be);
     void DiagnoseForSubscriptAssignExpr(ASTContext& ctx, const AST::AssignExpr& ae, std::vector<Diagnostic>& diags);
+    /** Synthesize the dynamic update e.f = v or e[i] = v on a value e of type Extern<T>, if @p ae is one. */
+    std::optional<Ptr<AST::Ty>> SynExternUpdate(ASTContext& ctx, AST::AssignExpr& ae);
     std::optional<Ptr<AST::Ty>> InferAssignExprCheckCaseOverloading(
         ASTContext& ctx, AST::AssignExpr& ae, std::vector<Diagnostic>& diags);
     bool PreCheckCompoundAssign(

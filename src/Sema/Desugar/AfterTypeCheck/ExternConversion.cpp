@@ -180,7 +180,8 @@ VisitAction ExternConversion::HandleVarDecl(const VarDecl& vd)
 
 VisitAction ExternConversion::HandleAssignExpr(const AssignExpr& ae)
 {
-    if (ae.desugarExpr || ae.isCompound || !ae.leftValue || !ae.rightExpr || !ae.leftValue->GetTy()) {
+    if (ae.desugarExpr || ae.isCompound || !ae.leftValue || !ae.rightExpr || !ae.leftValue->GetTy() ||
+        IsDynamicExternUpdate(ae)) {
         return VisitAction::WALK_CHILDREN;
     }
     TryConvert(*ae.rightExpr, *ae.leftValue->GetTy());

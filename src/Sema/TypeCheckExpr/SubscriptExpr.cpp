@@ -176,9 +176,11 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayAccess(ASTContext& ctx, Ptr<Ty> targ
 
 bool TypeChecker::TypeCheckerImpl::ChkExternSubscript(Ptr<Ty> target, SubscriptExpr& se, Ty& externTy)
 {
-    // The index is passed to the foreign runtime as Any, so it may have any type.
-    if (!ReplaceIdealTy(*se.indexExprs[0])) {
-        return false;
+    // The indices are passed to the foreign runtime as Any, so they may have any type.
+    for (auto& index : se.indexExprs) {
+        if (!ReplaceIdealTy(*index)) {
+            return false;
+        }
     }
     if (target && !typeManager.IsSubtype(&externTy, target)) {
         DiagMismatchedTypesWithFoundTy(diag, se, *target, externTy);

@@ -824,8 +824,22 @@ bool IsDynamicExternMemberAccess(const MemberAccess& ma)
 
 bool IsDynamicExternSubscript(const SubscriptExpr& se)
 {
-    return !se.desugarExpr && se.baseExpr && se.indexExprs.size() == 1 && !se.TestAttr(Attribute::LEFT_VALUE) &&
+    return !se.desugarExpr && se.baseExpr && !se.indexExprs.empty() && !se.TestAttr(Attribute::LEFT_VALUE) &&
         IsExternValue(*se.baseExpr);
+}
+
+bool IsDynamicExternUpdate(const AssignExpr& ae)
+{
+    if (ae.isCompound || ae.desugarExpr || !ae.leftValue || !ae.rightExpr) {
+        return false;
+    }
+    if (auto ma = DynamicCast<const MemberAccess*>(ae.leftValue.get())) {
+        return !ma->target && ma->baseExpr && IsExternValue(*ma->baseExpr);
+    }
+    if (auto se = DynamicCast<const SubscriptExpr*>(ae.leftValue.get())) {
+        return !se->desugarExpr && se->baseExpr && !se->indexExprs.empty() && IsExternValue(*se->baseExpr);
+    }
+    return false;
 }
 
 bool IsDynamicExternCall(const CallExpr& ce)

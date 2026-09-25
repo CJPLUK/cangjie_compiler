@@ -30,6 +30,8 @@ namespace {
 const std::string EVAL_FUNC = "eval";
 const std::string EXTERN_MEMBER_ACCESS_CTOR = "ExternMemberAccess";
 const std::string EXTERN_INDEXED_ACCESS_CTOR = "ExternIndexedAccess";
+const std::string EXTERN_MEMBER_UPDATE_CTOR = "ExternMemberUpdate";
+const std::string EXTERN_INDEXED_UPDATE_CTOR = "ExternIndexedUpdate";
 const std::string EXTERN_FUNCTION_CALL_CTOR = "ExternFunctionCall";
 
 class ExternOperations {
@@ -67,6 +69,9 @@ private:
         }
         if (auto ce = DynamicCast<const CallExpr*>(&expr)) {
             return IsDynamicExternCall(*ce);
+        }
+        if (auto ae = DynamicCast<const AssignExpr*>(&expr)) {
+            return IsDynamicExternUpdate(*ae);
         }
         return false;
     }
@@ -109,10 +114,13 @@ OwnedPtr<Expr> ExternOperations::BuildTree(Expr& expr)
         return ASTCloner::Clone(Ptr(&expr));
     }
     auto& externTy = *expr.GetTy();
+    // An update is built like the access to its left value, with the assigned value as an extra argument.
+    auto ae = DynamicCast<AssignExpr*>(&expr);
+    auto& access = ae ? *ae->leftValue : expr;
     Ctor ctor;
     std::vector<OwnedPtr<Expr>> args;
-    if (auto ma = DynamicCast<MemberAccess*>(&expr)) {
-        ctor = LookupCtor(EXTERN_MEMBER_ACCESS_CTOR, externTy);
+    if (auto ma = DynamicCast<MemberAccess*>(&access)) {
+        ctor = LookupCtor(ae ? EXTERN_MEMBER_UPDATE_CTOR : EXTERN_MEMBER_ACCESS_CTOR, externTy);
         if (!ctor.decl) {
             return nullptr;
         }
@@ -120,10 +128,23 @@ OwnedPtr<Expr> ExternOperations::BuildTree(Expr& expr)
         CopyBasicInfo(ma, field.get());
         args.emplace_back(BuildTree(*ma->baseExpr));
         args.emplace_back(std::move(field));
-    } else if (auto se = DynamicCast<SubscriptExpr*>(&expr)) {
-        ctor = LookupCtor(EXTERN_INDEXED_ACCESS_CTOR, externTy);
-        args.emplace_back(BuildTree(*se->baseExpr));
-        args.emplace_back(BuildTree(*se->indexExprs[0]));
+    } else if (auto se = DynamicCast<SubscriptExpr*>(&access)) {
+        // e[i1, ..., in] is built like e[i1]...[in].
+        auto receiver = BuildTree(*se->baseExpr);
+        auto accessCtor = LookupCtor(EXTERN_INDEXED_ACCESS_CTOR, externTy);
+        for (size_t i = 0; i + 1 < se->indexExprs.size(); ++i) {
+            auto index = BuildTree(*se->indexExprs[i]);
+            if (!accessCtor.decl || !receiver || !index) {
+                return nullptr;
+            }
+            std::vector<OwnedPtr<Expr>> accessArgs;
+            accessArgs.emplace_back(std::move(receiver));
+            accessArgs.emplace_back(std::move(index));
+            receiver = CreateCtorCall(accessCtor, externTy, std::move(accessArgs), *se);
+        }
+        ctor = ae ? LookupCtor(EXTERN_INDEXED_UPDATE_CTOR, externTy) : accessCtor;
+        args.emplace_back(std::move(receiver));
+        args.emplace_back(BuildTree(*se->indexExprs.back()));
     } else {
         auto& ce = StaticCast<CallExpr&>(expr);
         ctor = LookupCtor(EXTERN_FUNCTION_CALL_CTOR, externTy);
@@ -132,6 +153,9 @@ OwnedPtr<Expr> ExternOperations::BuildTree(Expr& expr)
         }
         args.emplace_back(BuildTree(*ce.baseFunc));
         args.emplace_back(BuildArgs(ce, *ctor.ty->paramTys[1]));
+    }
+    if (ae) {
+        args.emplace_back(BuildTree(*ae->rightExpr));
     }
     if (!ctor.decl || std::any_of(args.begin(), args.end(), [](auto& arg) { return !arg; })) {
         return nullptr;
