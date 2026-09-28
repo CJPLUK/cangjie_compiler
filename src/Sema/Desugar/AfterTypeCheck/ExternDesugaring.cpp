@@ -43,10 +43,11 @@ const std::string EXTERN_COMPOUND_ASSIGNMENT_CTOR = "ExternCompoundAssignment";
 
 /**
  * Create the reference RT.func to the static function @p func of the foreign runtime @p runtimeTy, typed @p funcTy.
- * @p matchedParentTy is the instantiated interface type when @p func is a member of an interface.
+ * @p matchedParentTy is the instantiated interface type when @p func is a member of an interface. The reference takes
+ * the position of @p expr, the expression being desugared.
  */
 OwnedPtr<MemberAccess> CreateForeignRuntimeFuncAccess(
-    Ty& runtimeTy, FuncDecl& func, Ptr<Ty> matchedParentTy, Ty& funcTy, const Node& pos)
+    Ty& runtimeTy, FuncDecl& func, Ptr<Ty> matchedParentTy, Ty& funcTy, const Expr& expr)
 {
     Ptr<Decl> runtimeDecl = runtimeTy.IsGeneric() ? Ptr<Decl>(StaticCast<GenericsTy*>(&runtimeTy)->decl)
                                                   : Ty::GetDeclOfTy(&runtimeTy);
@@ -59,7 +60,7 @@ OwnedPtr<MemberAccess> CreateForeignRuntimeFuncAccess(
     if (!runtimeTy.IsGeneric()) {
         runtimeRef->instTys = runtimeTy.typeArgs;
     }
-    CopyBasicInfo(&pos, runtimeRef.get());
+    CopyBasicInfo(&expr, runtimeRef.get());
 
     auto funcAccess = CreateMemberAccess(std::move(runtimeRef), func);
     funcAccess->EnableAttr(Attribute::IMPLICIT_ADD);
@@ -72,7 +73,7 @@ class ExternDesugaring {
 public:
     using NeedConversion = std::function<bool(Ty& from, Ty& to)>;
     using RuntimeFuncLookup =
-        std::function<ForeignRuntimeFunc(Ty& runtimeTy, const std::string& name, const Expr& pos)>;
+        std::function<ForeignRuntimeFunc(Ty& runtimeTy, const std::string& name, const Expr& expr)>;
 
     ExternDesugaring(TypeManager& typeManager, NeedConversion needConversion, RuntimeFuncLookup lookup)
         : typeManager(typeManager), needConversion(std::move(needConversion)), lookup(std::move(lookup))
@@ -161,10 +162,10 @@ private:
     OwnedPtr<Expr> BuildArgs(CallExpr& ce, Ty& arrayTy);
     Ctor LookupCtor(const std::string& name, Ty& externTy);
     static OwnedPtr<CallExpr> CreateCtorCall(
-        const Ctor& ctor, Ty& externTy, std::vector<OwnedPtr<Expr>> args, const Node& pos);
+        const Ctor& ctor, Ty& externTy, std::vector<OwnedPtr<Expr>> args, const Expr& expr);
 
     OwnedPtr<CallExpr> CreateRuntimeCall(const std::string& name, OwnedPtr<Expr> arg, Ty& argTy, Ty& externTy,
-        std::vector<Ptr<Ty>> instTys, const Expr& pos);
+        std::vector<Ptr<Ty>> instTys, const Expr& expr);
 
     TypeManager& typeManager;
     NeedConversion needConversion;
@@ -474,43 +475,44 @@ ExternDesugaring::Ctor ExternDesugaring::LookupCtor(const std::string& name, Ty&
     return ctorTy ? Ctor{ctor, ctorTy} : Ctor{};
 }
 
+/** Create the call of the constructor @p ctor, for the desugaring of @p expr. */
 OwnedPtr<CallExpr> ExternDesugaring::CreateCtorCall(
-    const Ctor& ctor, Ty& externTy, std::vector<OwnedPtr<Expr>> args, const Node& pos)
+    const Ctor& ctor, Ty& externTy, std::vector<OwnedPtr<Expr>> args, const Expr& expr)
 {
     CJC_ASSERT(ctor.decl && ctor.ty && ctor.ty->paramTys.size() == args.size());
     auto ctorRef = CreateRefExpr(*ctor.decl);
     ctorRef->SetTy(ctor.ty);
     ctorRef->EnableAttr(Attribute::IMPLICIT_ADD);
-    CopyBasicInfo(&pos, ctorRef.get());
+    CopyBasicInfo(&expr, ctorRef.get());
     std::vector<OwnedPtr<FuncArg>> funcArgs;
     for (size_t i = 0; i < args.size(); ++i) {
         auto argTy = args[i]->GetTy();
         auto arg = CreateFuncArg(std::move(args[i]), "", argTy);
-        CopyBasicInfo(&pos, arg.get());
+        CopyBasicInfo(&expr, arg.get());
         funcArgs.emplace_back(std::move(arg));
     }
     auto ce = CreateCallExpr(
         std::move(ctorRef), std::move(funcArgs), ctor.decl, &externTy, CallKind::CALL_DECLARED_FUNCTION);
     ce->EnableAttr(Attribute::IMPLICIT_ADD);
-    CopyBasicInfo(&pos, ce.get());
+    CopyBasicInfo(&expr, ce.get());
     return ce;
 }
 
 /**
  * Create the call T.name<instTys>(arg) to the static function @p name of the foreign runtime T of @p externTy, which
- * takes @p argTy and returns @p externTy.
+ * takes @p argTy and returns @p externTy, for the desugaring of @p expr.
  */
 OwnedPtr<CallExpr> ExternDesugaring::CreateRuntimeCall(const std::string& name, OwnedPtr<Expr> arg, Ty& argTy,
-    Ty& externTy, std::vector<Ptr<Ty>> instTys, const Expr& pos)
+    Ty& externTy, std::vector<Ptr<Ty>> instTys, const Expr& expr)
 {
     CJC_ASSERT(externTy.IsCoreExternType());
     auto runtimeTy = externTy.typeArgs[0];
-    auto [func, matchedParentTy] = lookup(*runtimeTy, name, pos);
+    auto [func, matchedParentTy] = lookup(*runtimeTy, name, expr);
     if (!func) {
         return nullptr;
     }
     auto baseFunc = CreateForeignRuntimeFuncAccess(
-        *runtimeTy, *func, matchedParentTy, *typeManager.GetFunctionTy({&argTy}, &externTy), pos);
+        *runtimeTy, *func, matchedParentTy, *typeManager.GetFunctionTy({&argTy}, &externTy), expr);
     if (!baseFunc) {
         return nullptr;
     }
@@ -519,13 +521,13 @@ OwnedPtr<CallExpr> ExternDesugaring::CreateRuntimeCall(const std::string& name, 
     args.emplace_back(CreateFuncArg(std::move(arg), "", &argTy));
     auto ce = CreateCallExpr(std::move(baseFunc), std::move(args), func, &externTy, CallKind::CALL_DECLARED_FUNCTION);
     ce->EnableAttr(Attribute::IMPLICIT_ADD);
-    CopyBasicInfo(&pos, ce.get());
+    CopyBasicInfo(&expr, ce.get());
     return ce;
 }
 } // namespace
 
 ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
-    ASTContext& ctx, Ty& runtimeTy, const std::string& name, const Expr& pos)
+    ASTContext& ctx, Ty& runtimeTy, const std::string& name, const Expr& expr)
 {
     std::vector<Ptr<Decl>> candidates;
     if (runtimeTy.IsGeneric()) {
@@ -535,7 +537,7 @@ ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
         }
         candidates = foreignRuntime->GetMemberDeclPtrs();
     } else {
-        candidates = FieldLookup(ctx, Ty::GetDeclOfTy(&runtimeTy), name, {&runtimeTy, pos.curFile});
+        candidates = FieldLookup(ctx, Ty::GetDeclOfTy(&runtimeTy), name, {&runtimeTy, expr.curFile});
     }
     Ptr<FuncDecl> func = nullptr;
     for (auto decl : candidates) {
@@ -553,7 +555,7 @@ ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
     }
     // Like a static call T.name(...) written by hand, the call must have an implementation.
     if (!runtimeTy.IsGeneric() && func->TestAttr(Attribute::ABSTRACT)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_interface_call_with_unimplemented_call, pos, "function", name);
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_interface_call_with_unimplemented_call, expr, "function", name);
     }
     Ptr<Ty> matchedParentTy = nullptr;
     if (func->outerDecl && func->outerDecl->astKind == ASTKind::INTERFACE_DECL) {
@@ -571,8 +573,8 @@ void TypeChecker::TypeCheckerImpl::DesugarExtern(ASTContext& ctx, Package& pkg)
         return;
     }
     auto needConversion = [this](Ty& from, Ty& to) { return NeedExternConversion(from, to); };
-    auto lookup = [this, &ctx](Ty& runtimeTy, const std::string& name, const Expr& pos) {
-        return LookupForeignRuntimeFunc(ctx, runtimeTy, name, pos);
+    auto lookup = [this, &ctx](Ty& runtimeTy, const std::string& name, const Expr& expr) {
+        return LookupForeignRuntimeFunc(ctx, runtimeTy, name, expr);
     };
     ExternDesugaring(typeManager, needConversion, lookup).Run(pkg);
 }
