@@ -144,7 +144,7 @@ bool TypeChecker::TypeCheckerImpl::CheckBodyRetType(ASTContext& ctx, FuncBody& f
             // Errors should be already reported during the synthesis.
             isWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::UNUSED}, fb.body.get()));
         } else if (NeedCheckBodyReturn(fb)) {
-            isWellTyped = Check(ctx, fb.retType->GetTy(), fb.body.get(), true);
+            isWellTyped = Check(ctx, fb.retType->GetTy(), fb.body.get());
             if (!isWellTyped && fb.body->body.empty()) {
                 DiagMismatchedTypes(diag, *fb.body, *fb.retType, "return type");
             }
@@ -510,7 +510,7 @@ bool TypeChecker::TypeCheckerImpl::ChkFuncArg(ASTContext& ctx, Ty& target, FuncA
     if (fa.withInout) {
         return ChkFuncArgWithInout(ctx, target, fa);
     }
-    if (!Check(ctx, &target, fa.expr.get(), true)) {
+    if (!Check(ctx, &target, fa.expr.get())) {
         fa.SetTy(TypeManager::GetInvalidTy());
         return false;
     }
@@ -722,6 +722,27 @@ CacheKey GetCacheKeyForChk(const ASTContext& ctx, Ptr<const Node> node, Ptr<Ty> 
 {
     return CacheKey{
         .target = target, .isDesugared = IsNodeDesugared(node), .diagKey = DiagnosticCache::ExtractKey(ctx.diag)};
+}
+
+/**
+ * Whether @p node checks the expressions giving its value against its own target, so that an implicit conversion to
+ * Extern<T> applies to those expressions: the branches of an if-else, match or try, and the last expression of a block.
+ */
+bool PassesTargetToValues(const Node& node)
+{
+    if (auto ie = DynamicCast<const IfExpr*>(&node)) {
+        while (auto elseIf = DynamicCast<const IfExpr*>(ie->elseBody.get())) {
+            ie = elseIf;
+        }
+        return ie->elseBody != nullptr;
+    }
+    if (auto te = DynamicCast<const TryExpr*>(&node)) {
+        return te->resourceSpec.empty() && te->handlers.empty();
+    }
+    if (auto b = DynamicCast<const Block*>(&node)) {
+        return !b->body.empty() && !b->body.back()->IsDecl();
+    }
+    return node.astKind == ASTKind::MATCH_EXPR || node.astKind == ASTKind::PAREN_EXPR;
 }
 
 void RestoreCached(ASTContext& ctx, Ptr<Node> node, CacheEntry& cache, bool recoverDiag = true)
@@ -1104,13 +1125,10 @@ bool TypeChecker::TypeCheckerImpl::ChkWithExternConversion(ASTContext& ctx, Node
     return isWellTyped && Ty::IsTyCorrect(node.GetTy()) && !node.GetTy()->HasPlaceholder();
 }
 
-bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node, bool allowToExternConv)
+bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
 {
     if (auto res = PerformBasicChecksForCheck(ctx, target, node)) {
         return *res;
-    }
-    if (allowToExternConv && NeedTryExternConversion(*typeManager.TryGreedySubst(target), *node)) {
-        return ChkWithExternConversion(ctx, *node);
     }
     ctx.typeCheckCache[node].lastKey = GetCacheKeyForChk(ctx, node, target);
     ASTContext* curCtx = &ctx;
@@ -1141,6 +1159,8 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
             ReplaceIdealTy(*node);
             chkRet = typeManager.IsSubtype(node->GetTy(), realTarget);
         }
+    } else if (NeedTryExternConversion(*realTarget, *node) && !PassesTargetToValues(*node)) {
+        chkRet = ChkWithExternConversion(*curCtx, *node);
     } else {
         switch (node->astKind) {
             case ASTKind::IF_EXPR: {

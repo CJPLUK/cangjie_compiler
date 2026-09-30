@@ -322,7 +322,7 @@ void TypeChecker::TypeCheckerImpl::SynchronizeTypeAndInitializer(const CheckerCo
                 vd.initializer->SetTy(vd.type->GetTy());
                 ChkLitConstExprRange(StaticCast<LitConstExpr&>(*vd.initializer));
             } else {
-                bool isWellTyped = Check(ctx.Ctx(), vd.type->GetTy(), vd.initializer.get(), true);
+                bool isWellTyped = Check(ctx.Ctx(), vd.type->GetTy(), vd.initializer.get());
                 // Unset 'checked' attribute for local variables when there exists any error.
                 if (!isWellTyped && !IsGlobalOrMember(vd)) {
                     vd.DisableAttr(Attribute::IS_CHECK_VISITED);

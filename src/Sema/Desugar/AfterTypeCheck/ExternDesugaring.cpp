@@ -96,6 +96,11 @@ public:
                 [this](const ReturnExpr& re) { return HandleReturnExpr(re); },
                 [this](const FuncBody& fb) { return HandleFuncBody(fb); },
                 [this](ArrayExpr& ae) { return HandleArrayExpr(ae); },
+                [this](ArrayLit& al) { return HandleValues(al); },
+                [this](TupleLit& tl) { return HandleValues(tl); },
+                [this](IfExpr& ie) { return HandleValues(ie); },
+                [this](MatchExpr& me) { return HandleValues(me); },
+                [this](TryExpr& te) { return HandleValues(te); },
                 []() { return VisitAction::WALK_CHILDREN; });
         };
         Walker(&root, preVisit).Walk();
@@ -152,6 +157,7 @@ private:
     VisitAction HandleReturnExpr(const ReturnExpr& re);
     VisitAction HandleFuncBody(const FuncBody& fb);
     VisitAction HandleArrayExpr(ArrayExpr& ae);
+    VisitAction HandleValues(Expr& expr);
 
     // Dynamic operations on Extern<T>.
     void PrepareStaticCompoundAssignment(AssignExpr& ae);
@@ -299,6 +305,49 @@ VisitAction ExternDesugaring::HandleArrayExpr(ArrayExpr& ae)
     Ptr<FuncArg> arg = ae.isValueArray ? ae.args[0].get() : (ae.args.size() > 1 ? ae.args[1].get() : nullptr);
     if (arg && arg->expr && TryConvert(*arg->expr, *typeArgs[0])) {
         arg->SetTy(arg->expr->GetTy());
+    }
+    return VisitAction::WALK_CHILDREN;
+}
+
+/**
+ * The elements of an array or tuple literal are converted to their element types, the branches of an if/match/try
+ * to the type of the whole expression.
+ */
+VisitAction ExternDesugaring::HandleValues(Expr& expr)
+{
+    auto ty = expr.GetTy();
+    if (expr.desugarExpr || !Ty::IsTyCorrect(ty)) {
+        return VisitAction::WALK_CHILDREN;
+    }
+    if (auto al = DynamicCast<ArrayLit*>(&expr); al && ty->IsStructArray() && !ty->typeArgs.empty()) {
+        for (auto& child : al->children) {
+            TryConvert(*child, *ty->typeArgs[0]);
+        }
+    } else if (auto tl = DynamicCast<TupleLit*>(&expr); tl && ty->IsTuple()) {
+        for (size_t i = 0; i < tl->children.size() && i < ty->typeArgs.size(); ++i) {
+            TryConvert(*tl->children[i], *ty->typeArgs[i]);
+        }
+    } else if (auto ie = DynamicCast<IfExpr*>(&expr)) {
+        TryConvertBlock(*ie->thenBody, *ty);
+        if (auto elseBlock = DynamicCast<Block*>(ie->elseBody.get())) {
+            TryConvertBlock(*elseBlock, *ty);
+        } else if (ie->elseBody) {
+            TryConvert(*ie->elseBody, *ty);
+        }
+    } else if (auto me = DynamicCast<MatchExpr*>(&expr)) {
+        for (auto& mc : me->matchCases) {
+            TryConvertBlock(*mc->exprOrDecls, *ty);
+            mc->SetTy(mc->exprOrDecls->GetTy());
+        }
+        for (auto& mco : me->matchCaseOthers) {
+            TryConvertBlock(*mco->exprOrDecls, *ty);
+            mco->SetTy(mco->exprOrDecls->GetTy());
+        }
+    } else if (auto te = DynamicCast<TryExpr*>(&expr); te && te->resourceSpec.empty() && te->handlers.empty()) {
+        TryConvertBlock(*te->tryBlock, *ty);
+        for (auto& catchBlock : te->catchBlocks) {
+            TryConvertBlock(*catchBlock, *ty);
+        }
     }
     return VisitAction::WALK_CHILDREN;
 }

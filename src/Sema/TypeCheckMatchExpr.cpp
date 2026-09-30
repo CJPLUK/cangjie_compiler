@@ -67,10 +67,12 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynMatchExpr(ASTContext& ctx, MatchExpr& m
 
 bool TypeChecker::TypeCheckerImpl::ChkMatchExpr(ASTContext& ctx, Ty& target, MatchExpr& me)
 {
-    if (me.selector) {
-        return ChkMatchExprHasSelector(ctx, target, me);
+    bool isWellTyped = me.selector ? ChkMatchExprHasSelector(ctx, target, me) : ChkMatchExprNoSelector(ctx, target, me);
+    // Cases converted to Extern<T> may have a join that is not Extern<T>, e.g. Any.
+    if (isWellTyped && NeedTryExternConversion(target, me)) {
+        me.SetTy(&target);
     }
-    return ChkMatchExprNoSelector(ctx, target, me);
+    return isWellTyped;
 }
 
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynMatchExprHasSelector(ASTContext& ctx, MatchExpr& me)
