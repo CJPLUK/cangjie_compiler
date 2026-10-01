@@ -1512,6 +1512,17 @@ void StructInheritanceChecker::CheckNativeFFI(
     [[maybe_unused]] const MemberSignature& parent, [[maybe_unused]] const MemberSignature& child) const
 {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    const auto sameStatus = parent.decl->TestAttr(Attribute::STATIC) == child.decl->TestAttr(Attribute::STATIC) &&
+        parent.decl->TestAttr(Attribute::GENERIC) == child.decl->TestAttr(Attribute::GENERIC) &&
+        parent.decl->astKind == child.decl->astKind;
+    const auto parentFuncTy = DynamicCast<FuncTy*>(parent.ty);
+    const auto childFuncTy = DynamicCast<FuncTy*>(child.ty);
+    const auto sameParams = (!parentFuncTy && !childFuncTy) ||
+        (parentFuncTy && childFuncTy && parent.decl->IsFunc() && child.decl->IsFunc() &&
+            typeManager.IsFuncParameterTypesIdentical(*parentFuncTy, *childFuncTy));
+    if (!sameStatus || !sameParams) {
+        return;
+    }
     if (checkingDecls.size() > 0 && checkingDecls.back()) {
         Interop::Java::CheckForeignName(diag, typeManager, parent, child, *checkingDecls.back());
         Interop::ObjC::CheckForeignAnnotations(diag, typeManager, parent, child, *checkingDecls.back());
