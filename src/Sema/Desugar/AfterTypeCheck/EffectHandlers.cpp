@@ -798,6 +798,10 @@ void TypeChecker::TypeCheckerImpl::CreateSetHandler(
 
             // Recover all types in the try expression
             SynthesizeWithoutRecover({ctx, SynPos::NONE}, tryExpr); // none for now
+            // A value implicitly converted to Extern<T> keeps its own type until DesugarExtern converts it.
+            if (te.GetTy()->IsCoreExternType()) {
+                tryExpr->SetTy(te.GetTy());
+            }
 
             std::vector<OwnedPtr<Cangjie::AST::Node>> nodes;
 

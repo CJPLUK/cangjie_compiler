@@ -726,23 +726,12 @@ CacheKey GetCacheKeyForChk(const ASTContext& ctx, Ptr<const Node> node, Ptr<Ty> 
 
 /**
  * Whether @p node checks the expressions giving its value against its own target, so that an implicit conversion to
- * Extern<T> applies to those expressions: the branches of an if-else, match or try, and the last expression of a block.
+ * Extern<T> applies to those expressions: the branches of an if, match or try, and the last expression of a block.
  */
 bool PassesTargetToValues(const Node& node)
 {
-    if (auto ie = DynamicCast<const IfExpr*>(&node)) {
-        while (auto elseIf = DynamicCast<const IfExpr*>(ie->elseBody.get())) {
-            ie = elseIf;
-        }
-        return ie->elseBody != nullptr;
-    }
-    if (auto te = DynamicCast<const TryExpr*>(&node)) {
-        return te->resourceSpec.empty() && te->handlers.empty();
-    }
-    if (auto b = DynamicCast<const Block*>(&node)) {
-        return !b->body.empty() && !b->body.back()->IsDecl();
-    }
-    return node.astKind == ASTKind::MATCH_EXPR || node.astKind == ASTKind::PAREN_EXPR;
+    return Utils::In(node.astKind,
+        {ASTKind::IF_EXPR, ASTKind::MATCH_EXPR, ASTKind::TRY_EXPR, ASTKind::BLOCK, ASTKind::PAREN_EXPR});
 }
 
 void RestoreCached(ASTContext& ctx, Ptr<Node> node, CacheEntry& cache, bool recoverDiag = true)

@@ -343,7 +343,7 @@ VisitAction ExternDesugaring::HandleValues(Expr& expr)
             TryConvertBlock(*mco->exprOrDecls, *ty);
             mco->SetTy(mco->exprOrDecls->GetTy());
         }
-    } else if (auto te = DynamicCast<TryExpr*>(&expr); te && te->resourceSpec.empty() && te->handlers.empty()) {
+    } else if (auto te = DynamicCast<TryExpr*>(&expr)) {
         TryConvertBlock(*te->tryBlock, *ty);
         for (auto& catchBlock : te->catchBlocks) {
             TryConvertBlock(*catchBlock, *ty);
