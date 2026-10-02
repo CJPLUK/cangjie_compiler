@@ -725,13 +725,16 @@ CacheKey GetCacheKeyForChk(const ASTContext& ctx, Ptr<const Node> node, Ptr<Ty> 
 }
 
 /**
- * Whether @p node checks the expressions giving its value against its own target, so that an implicit conversion to
- * Extern<T> applies to those expressions: the branches of an if, match or try, and the last expression of a block.
+ * Whether @p node is made of blocks of code. Such a node is never implicitly converted to Extern<T> as a whole: it
+ * checks the expressions giving its value against its own target, e.g. the branches of an if or the last expression
+ * of a block, so that the conversion applies to them. Loops have no such expressions and are always Unit.
  */
-bool PassesTargetToValues(const Node& node)
+bool IsControlFlowExpr(const Node& node)
 {
-    return Utils::In(node.astKind,
-        {ASTKind::IF_EXPR, ASTKind::MATCH_EXPR, ASTKind::TRY_EXPR, ASTKind::BLOCK, ASTKind::PAREN_EXPR});
+    return node.IsLoopExpr() ||
+        Utils::In(node.astKind,
+            {ASTKind::IF_EXPR, ASTKind::MATCH_EXPR, ASTKind::TRY_EXPR, ASTKind::SYNCHRONIZED_EXPR, ASTKind::BLOCK,
+                ASTKind::PAREN_EXPR});
 }
 
 void RestoreCached(ASTContext& ctx, Ptr<Node> node, CacheEntry& cache, bool recoverDiag = true)
@@ -1148,7 +1151,7 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
             ReplaceIdealTy(*node);
             chkRet = typeManager.IsSubtype(node->GetTy(), realTarget);
         }
-    } else if (NeedTryExternConversion(*realTarget, *node) && !PassesTargetToValues(*node)) {
+    } else if (NeedTryExternConversion(*realTarget, *node) && !IsControlFlowExpr(*node)) {
         chkRet = ChkWithExternConversion(*curCtx, *node);
     } else {
         switch (node->astKind) {
