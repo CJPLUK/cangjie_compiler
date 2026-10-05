@@ -14,7 +14,7 @@
  *   kept as a leaf and desugared on its own.
  */
 
-#include "TypeCheckerImpl.h"
+#include "ExternDesugaring.h"
 
 #include "Desugar/AfterTypeCheck.h"
 #include "TypeCheckUtil.h"
@@ -68,115 +68,67 @@ OwnedPtr<MemberAccess> CreateForeignRuntimeFuncAccess(
     funcAccess->SetTy(&funcTy);
     return funcAccess;
 }
+} // namespace
 
-class ExternDesugaring {
-public:
-    using NeedConversion = std::function<bool(Ty& from, Ty& to)>;
-    using RuntimeFuncLookup =
-        std::function<ForeignRuntimeFunc(Ty& runtimeTy, const std::string& name, const Expr& expr)>;
+void ExternDesugaring::Run(Node& root)
+{
+    std::function<VisitAction(Ptr<Node>)> preVisit = [this](Ptr<Node> node) -> VisitAction {
+        if (auto ae = DynamicCast<AssignExpr*>(node)) {
+            PrepareStaticCompoundAssignment(*ae);
+        }
+        if (auto expr = DynamicCast<Expr*>(node); expr && IsDynamic(*expr)) {
+            DesugarOperation(*expr);
+            return VisitAction::SKIP_CHILDREN;
+        }
+        return match(*node)(
+            [this](const VarDecl& vd) {return HandleVarDecl(vd); },
+            [this](const AssignExpr& ae) { return HandleAssignExpr(ae); },
+            [this](CallExpr& ce) { return HandleCallExpr(ce); },
+            [this](const ReturnExpr& re) { return HandleReturnExpr(re); },
+            [this](const FuncBody& fb) { return HandleFuncBody(fb); },
+            [this](ArrayExpr& ae) { return HandleArrayExpr(ae); },
+            [this](ArrayLit& al) { return HandleValues(al); },
+            [this](TupleLit& tl) { return HandleValues(tl); },
+            [this](IfExpr& ie) { return HandleValues(ie); },
+            [this](MatchExpr& me) { return HandleValues(me); },
+            [this](TryExpr& te) { return HandleValues(te); },
+            []() { return VisitAction::WALK_CHILDREN; });
+    };
+    Walker(&root, preVisit).Walk();
+}
 
-    ExternDesugaring(TypeManager& typeManager, NeedConversion needConversion, RuntimeFuncLookup lookup)
-        : typeManager(typeManager), needConversion(std::move(needConversion)), lookup(std::move(lookup))
-    {
-    }
-
-    void Run(Node& root)
-    {
-        std::function<VisitAction(Ptr<Node>)> preVisit = [this](Ptr<Node> node) -> VisitAction {
-            if (auto ae = DynamicCast<AssignExpr*>(node)) {
-                PrepareStaticCompoundAssignment(*ae);
-            }
-            if (auto expr = DynamicCast<Expr*>(node); expr && IsDynamic(*expr)) {
-                DesugarOperation(*expr);
-                return VisitAction::SKIP_CHILDREN;
-            }
-            return match(*node)([this](const VarDecl& vd) { return HandleVarDecl(vd); },
-                [this](const AssignExpr& ae) { return HandleAssignExpr(ae); },
-                [this](CallExpr& ce) { return HandleCallExpr(ce); },
-                [this](const ReturnExpr& re) { return HandleReturnExpr(re); },
-                [this](const FuncBody& fb) { return HandleFuncBody(fb); },
-                [this](ArrayExpr& ae) { return HandleArrayExpr(ae); },
-                [this](ArrayLit& al) { return HandleValues(al); },
-                [this](TupleLit& tl) { return HandleValues(tl); },
-                [this](IfExpr& ie) { return HandleValues(ie); },
-                [this](MatchExpr& me) { return HandleValues(me); },
-                [this](TryExpr& te) { return HandleValues(te); },
-                []() { return VisitAction::WALK_CHILDREN; });
-        };
-        Walker(&root, preVisit).Walk();
-    }
-
-private:
-    static bool IsDynamic(const Expr& expr)
-    {
-        if (expr.desugarExpr) {
-            return false;
-        }
-        if (auto ma = DynamicCast<const MemberAccess*>(&expr)) {
-            return IsDynamicExternMemberAccess(*ma);
-        }
-        if (auto se = DynamicCast<const SubscriptExpr*>(&expr)) {
-            return IsDynamicExternSubscript(*se);
-        }
-        if (auto ce = DynamicCast<const CallExpr*>(&expr)) {
-            return IsDynamicExternCall(*ce);
-        }
-        if (auto ae = DynamicCast<const AssignExpr*>(&expr)) {
-            return IsDynamicExternUpdate(*ae);
-        }
+bool ExternDesugaring::IsDynamic(const Expr& expr)
+{
+    if (expr.desugarExpr) {
         return false;
     }
-
-    /** A primitive constructor of Extern<T>, with its type instantiated for a given T. */
-    struct Ctor {
-        Ptr<FuncDecl> decl{nullptr};
-        Ptr<FuncTy> ty{nullptr};
-    };
-
-    /** Whether evaluating @p expr more than once has no observable effect. */
-    static bool IsSideEffectFree(const Expr& expr)
-    {
-        auto target = expr.GetTarget();
-        bool isPureTarget = target &&
-            (target->IsTypeDecl() || target->astKind == ASTKind::PACKAGE_DECL ||
-                (Is<VarDecl>(target) && !Is<PropDecl>(target)));
-        if (expr.astKind == ASTKind::REF_EXPR) {
-            return isPureTarget;
-        }
-        auto ma = DynamicCast<const MemberAccess*>(&expr);
-        return ma && isPureTarget && ma->baseExpr && IsSideEffectFree(*ma->baseExpr);
+    if (auto ma = DynamicCast<const MemberAccess*>(&expr)) {
+        return IsDynamicExternMemberAccess(*ma);
     }
+    if (auto se = DynamicCast<const SubscriptExpr*>(&expr)) {
+        return IsDynamicExternSubscript(*se);
+    }
+    if (auto ce = DynamicCast<const CallExpr*>(&expr)) {
+        return IsDynamicExternCall(*ce);
+    }
+    if (auto ae = DynamicCast<const AssignExpr*>(&expr)) {
+        return IsDynamicExternUpdate(*ae);
+    }
+    return false;
+}
 
-    // Conversions to Extern<T>.
-    bool TryConvert(Expr& expr, Ty& target);
-    void TryConvertBlock(Block& block, Ty& target);
-
-    VisitAction HandleVarDecl(const VarDecl& vd);
-    VisitAction HandleAssignExpr(const AssignExpr& ae);
-    VisitAction HandleCallExpr(CallExpr& ce);
-    VisitAction HandleReturnExpr(const ReturnExpr& re);
-    VisitAction HandleFuncBody(const FuncBody& fb);
-    VisitAction HandleArrayExpr(ArrayExpr& ae);
-    VisitAction HandleValues(Expr& expr);
-
-    // Dynamic operations on Extern<T>.
-    void PrepareStaticCompoundAssignment(AssignExpr& ae);
-    void DesugarOperation(Expr& expr);
-    OwnedPtr<Expr> BuildTree(Expr& expr);
-    OwnedPtr<Expr> BuildOperation(Expr& expr, Ty& externTy);
-    OwnedPtr<Expr> BuildCompoundAssignment(AssignExpr& ae, Ty& externTy);
-    OwnedPtr<Expr> BuildArgs(CallExpr& ce, Ty& arrayTy);
-    Ctor LookupCtor(const std::string& name, Ty& externTy);
-    static OwnedPtr<CallExpr> CreateCtorCall(
-        const Ctor& ctor, Ty& externTy, std::vector<OwnedPtr<Expr>> args, const Expr& expr);
-
-    OwnedPtr<CallExpr> CreateRuntimeCall(const std::string& name, OwnedPtr<Expr> arg, Ty& argTy, Ty& externTy,
-        std::vector<Ptr<Ty>> instTys, const Expr& expr);
-
-    TypeManager& typeManager;
-    NeedConversion needConversion;
-    RuntimeFuncLookup lookup;
-};
+bool ExternDesugaring::IsSideEffectFree(const Expr& expr)
+{
+    auto target = expr.GetTarget();
+    bool isPureTarget = target &&
+        (target->IsTypeDecl() || target->astKind == ASTKind::PACKAGE_DECL ||
+            (Is<VarDecl>(target) && !Is<PropDecl>(target)));
+    if (expr.astKind == ASTKind::REF_EXPR) {
+        return isPureTarget;
+    }
+    auto ma = DynamicCast<const MemberAccess*>(&expr);
+    return ma && isPureTarget && ma->baseExpr && IsSideEffectFree(*ma->baseExpr);
+}
 
 bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
 {
@@ -573,7 +525,6 @@ OwnedPtr<CallExpr> ExternDesugaring::CreateRuntimeCall(const std::string& name, 
     CopyBasicInfo(&expr, ce.get());
     return ce;
 }
-} // namespace
 
 ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
     ASTContext& ctx, Ty& runtimeTy, const std::string& name, const Expr& expr)
@@ -582,6 +533,7 @@ ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
     if (runtimeTy.IsGeneric()) {
         auto foreignRuntime = importManager.GetCoreDecl<InterfaceDecl>(STD_LIB_FOREIGN_RUNTIME);
         if (!foreignRuntime) {
+            CJC_ASSERT(false);
             return {};
         }
         candidates = foreignRuntime->GetMemberDeclPtrs();
@@ -618,12 +570,10 @@ ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
 
 void TypeChecker::TypeCheckerImpl::DesugarExtern(ASTContext& ctx, Package& pkg)
 {
-    if (!importManager.GetCoreDecl<InterfaceDecl>(STD_LIB_FOREIGN_RUNTIME)) {
-        return;
-    }
     auto needConversion = [this](Ty& from, Ty& to) { return NeedExternConversion(from, to); };
     auto lookup = [this, &ctx](Ty& runtimeTy, const std::string& name, const Expr& expr) {
         return LookupForeignRuntimeFunc(ctx, runtimeTy, name, expr);
     };
-    ExternDesugaring(typeManager, needConversion, lookup).Run(pkg);
+    auto externDesugaring = ExternDesugaring(typeManager, needConversion, lookup);
+    externDesugaring.Run(pkg);
 }
