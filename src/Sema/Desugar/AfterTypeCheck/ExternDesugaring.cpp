@@ -73,9 +73,6 @@ OwnedPtr<MemberAccess> CreateForeignRuntimeFuncAccess(
 void ExternDesugaring::Run(Node& root)
 {
     std::function<VisitAction(Ptr<Node>)> preVisit = [this](Ptr<Node> node) -> VisitAction {
-        if (auto ae = DynamicCast<AssignExpr*>(node)) {
-            PrepareStaticCompoundAssignment(*ae);
-        }
         if (auto expr = DynamicCast<Expr*>(node); expr && IsDynamic(*expr)) {
             DesugarOperation(*expr);
             return VisitAction::SKIP_CHILDREN;
@@ -115,19 +112,6 @@ bool ExternDesugaring::IsDynamic(const Expr& expr)
         return IsDynamicExternUpdate(*ae);
     }
     return false;
-}
-
-bool ExternDesugaring::IsSideEffectFree(const Expr& expr)
-{
-    auto target = expr.GetTarget();
-    bool isPureTarget = target &&
-        (target->IsTypeDecl() || target->astKind == ASTKind::PACKAGE_DECL ||
-            (Is<VarDecl>(target) && !Is<PropDecl>(target)));
-    if (expr.astKind == ASTKind::REF_EXPR) {
-        return isPureTarget;
-    }
-    auto ma = DynamicCast<const MemberAccess*>(&expr);
-    return ma && isPureTarget && ma->baseExpr && IsSideEffectFree(*ma->baseExpr);
 }
 
 bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
@@ -302,47 +286,6 @@ VisitAction ExternDesugaring::HandleValues(Expr& expr)
         }
     }
     return VisitAction::WALK_CHILDREN;
-}
-
-/**
- * A compound assignment lhs op= v whose statically resolved left value lhs has type Extern<T> is type checked as
- * lhs = lhs'.op(v), where the copy lhs' is mapped to lhs so that the receiver of lhs is evaluated once. lhs' becomes
- * a leaf of the tree of the dynamic call and is read as a value, while the mapping yields a reference to lhs. So lhs'
- * is either evaluated again, if that has no effect, or the receiver of lhs is stored in a variable:
- * {
- *     let tmp = base
- *     tmp.x = tmp.x.op(v)
- * }
- */
-void ExternDesugaring::PrepareStaticCompoundAssignment(AssignExpr& ae)
-{
-    auto inner = ae.isCompound ? DynamicCast<AssignExpr*>(ae.desugarExpr.get()) : nullptr;
-    auto ce = inner ? DynamicCast<CallExpr*>(inner->rightExpr.get()) : nullptr;
-    auto callee = ce && IsDynamic(*ce) ? DynamicCast<MemberAccess*>(ce->baseFunc.get()) : nullptr;
-    if (!callee || !callee->baseExpr || callee->baseExpr->mapExpr != inner->leftValue.get()) {
-        return;
-    }
-    auto& copy = *callee->baseExpr;
-    copy.mapExpr = nullptr;
-    auto lhs = DynamicCast<MemberAccess*>(inner->leftValue.get());
-    if (!lhs || !lhs->baseExpr || IsSideEffectFree(*lhs->baseExpr)) {
-        return;
-    }
-    auto vd = CreateVarDecl(V_COMPILER, std::move(lhs->baseExpr));
-    vd->fullPackageName = ae.GetFullPackageName();
-    CopyBasicInfo(vd->initializer.get(), vd.get());
-    lhs->baseExpr = CreateRefExpr(*vd, *vd->initializer);
-    CopyBasicInfo(vd->initializer.get(), lhs->baseExpr.get());
-    auto& copyAccess = StaticCast<MemberAccess&>(copy);
-    copyAccess.baseExpr = CreateRefExpr(*vd, *vd->initializer);
-    CopyBasicInfo(vd->initializer.get(), copyAccess.baseExpr.get());
-    std::vector<OwnedPtr<Node>> nodes;
-    nodes.emplace_back(std::move(vd));
-    nodes.emplace_back(std::move(ae.desugarExpr));
-    auto block = CreateBlock(std::move(nodes), ae.GetTy());
-    CopyBasicInfo(&ae, block.get());
-    AddCurFile(*block, ae.curFile);
-    ae.desugarExpr = std::move(block);
 }
 
 void ExternDesugaring::DesugarOperation(Expr& expr)

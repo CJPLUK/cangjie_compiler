@@ -404,6 +404,20 @@ Value* Translator::TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const
         argVal = CreateAndAppendExpression<Intrinsic>(loc, ty, callContext, currentBlock)->GetResult();
     } else {
         argVal = TranslateExprArg(*arg.expr);
+        /* A compound assignment `lhs op= v` with an overloaded `op` is desugared in Sema into `lhs = lhs'.op(v)`,
+           where the copy `lhs'` is mapped to `lhs` (see DesugarOperatorOverloadExpr). When `lhs` is a member access,
+           TranslateAssignExpr evaluates its receiver once and records a *reference* to the field for `lhs`, which
+           `lhs'` then reuses. Usually `lhs'` is the receiver of the call `.op`, which accepts a reference.
+           When `lhs` has type Extern<T>, `lhs'.op(v)` is a dynamic call and ExternDesugaring turns it into
+               T.eval(ExternFunctionCall(ExternMemberAccess(lhs', "op"), [v]))
+           so `lhs'` becomes an argument of an enum constructor call, which needs the value of the field. Load it
+           from the reference here. The other mapped arguments, e.g. the indices of a compound assignment through
+           `[]`, are recorded as values, for which GetDerefedValue does nothing. */
+        CJC_ASSERT(GetMapExpr(*arg.expr) == nullptr || !argVal->GetType()->IsRef() ||
+            StaticCast<RefType*>(argVal->GetType())->GetBaseType()->IsClassOrArray() || arg.expr->GetTy()->IsCoreExternType());
+        if (GetMapExpr(*arg.expr) != nullptr) {
+            argVal = GetDerefedValue(argVal, loc);
+        }
     }
     if (expectedTy != nullptr) {
         argVal = TypeCastOrBoxIfNeeded(*argVal, *expectedTy, loc);

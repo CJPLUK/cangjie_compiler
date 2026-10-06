@@ -45,8 +45,6 @@ private:
     };
 
     static bool IsDynamic(const AST::Expr& expr);
-    /** Whether evaluating @p expr more than once has no observable effect. */
-    static bool IsSideEffectFree(const AST::Expr& expr);
 
     // Conversions to Extern<T>.
     bool TryConvert(AST::Expr& expr, AST::Ty& target);
@@ -61,7 +59,6 @@ private:
     AST::VisitAction HandleValues(AST::Expr& expr);
 
     // Dynamic operations on Extern<T>.
-    void PrepareStaticCompoundAssignment(AST::AssignExpr& ae);
     void DesugarOperation(AST::Expr& expr);
     OwnedPtr<AST::Expr> BuildTree(AST::Expr& expr);
     OwnedPtr<AST::Expr> BuildOperation(AST::Expr& expr, AST::Ty& externTy);
