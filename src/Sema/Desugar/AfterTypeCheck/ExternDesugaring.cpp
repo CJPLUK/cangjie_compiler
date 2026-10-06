@@ -291,9 +291,8 @@ VisitAction ExternDesugaring::HandleValues(Expr& expr)
 void ExternDesugaring::DesugarOperation(Expr& expr)
 {
     auto& externTy = *expr.GetTy();
-    auto tree = BuildTree(expr);
-    auto eval = tree ? CreateRuntimeCall(EVAL_FUNC, std::move(tree), externTy, externTy, {}, expr) : nullptr;
-    CJC_NULLPTR_CHECK(eval);
+    auto eval = CreateRuntimeCall(EVAL_FUNC, BuildTree(expr), externTy, externTy, {}, expr);
+    CJC_NULLPTR_CHECK(eval); // for well typed programs eval != nullptr
     expr.desugarExpr = std::move(eval);
     AddCurFile(*expr.desugarExpr, expr.curFile);
     // Leaves of the tree may contain conversions and dynamic operations of their own.
