@@ -75,21 +75,25 @@ void ExternDesugaring::Run(Node& root)
     std::function<VisitAction(Ptr<Node>)> preVisit = [this](Ptr<Node> node) -> VisitAction {
         if (auto expr = DynamicCast<Expr*>(node); expr && IsDynamic(*expr)) {
             DesugarOperation(*expr);
+            // Visit the cloned leaves, which may contain conversions and dynamic operations of their own.
+            Run(*expr->desugarExpr);
+            // The original operands are already represented in the tree.
             return VisitAction::SKIP_CHILDREN;
         }
-        return match(*node)(
-            [this](const VarDecl& vd) {return HandleVarDecl(vd); },
-            [this](const AssignExpr& ae) { return HandleAssignExpr(ae); },
-            [this](CallExpr& ce) { return HandleCallExpr(ce); },
-            [this](const ReturnExpr& re) { return HandleReturnExpr(re); },
-            [this](const FuncBody& fb) { return HandleFuncBody(fb); },
-            [this](ArrayExpr& ae) { return HandleArrayExpr(ae); },
-            [this](ArrayLit& al) { return HandleValues(al); },
-            [this](TupleLit& tl) { return HandleValues(tl); },
-            [this](IfExpr& ie) { return HandleValues(ie); },
-            [this](MatchExpr& me) { return HandleValues(me); },
-            [this](TryExpr& te) { return HandleValues(te); },
-            []() { return VisitAction::WALK_CHILDREN; });
+        match(*node)(
+            [this](const VarDecl& vd) { HandleVarDecl(vd); },
+            [this](const AssignExpr& ae) { HandleAssignExpr(ae); },
+            [this](CallExpr& ce) { HandleCallExpr(ce); },
+            [this](const ReturnExpr& re) { HandleReturnExpr(re); },
+            [this](const FuncBody& fb) { HandleFuncBody(fb); },
+            [this](ArrayExpr& ae) { HandleArrayExpr(ae); },
+            [this](ArrayLit& al) { HandleArrayLit(al); },
+            [this](TupleLit& tl) { HandleTupleLit(tl); },
+            [this](IfExpr& ie) { HandleIfExpr(ie); },
+            [this](MatchExpr& me) { HandleMatchExpr(me); },
+            [this](TryExpr& te) { HandleTryExpr(te); },
+            []() {});
+        return VisitAction::WALK_CHILDREN;
     };
     Walker(&root, preVisit).Walk();
 }
@@ -126,7 +130,7 @@ bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
         return false;
     }
     if (expr.astKind == ASTKind::BLOCK) {
-        // For correct deserialization, we need to keep type of block.
+        // Deserialization expects a block's desugarExpr to remain a Block, so wrap the conversion call.
         auto b = MakeOwnedNode<Block>();
         b->SetTy(ce->GetTy());
         b->body.emplace_back(std::move(ce));
@@ -162,28 +166,26 @@ void ExternDesugaring::TryConvertBlock(Block& block, Ty& target)
     }
 }
 
-VisitAction ExternDesugaring::HandleVarDecl(const VarDecl& vd)
+void ExternDesugaring::HandleVarDecl(const VarDecl& vd)
 {
     if (vd.initializer && vd.GetTy()) {
         TryConvert(*vd.initializer, *vd.GetTy());
     }
-    return VisitAction::WALK_CHILDREN;
 }
 
-VisitAction ExternDesugaring::HandleAssignExpr(const AssignExpr& ae)
+void ExternDesugaring::HandleAssignExpr(const AssignExpr& ae)
 {
     // Dynamic updates never get here, their value is kept as is in the tree.
     if (ae.desugarExpr || ae.isCompound || !ae.leftValue || !ae.rightExpr || !ae.leftValue->GetTy()) {
-        return VisitAction::WALK_CHILDREN;
+        return;
     }
     TryConvert(*ae.rightExpr, *ae.leftValue->GetTy());
-    return VisitAction::WALK_CHILDREN;
 }
 
-VisitAction ExternDesugaring::HandleCallExpr(CallExpr& ce)
+void ExternDesugaring::HandleCallExpr(CallExpr& ce)
 {
     if (!ce.baseFunc || !Ty::IsTyCorrect(ce.baseFunc->GetTy()) || !ce.baseFunc->GetTy()->IsFunc()) {
-        return VisitAction::WALK_CHILDREN;
+        return;
     }
     auto funcTy = RawStaticCast<FuncTy*>(ce.baseFunc->GetTy());
     auto convertArgs = [this, funcTy](auto begin, auto end) {
@@ -200,92 +202,109 @@ VisitAction ExternDesugaring::HandleCallExpr(CallExpr& ce)
     } else {
         convertArgs(ce.args.begin(), ce.args.end());
     }
-    return VisitAction::WALK_CHILDREN;
 }
 
-VisitAction ExternDesugaring::HandleReturnExpr(const ReturnExpr& re)
+void ExternDesugaring::HandleReturnExpr(const ReturnExpr& re)
 {
     if (!re.expr || !re.refFuncBody || !Ty::IsTyCorrect(re.refFuncBody->GetTy()) ||
         !re.refFuncBody->GetTy()->IsFunc()) {
-        return VisitAction::WALK_CHILDREN;
+        return;
     }
     auto retTy = RawStaticCast<FuncTy*>(re.refFuncBody->GetTy())->retTy;
     if (retTy) {
         TryConvert(re.desugarExpr ? *re.desugarExpr : *re.expr, *retTy);
     }
-    return VisitAction::WALK_CHILDREN;
 }
 
-VisitAction ExternDesugaring::HandleFuncBody(const FuncBody& fb)
+void ExternDesugaring::HandleFuncBody(const FuncBody& fb)
 {
     if (!fb.body || !Ty::IsTyCorrect(fb.GetTy()) || !fb.GetTy()->IsFunc()) {
-        return VisitAction::WALK_CHILDREN;
+        return;
     }
     auto retTy = RawStaticCast<FuncTy*>(fb.GetTy())->retTy;
     if (retTy && retTy->IsCoreExternType()) {
         TryConvertBlock(*fb.body, *retTy);
     }
-    return VisitAction::WALK_CHILDREN;
 }
 
-VisitAction ExternDesugaring::HandleArrayExpr(ArrayExpr& ae)
+void ExternDesugaring::HandleArrayExpr(ArrayExpr& ae)
 {
     if (!Ty::IsTyCorrect(ae.GetTy()) || ae.initFunc || ae.args.empty()) {
-        return VisitAction::WALK_CHILDREN;
+        return;
     }
     auto typeArgs = typeManager.GetTypeArgs(*ae.GetTy());
     if (typeArgs.empty() || !typeArgs[0]) {
-        return VisitAction::WALK_CHILDREN;
+        return;
     }
     // VArray takes the element as its only argument, Array(size, item: T) as its second one.
     Ptr<FuncArg> arg = ae.isValueArray ? ae.args[0].get() : (ae.args.size() > 1 ? ae.args[1].get() : nullptr);
     if (arg && arg->expr && TryConvert(*arg->expr, *typeArgs[0])) {
         arg->SetTy(arg->expr->GetTy());
     }
-    return VisitAction::WALK_CHILDREN;
 }
 
-/**
- * The elements of an array or tuple literal are converted to their element types, the branches of an if/match/try
- * to the type of the whole expression.
- */
-VisitAction ExternDesugaring::HandleValues(Expr& expr)
+void ExternDesugaring::HandleArrayLit(ArrayLit& al)
 {
-    auto ty = expr.GetTy();
-    if (expr.desugarExpr || !Ty::IsTyCorrect(ty)) {
-        return VisitAction::WALK_CHILDREN;
+    auto ty = al.GetTy();
+    if (al.desugarExpr || !Ty::IsTyCorrect(ty) || !ty->IsStructArray() || ty->typeArgs.empty()) {
+        return;
     }
-    if (auto al = DynamicCast<ArrayLit*>(&expr); al && ty->IsStructArray() && !ty->typeArgs.empty()) {
-        for (auto& child : al->children) {
-            TryConvert(*child, *ty->typeArgs[0]);
-        }
-    } else if (auto tl = DynamicCast<TupleLit*>(&expr); tl && ty->IsTuple()) {
-        for (size_t i = 0; i < tl->children.size() && i < ty->typeArgs.size(); ++i) {
-            TryConvert(*tl->children[i], *ty->typeArgs[i]);
-        }
-    } else if (auto ie = DynamicCast<IfExpr*>(&expr)) {
-        TryConvertBlock(*ie->thenBody, *ty);
-        if (auto elseBlock = DynamicCast<Block*>(ie->elseBody.get())) {
-            TryConvertBlock(*elseBlock, *ty);
-        } else if (ie->elseBody) {
-            TryConvert(*ie->elseBody, *ty);
-        }
-    } else if (auto me = DynamicCast<MatchExpr*>(&expr)) {
-        for (auto& mc : me->matchCases) {
-            TryConvertBlock(*mc->exprOrDecls, *ty);
-            mc->SetTy(mc->exprOrDecls->GetTy());
-        }
-        for (auto& mco : me->matchCaseOthers) {
-            TryConvertBlock(*mco->exprOrDecls, *ty);
-            mco->SetTy(mco->exprOrDecls->GetTy());
-        }
-    } else if (auto te = DynamicCast<TryExpr*>(&expr)) {
-        TryConvertBlock(*te->tryBlock, *ty);
-        for (auto& catchBlock : te->catchBlocks) {
-            TryConvertBlock(*catchBlock, *ty);
-        }
+    for (auto& child : al.children) {
+        TryConvert(*child, *ty->typeArgs[0]);
     }
-    return VisitAction::WALK_CHILDREN;
+}
+
+void ExternDesugaring::HandleTupleLit(TupleLit& tl)
+{
+    auto ty = tl.GetTy();
+    if (tl.desugarExpr || !Ty::IsTyCorrect(ty) || !ty->IsTuple()) {
+        return;
+    }
+    for (size_t i = 0; i < tl.children.size() && i < ty->typeArgs.size(); ++i) {
+        TryConvert(*tl.children[i], *ty->typeArgs[i]);
+    }
+}
+
+void ExternDesugaring::HandleIfExpr(IfExpr& ie)
+{
+    auto ty = ie.GetTy();
+    if (ie.desugarExpr || !Ty::IsTyCorrect(ty)) {
+        return;
+    }
+    TryConvertBlock(*ie.thenBody, *ty);
+    if (auto elseBlock = DynamicCast<Block*>(ie.elseBody.get())) {
+        TryConvertBlock(*elseBlock, *ty);
+    } else if (ie.elseBody) {
+        TryConvert(*ie.elseBody, *ty);
+    }
+}
+
+void ExternDesugaring::HandleMatchExpr(MatchExpr& me)
+{
+    auto ty = me.GetTy();
+    if (me.desugarExpr || !Ty::IsTyCorrect(ty)) {
+        return;
+    }
+    for (auto& mc : me.matchCases) {
+        TryConvertBlock(*mc->exprOrDecls, *ty);
+        mc->SetTy(mc->exprOrDecls->GetTy());
+    }
+    for (auto& mco : me.matchCaseOthers) {
+        TryConvertBlock(*mco->exprOrDecls, *ty);
+        mco->SetTy(mco->exprOrDecls->GetTy());
+    }
+}
+
+void ExternDesugaring::HandleTryExpr(TryExpr& te)
+{
+    auto ty = te.GetTy();
+    if (te.desugarExpr || !Ty::IsTyCorrect(ty)) {
+        return;
+    }
+    TryConvertBlock(*te.tryBlock, *ty);
+    for (auto& catchBlock : te.catchBlocks) {
+        TryConvertBlock(*catchBlock, *ty);
+    }
 }
 
 void ExternDesugaring::DesugarOperation(Expr& expr)
@@ -295,8 +314,6 @@ void ExternDesugaring::DesugarOperation(Expr& expr)
     CJC_NULLPTR_CHECK(eval); // for well typed programs eval != nullptr
     expr.desugarExpr = std::move(eval);
     AddCurFile(*expr.desugarExpr, expr.curFile);
-    // Leaves of the tree may contain conversions and dynamic operations of their own.
-    Run(*expr.desugarExpr);
 }
 
 OwnedPtr<Expr> ExternDesugaring::BuildTree(Expr& expr)
@@ -312,56 +329,99 @@ OwnedPtr<Expr> ExternDesugaring::BuildTree(Expr& expr)
 
 OwnedPtr<Expr> ExternDesugaring::BuildOperation(Expr& expr, Ty& externTy)
 {
-    // An update is built like the access to its left value, with the assigned value as an extra argument.
-    auto ae = DynamicCast<AssignExpr*>(&expr);
-    if (ae && ae->isCompound) {
-        return BuildCompoundAssignment(*ae, externTy);
+    return match(expr)(
+        [this, &externTy](MemberAccess& ma) { return BuildMemberOperation(ma, externTy, ma); },
+        [this, &externTy](SubscriptExpr& se) { return BuildIndexedOperation(se, externTy, se); },
+        [this, &externTy](CallExpr& ce) { return BuildCallOperation(ce, externTy); },
+        [this, &externTy](AssignExpr& ae) { return BuildAssignmentOperation(ae, externTy); },
+        []() -> OwnedPtr<Expr> {
+            CJC_ASSERT(false);
+            return nullptr;
+        });
+}
+
+OwnedPtr<Expr> ExternDesugaring::BuildMemberOperation(
+    MemberAccess& ma, Ty& externTy, const Expr& source, Ptr<Expr> value)
+{
+    auto ctor = LookupCtor(value ? EXTERN_MEMBER_UPDATE_CTOR : EXTERN_MEMBER_ACCESS_CTOR, externTy);
+    if (!ctor.decl) {
+        return nullptr;
     }
-    auto& access = ae ? *ae->leftValue : expr;
-    Ctor ctor;
+    auto field = CreateLitConstExpr(LitConstKind::STRING, ma.field.Val(), ctor.ty->paramTys[1], true);
+    CopyBasicInfo(&ma, field.get());
     std::vector<OwnedPtr<Expr>> args;
-    if (auto ma = DynamicCast<MemberAccess*>(&access)) {
-        ctor = LookupCtor(ae ? EXTERN_MEMBER_UPDATE_CTOR : EXTERN_MEMBER_ACCESS_CTOR, externTy);
-        if (!ctor.decl) {
-            return nullptr;
-        }
-        auto field = CreateLitConstExpr(LitConstKind::STRING, ma->field.Val(), ctor.ty->paramTys[1], true);
-        CopyBasicInfo(ma, field.get());
-        args.emplace_back(BuildTree(*ma->baseExpr));
-        args.emplace_back(std::move(field));
-    } else if (auto se = DynamicCast<SubscriptExpr*>(&access)) {
-        // e[i1, ..., in] is built like e[i1]...[in].
-        auto receiver = BuildTree(*se->baseExpr);
-        auto accessCtor = LookupCtor(EXTERN_INDEXED_ACCESS_CTOR, externTy);
-        for (size_t i = 0; i + 1 < se->indexExprs.size(); ++i) {
-            auto index = BuildTree(*se->indexExprs[i]);
-            if (!accessCtor.decl || !receiver || !index) {
-                return nullptr;
-            }
-            std::vector<OwnedPtr<Expr>> accessArgs;
-            accessArgs.emplace_back(std::move(receiver));
-            accessArgs.emplace_back(std::move(index));
-            receiver = CreateCtorCall(accessCtor, externTy, std::move(accessArgs), *se);
-        }
-        ctor = ae ? LookupCtor(EXTERN_INDEXED_UPDATE_CTOR, externTy) : accessCtor;
-        args.emplace_back(std::move(receiver));
-        args.emplace_back(BuildTree(*se->indexExprs.back()));
-    } else {
-        auto& ce = StaticCast<CallExpr&>(expr);
-        ctor = LookupCtor(EXTERN_FUNCTION_CALL_CTOR, externTy);
-        if (!ctor.decl) {
-            return nullptr;
-        }
-        args.emplace_back(BuildTree(*ce.baseFunc));
-        args.emplace_back(BuildArgs(ce, *ctor.ty->paramTys[1]));
+    args.emplace_back(BuildTree(*ma.baseExpr));
+    args.emplace_back(std::move(field));
+    if (value) {
+        args.emplace_back(BuildTree(*value));
     }
-    if (ae) {
-        args.emplace_back(BuildTree(*ae->rightExpr));
+    if (std::any_of(args.begin(), args.end(), [](auto& arg) { return !arg; })) {
+        return nullptr;
+    }
+    return CreateCtorCall(ctor, externTy, std::move(args), source);
+}
+
+OwnedPtr<Expr> ExternDesugaring::BuildIndexedOperation(
+    SubscriptExpr& se, Ty& externTy, const Expr& source, Ptr<Expr> value)
+{
+    // e[i1, ..., in] is built like e[i1]...[in]; an update changes only the final access.
+    auto receiver = BuildTree(*se.baseExpr);
+    auto accessCtor = LookupCtor(EXTERN_INDEXED_ACCESS_CTOR, externTy);
+    for (size_t i = 0; i + 1 < se.indexExprs.size(); ++i) {
+        auto index = BuildTree(*se.indexExprs[i]);
+        if (!accessCtor.decl || !receiver || !index) {
+            return nullptr;
+        }
+        std::vector<OwnedPtr<Expr>> accessArgs;
+        accessArgs.emplace_back(std::move(receiver));
+        accessArgs.emplace_back(std::move(index));
+        receiver = CreateCtorCall(accessCtor, externTy, std::move(accessArgs), se);
+    }
+    auto ctor = value ? LookupCtor(EXTERN_INDEXED_UPDATE_CTOR, externTy) : accessCtor;
+    std::vector<OwnedPtr<Expr>> args;
+    args.emplace_back(std::move(receiver));
+    args.emplace_back(BuildTree(*se.indexExprs.back()));
+    if (value) {
+        args.emplace_back(BuildTree(*value));
     }
     if (!ctor.decl || std::any_of(args.begin(), args.end(), [](auto& arg) { return !arg; })) {
         return nullptr;
     }
-    return CreateCtorCall(ctor, externTy, std::move(args), expr);
+    return CreateCtorCall(ctor, externTy, std::move(args), source);
+}
+
+OwnedPtr<Expr> ExternDesugaring::BuildCallOperation(CallExpr& ce, Ty& externTy)
+{
+    auto ctor = LookupCtor(EXTERN_FUNCTION_CALL_CTOR, externTy);
+    if (!ctor.decl) {
+        return nullptr;
+    }
+    std::vector<OwnedPtr<Expr>> args;
+    args.emplace_back(BuildTree(*ce.baseFunc));
+    args.emplace_back(BuildArgs(ce, *ctor.ty->paramTys[1]));
+    if (std::any_of(args.begin(), args.end(), [](auto& arg) { return !arg; })) {
+        return nullptr;
+    }
+    return CreateCtorCall(ctor, externTy, std::move(args), ce);
+}
+
+OwnedPtr<Expr> ExternDesugaring::BuildAssignmentOperation(AssignExpr& ae, Ty& externTy)
+{
+    if (ae.isCompound) {
+        return BuildCompoundAssignment(ae, externTy);
+    }
+    // An update uses the access to its left value, with the assigned value as an extra argument.
+    return match(*ae.leftValue)(
+        [this, &ae, &externTy](MemberAccess& ma) {
+            return BuildMemberOperation(ma, externTy, ae, ae.rightExpr.get());
+        },
+        [this, &ae, &externTy](SubscriptExpr& se) {
+            return BuildIndexedOperation(se, externTy, ae, ae.rightExpr.get());
+        },
+        []() -> OwnedPtr<Expr> {
+            CJC_ASSERT(false);
+            return nullptr;
+        });
 }
 
 OwnedPtr<Expr> ExternDesugaring::BuildCompoundAssignment(AssignExpr& ae, Ty& externTy)
@@ -371,6 +431,7 @@ OwnedPtr<Expr> ExternDesugaring::BuildCompoundAssignment(AssignExpr& ae, Ty& ext
         return nullptr;
     }
     // e.f op= v is built from the access e.f and the binary operator op, without '='.
+    // BuildOperation also handles left values; BuildTree would treat the target as a non-dynamic leaf.
     auto target = BuildOperation(*ae.leftValue, externTy);
     auto op = CreateLitConstExpr(LitConstKind::STRING,
         TOKENS[static_cast<int>(COMPOUND_ASSIGN_EXPR_MAP.at(ae.op))], ctor.ty->paramTys[1], true);

@@ -50,18 +50,29 @@ private:
     bool TryConvert(AST::Expr& expr, AST::Ty& target);
     void TryConvertBlock(AST::Block& block, AST::Ty& target);
 
-    AST::VisitAction HandleVarDecl(const AST::VarDecl& vd);
-    AST::VisitAction HandleAssignExpr(const AST::AssignExpr& ae);
-    AST::VisitAction HandleCallExpr(AST::CallExpr& ce);
-    AST::VisitAction HandleReturnExpr(const AST::ReturnExpr& re);
-    AST::VisitAction HandleFuncBody(const AST::FuncBody& fb);
-    AST::VisitAction HandleArrayExpr(AST::ArrayExpr& ae);
-    AST::VisitAction HandleValues(AST::Expr& expr);
+    void HandleVarDecl(const AST::VarDecl& vd);
+    void HandleAssignExpr(const AST::AssignExpr& ae);
+    void HandleCallExpr(AST::CallExpr& ce);
+    void HandleReturnExpr(const AST::ReturnExpr& re);
+    void HandleFuncBody(const AST::FuncBody& fb);
+    void HandleArrayExpr(AST::ArrayExpr& ae);
+    void HandleArrayLit(AST::ArrayLit& al);
+    void HandleTupleLit(AST::TupleLit& tl);
+    void HandleIfExpr(AST::IfExpr& ie);
+    void HandleMatchExpr(AST::MatchExpr& me);
+    void HandleTryExpr(AST::TryExpr& te);
 
     // Dynamic operations on Extern<T>.
     void DesugarOperation(AST::Expr& expr);
     OwnedPtr<AST::Expr> BuildTree(AST::Expr& expr);
     OwnedPtr<AST::Expr> BuildOperation(AST::Expr& expr, AST::Ty& externTy);
+    // A value selects the update constructor; otherwise these build a read.
+    OwnedPtr<AST::Expr> BuildMemberOperation(
+        AST::MemberAccess& ma, AST::Ty& externTy, const AST::Expr& source, Ptr<AST::Expr> value = nullptr);
+    OwnedPtr<AST::Expr> BuildIndexedOperation(
+        AST::SubscriptExpr& se, AST::Ty& externTy, const AST::Expr& source, Ptr<AST::Expr> value = nullptr);
+    OwnedPtr<AST::Expr> BuildCallOperation(AST::CallExpr& ce, AST::Ty& externTy);
+    OwnedPtr<AST::Expr> BuildAssignmentOperation(AST::AssignExpr& ae, AST::Ty& externTy);
     OwnedPtr<AST::Expr> BuildCompoundAssignment(AST::AssignExpr& ae, AST::Ty& externTy);
     OwnedPtr<AST::Expr> BuildArgs(AST::CallExpr& ce, AST::Ty& arrayTy);
     Ctor LookupCtor(const std::string& name, AST::Ty& externTy);
