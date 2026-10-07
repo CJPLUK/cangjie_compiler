@@ -613,6 +613,7 @@ public:
 #endif
     bool chirEA = false;   /**< Whether enable escape analysis on CHIR. */
     bool chirLICM = false; /**< Whether enable LICM on CHIR (this depends on escape analysis) */
+    bool enableExternSequence = false; /**< Whether merge consecutive evaluations of Extern operations on CHIR. */
 
     // CHIR closure-conversion
     bool chirCC = false;

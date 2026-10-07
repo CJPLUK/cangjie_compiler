@@ -1656,6 +1656,7 @@ std::vector<std::string> GlobalOptions::ToSerialized() const
     result.emplace_back(BoolToSerializedString(implicitPrelude));
     result.emplace_back(BoolToSerializedString(chirEA));
     result.emplace_back(BoolToSerializedString(chirLICM));
+    result.emplace_back(BoolToSerializedString(enableExternSequence));
     result.emplace_back(BoolToSerializedString(chirCC));
     result.emplace_back(OptimizationLevelToSerializedString());
     result.emplace_back(StackTraceFormatToSerializedString());

@@ -942,6 +942,7 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
             opts.enableChirRGetOrThrowE = true;
 	    return true;
     }},
+    { Options::ID::ENABLE_EXTERN_SEQUENCE, OPTION_TRUE_ACTION(opts.enableExternSequence = true) },
     { Options::ID::DISABLE_CHIR_USELESS_IMPORT_ELIMINATION, [](
         GlobalOptions& opts, [[maybe_unused]] const OptionArgInstance& arg) {
         opts.disableChirUselessImportElimination = true;

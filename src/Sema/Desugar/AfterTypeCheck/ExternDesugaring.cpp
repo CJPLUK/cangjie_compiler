@@ -312,6 +312,8 @@ void ExternDesugaring::DesugarOperation(Expr& expr)
     auto& externTy = *expr.GetTy();
     auto eval = CreateRuntimeCall(EVAL_FUNC, BuildTree(expr), externTy, externTy, {}, expr);
     CJC_NULLPTR_CHECK(eval); // for well typed programs eval != nullptr
+    // Distinguishes the generated evaluations, which CHIR may merge (--enable-extern-sequence), from calls in user code.
+    eval->EnableAttr(Attribute::EXTERN_EVAL);
     expr.desugarExpr = std::move(eval);
     AddCurFile(*expr.desugarExpr, expr.curFile);
 }

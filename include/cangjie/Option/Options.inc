@@ -378,6 +378,9 @@ OPTION("--chir-wfc", CHIR_WFC, SEPARATED, { BACKEND(ALL) },
 OPTION("--enable-chir-redundant-getorthrow-elimination", ENABLE_CHIR_REDUNDANT_GETORTHROW_ELIMINATION, FLAG,
     { BACKEND(CJNATIVE) }, { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Enable CHIR redundant GetOrThrow elimination.")
+OPTION("--enable-extern-sequence", ENABLE_EXTERN_SEQUENCE, FLAG, { BACKEND(CJNATIVE) },
+    { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Merge consecutive evaluations of Extern operations into one evaluation of an ExternSequence in CHIR.")
 OPTION("--disable-chir-useless-import-elimination", DISABLE_CHIR_USELESS_IMPORT_ELIMINATION, FLAG,
     { BACKEND(CJNATIVE) }, { GROUP(GLOBAL) COMMA GROUP(STABLE) }, "--disable-chir-UIE", {}, MULTIPLE_OCCURRENCE,
     "Disable CHIR useless import elimination")

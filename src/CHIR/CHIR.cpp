@@ -23,6 +23,7 @@
 #include "cangjie/CHIR/Optimization/Devirtualization.h"
 #include "cangjie/CHIR/Optimization/DevirtualizeTrivialStatics.h"
 #include "cangjie/CHIR/Optimization/FunctionInline.h"
+#include "cangjie/CHIR/Optimization/ExternSequenceMerge.h"
 #include "cangjie/CHIR/Optimization/GetRefToArrayElem.h"
 #include "cangjie/CHIR/Optimization/MergeBlocks.h"
 #include "cangjie/CHIR/Optimization/OptFuncRetType.h"
@@ -633,6 +634,11 @@ void ToCHIR::OptimizeFuncReturnType()
 void ToCHIR::RunOptimizationPass()
 {
     Utils::ProfileRecorder recorder("CHIR", "CHIR Opt");
+    // Before inlining, which may inline the evaluations it merges.
+    if (opts.enableExternSequence) {
+        ExternSequenceMerge(builder, opts.chirDebugOptimizer).RunOnPackage(*chirPkg);
+        DumpCHIRToFile("ExternSequenceMerge");
+    }
     OptimizeFuncReturnType();
     RunArrayListConstStartOpt();
     RunUnitUnify();

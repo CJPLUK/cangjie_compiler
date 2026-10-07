@@ -140,6 +140,7 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::DOES_NOT_THROW, "DOES_NOT_THROW"},
     {AST::Attribute::OBJ_C_IMPL_REGISTRY_COMPANION, "OBJ_C_IMPL_REGISTRY_COMPANION"},
     {AST::Attribute::OBJ_C_IMPL_MOVED_MEMBER_PROXY, "OBJ_C_IMPL_MOVED_MEMBER_PROXY"},
+    {AST::Attribute::EXTERN_EVAL, "EXTERN_EVAL"},
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
 };
 UNSUPPRESS_WARNING()
