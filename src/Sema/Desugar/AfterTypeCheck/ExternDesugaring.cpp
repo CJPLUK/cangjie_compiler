@@ -81,7 +81,7 @@ void ExternDesugaring::Run(Node& root)
             return VisitAction::SKIP_CHILDREN;
         }
         match(*node)(
-            [this](const VarDecl& vd) { HandleVarDecl(vd); },
+            [this](const VarDeclAbstract& vd) { HandleVarDecl(vd); },
             [this](const AssignExpr& ae) { HandleAssignExpr(ae); },
             [this](CallExpr& ce) { HandleCallExpr(ce); },
             [this](const ReturnExpr& re) { HandleReturnExpr(re); },
@@ -166,7 +166,7 @@ void ExternDesugaring::TryConvertBlock(Block& block, Ty& target)
     }
 }
 
-void ExternDesugaring::HandleVarDecl(const VarDecl& vd)
+void ExternDesugaring::HandleVarDecl(const VarDeclAbstract& vd)
 {
     if (vd.initializer && vd.GetTy()) {
         TryConvert(*vd.initializer, *vd.GetTy());

@@ -50,7 +50,7 @@ private:
     bool TryConvert(AST::Expr& expr, AST::Ty& target);
     void TryConvertBlock(AST::Block& block, AST::Ty& target);
 
-    void HandleVarDecl(const AST::VarDecl& vd);
+    void HandleVarDecl(const AST::VarDeclAbstract& vd);
     void HandleAssignExpr(const AST::AssignExpr& ae);
     void HandleCallExpr(AST::CallExpr& ce);
     void HandleReturnExpr(const AST::ReturnExpr& re);
