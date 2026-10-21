@@ -12,6 +12,7 @@
 #ifdef STDLIB
 STDLIB(CORE, "std", "core")
 STDLIB(BINARY, "std", "binary")
+STDLIB(EXPERIMENTAL, "std", "experimental")
 STDLIB(IO, "std", "io")
 STDLIB(MATH, "std", "math")
 STDLIB(OVERFLOW, "std", "overflow")

@@ -439,6 +439,13 @@ bool ImportManager::ResolveImportedPackageForFile(File& file, bool isRecursive)
         }
         auto isVisible = import->IsReExport() && Modules::IsVisible(*import, relation);
         auto [fullPackageName, cjoPath] = cjoManager->GetPackageCjo(*import);
+        if (!opts.experimentalMode && fullPackageName == "std.experimental") {
+            auto range = isRecursive ? MakeRange(import->begin, import->begin + 1)
+                                     : GetPackageNameRange(*cjoManager, *import);
+            diag.DiagnoseRefactor(DiagKindRefactor::package_requires_experimental, range, fullPackageName);
+            success = false;
+            continue;
+        }
         SaveDepPkgCjoPath(fullPackageName, cjoPath);
         // 1. Handle the package which has been parsed before.
         auto importPkg = cjoManager->GetPackage(fullPackageName);
@@ -537,6 +544,12 @@ bool ImportManager::CheckCjoPathLegality(const OwnedPtr<ImportSpec>& import, con
 
 bool ImportManager::ResolveImportedPackageHeaders(const Package& package, bool isRecursive)
 {
+    // Check serialized dependencies too: private imports, including those in macros, may not load declarations.
+    if (isRecursive && !opts.experimentalMode &&
+        Utils::In(std::string{"std.experimental"}, package.GetAllDependentStdPkgs())) {
+        diag.DiagnoseRefactor(DiagKindRefactor::package_requires_experimental, DEFAULT_POSITION, "std.experimental");
+        return false;
+    }
     bool success{true};
     for (auto& file : package.files) {
         if (!ResolveImportedPackageForFile(*file, isRecursive)) {
