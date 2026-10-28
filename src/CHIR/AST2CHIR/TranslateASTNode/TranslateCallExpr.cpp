@@ -414,7 +414,8 @@ Value* Translator::TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const
            from the reference here. The other mapped arguments, e.g. the indices of a compound assignment through
            `[]`, are recorded as values, for which GetDerefedValue does nothing. */
         CJC_ASSERT(GetMapExpr(*arg.expr) == nullptr || !argVal->GetType()->IsRef() ||
-            StaticCast<RefType*>(argVal->GetType())->GetBaseType()->IsClassOrArray() || arg.expr->GetTy()->IsCoreExternType());
+            StaticCast<RefType*>(argVal->GetType())->GetBaseType()->IsClassOrArray() ||
+            arg.expr->GetTy()->IsCoreExternType());
         if (GetMapExpr(*arg.expr) != nullptr) {
             argVal = GetDerefedValue(argVal, loc);
         }

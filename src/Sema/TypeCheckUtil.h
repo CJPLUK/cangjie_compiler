@@ -244,8 +244,8 @@ bool IsDynamicExternSubscript(const AST::SubscriptExpr& se);
  */
 bool IsDynamicExternUpdate(const AST::AssignExpr& ae);
 /**
- * Whether @p ce is a dynamic call e(a1, ..., an), i.e. a call with arguments of any type to a value e of type Extern<T>.
- * This includes e.f(a1, ..., an), whose callee e.f is a dynamic member access.
+ * Whether @p ce is a dynamic call e(a1, ..., an), i.e. a call with arguments of any type to a value e of type
+ * Extern<T>. This includes e.f(a1, ..., an), whose callee e.f is a dynamic member access.
  */
 bool IsDynamicExternCall(const AST::CallExpr& ce);
 

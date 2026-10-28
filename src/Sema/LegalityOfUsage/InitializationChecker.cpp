@@ -294,8 +294,9 @@ bool MayBeStructTy(const VarDecl& target)
     if (!Ty::IsTyCorrect(target.GetTy())) {
         return false;
     }
+    // A dynamic update e.f = v on a value e of type Extern<T> does not modify e.
     if (target.GetTy()->IsStruct()) {
-        return true;
+        return !target.GetTy()->IsCoreExternType();
     }
     if (target.GetTy()->IsGeneric()) {
         auto gTy = RawStaticCast<GenericsTy*>(target.GetTy());
@@ -745,17 +746,14 @@ void InitializationChecker::CheckLetFlagInMemberAccess(const Expr& ae, const Mem
             }
         }
     }
-    // Do not allow assignments of fields of 'let' struct instance. A dynamic update e.f = v on a value e of type
-    // Extern<T> does not modify e.
+    // Do not allow assignments of fields of 'let' struct instance
     if (auto re = DynamicCast<RefExpr*>(ma.baseExpr.get()); re) {
-        if (auto vd = DynamicCast<VarDecl*>(re->ref.target);
-            vd && !vd->isVar && MayBeStructTy(*vd) && !vd->GetTy()->IsCoreExternType()) {
+        if (auto vd = DynamicCast<VarDecl*>(re->ref.target); vd && !vd->isVar && MayBeStructTy(*vd)) {
             DiagCannotAssignToImmutable(diag, ae, *re);
         }
     }
     if (auto m = DynamicCast<MemberAccess*>(ma.baseExpr.get()); m) {
-        if (auto vd = DynamicCast<VarDecl*>(m->target);
-            vd && MayBeStructTy(*vd) && !vd->GetTy()->IsCoreExternType()) {
+        if (auto vd = DynamicCast<VarDecl*>(m->target); vd && MayBeStructTy(*vd)) {
             if (!vd->isVar) {
                 DiagCannotAssignToImmutable(diag, ae, ma);
             } else {
