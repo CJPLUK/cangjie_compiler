@@ -70,6 +70,12 @@ private:
     OwnedPtr<AST::Expr> BuildFunctionCall(AST::CallExpr& ce, AST::Ty& externTy);
     OwnedPtr<AST::Expr> BuildUpdate(AST::AssignExpr& ae, AST::Ty& externTy);
     OwnedPtr<AST::Expr> BuildCompoundAssignment(AST::AssignExpr& ae, AST::Ty& externTy);
+    OwnedPtr<AST::Expr> BuildMemberCompoundUpdate(AST::AssignExpr& ae, AST::MemberAccess& ma, AST::Ty& externTy,
+        std::vector<OwnedPtr<AST::Node>>& nodes);
+    OwnedPtr<AST::Expr> BuildIndexedCompoundUpdate(AST::AssignExpr& ae, AST::SubscriptExpr& se, AST::Ty& externTy,
+        std::vector<OwnedPtr<AST::Node>>& nodes);
+    OwnedPtr<AST::Expr> CreateCompoundOpCall(AST::AssignExpr& ae, OwnedPtr<AST::Expr> current, AST::Ty& externTy,
+        std::vector<OwnedPtr<AST::Node>>& nodes);
     /** The receiver e[i1]...[in-1] of the last index of e[i1, ..., in]. */
     OwnedPtr<AST::Expr> BuildIndexedReceiver(AST::SubscriptExpr& se, AST::Ty& externTy);
 

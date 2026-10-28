@@ -90,6 +90,19 @@ OwnedPtr<RefExpr> CreateTmpRef(VarDecl& tmp, const Expr& expr)
     CopyBasicInfo(&expr, ref.get());
     return ref;
 }
+
+/** Append the declaration let name = init to @p nodes. */
+Ptr<VarDecl> AddTmp(std::vector<OwnedPtr<Node>>& nodes, const std::string& name, OwnedPtr<Expr> init, const Expr& expr)
+{
+    if (!init) {
+        return nullptr;
+    }
+    auto tmp = CreateVarDecl(name, std::move(init));
+    CopyBasicInfo(&expr, tmp.get());
+    auto ptr = tmp.get();
+    nodes.emplace_back(std::move(tmp));
+    return ptr;
+}
 } // namespace
 
 void ExternDesugaring::Run(Node& root)
@@ -407,60 +420,12 @@ OwnedPtr<Expr> ExternDesugaring::BuildUpdate(AssignExpr& ae, Ty& externTy)
  */
 OwnedPtr<Expr> ExternDesugaring::BuildCompoundAssignment(AssignExpr& ae, Ty& externTy)
 {
-    const std::string op = TOKENS[static_cast<int>(COMPOUND_ASSIGN_EXPR_MAP.at(ae.op))];
     std::vector<OwnedPtr<Node>> nodes;
-    auto addTmp = [&nodes, &ae](const std::string& name, OwnedPtr<Expr> init) -> Ptr<VarDecl> {
-        if (!init) {
-            return nullptr;
-        }
-        auto tmp = CreateVarDecl(name, std::move(init));
-        CopyBasicInfo(&ae, tmp.get());
-        auto ptr = tmp.get();
-        nodes.emplace_back(std::move(tmp));
-        return ptr;
-    };
-    auto applyOp = [this, &ae, &externTy](VarDecl& opFunc) {
-        std::vector<OwnedPtr<Expr>> args;
-        args.emplace_back(ASTCloner::Clone(ae.rightExpr.get()));
-        return CreateFunctionCall(CreateTmpRef(opFunc, ae), std::move(args), externTy, ae);
-    };
     OwnedPtr<Expr> update;
     if (auto ma = DynamicCast<MemberAccess*>(ae.leftValue.get())) {
-        auto receiver = addTmp("$externReceiver", ASTCloner::Clone(ma->baseExpr.get()));
-        auto func = LookupRuntimeFunc(MEMBER_UPDATE_FUNC, externTy, {}, ae);
-        if (!receiver || !func.decl) {
-            return nullptr;
-        }
-        auto current = CreateMemberAccessCall(CreateTmpRef(*receiver, ae), ma->field.Val(), externTy, *ma);
-        auto opFunc = addTmp("$externOp", CreateMemberAccessCall(std::move(current), op, externTy, ae));
-        if (!opFunc) {
-            return nullptr;
-        }
-        std::vector<OwnedPtr<Expr>> args;
-        args.emplace_back(CreateTmpRef(*receiver, ae));
-        args.emplace_back(CreateFieldName(ma->field.Val(), *func.ty->paramTys[1], *ma));
-        args.emplace_back(applyOp(*opFunc));
-        update = CreateRuntimeCall(func, std::move(args), externTy, ae);
+        update = BuildMemberCompoundUpdate(ae, *ma, externTy, nodes);
     } else {
-        auto& se = StaticCast<SubscriptExpr&>(*ae.leftValue);
-        auto receiver = addTmp("$externReceiver", BuildIndexedReceiver(se, externTy));
-        auto index = addTmp("$externIndex", ASTCloner::Clone(se.indexExprs.back().get()));
-        if (!receiver || !index) {
-            return nullptr;
-        }
-        std::vector<OwnedPtr<Expr>> accessArgs;
-        accessArgs.emplace_back(CreateTmpRef(*receiver, ae));
-        accessArgs.emplace_back(CreateTmpRef(*index, ae));
-        auto current = CreateRuntimeCall(INDEXED_ACCESS_FUNC, std::move(accessArgs), externTy, se);
-        auto opFunc = addTmp("$externOp", CreateMemberAccessCall(std::move(current), op, externTy, ae));
-        if (!opFunc) {
-            return nullptr;
-        }
-        std::vector<OwnedPtr<Expr>> args;
-        args.emplace_back(CreateTmpRef(*receiver, ae));
-        args.emplace_back(CreateTmpRef(*index, ae));
-        args.emplace_back(applyOp(*opFunc));
-        update = CreateRuntimeCall(INDEXED_UPDATE_FUNC, std::move(args), externTy, ae);
+        update = BuildIndexedCompoundUpdate(ae, StaticCast<SubscriptExpr&>(*ae.leftValue), externTy, nodes);
     }
     if (!update) {
         return nullptr;
@@ -469,6 +434,63 @@ OwnedPtr<Expr> ExternDesugaring::BuildCompoundAssignment(AssignExpr& ae, Ty& ext
     auto block = CreateBlock(std::move(nodes), TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
     CopyBasicInfo(&ae, block.get());
     return block;
+}
+
+OwnedPtr<Expr> ExternDesugaring::BuildMemberCompoundUpdate(
+    AssignExpr& ae, MemberAccess& ma, Ty& externTy, std::vector<OwnedPtr<Node>>& nodes)
+{
+    auto receiver = AddTmp(nodes, "$externReceiver", ASTCloner::Clone(ma.baseExpr.get()), ae);
+    auto func = LookupRuntimeFunc(MEMBER_UPDATE_FUNC, externTy, {}, ae);
+    if (!receiver || !func.decl) {
+        return nullptr;
+    }
+    auto current = CreateMemberAccessCall(CreateTmpRef(*receiver, ae), ma.field.Val(), externTy, ma);
+    auto opCall = CreateCompoundOpCall(ae, std::move(current), externTy, nodes);
+    if (!opCall) {
+        return nullptr;
+    }
+    std::vector<OwnedPtr<Expr>> args;
+    args.emplace_back(CreateTmpRef(*receiver, ae));
+    args.emplace_back(CreateFieldName(ma.field.Val(), *func.ty->paramTys[1], ma));
+    args.emplace_back(std::move(opCall));
+    return CreateRuntimeCall(func, std::move(args), externTy, ae);
+}
+
+OwnedPtr<Expr> ExternDesugaring::BuildIndexedCompoundUpdate(
+    AssignExpr& ae, SubscriptExpr& se, Ty& externTy, std::vector<OwnedPtr<Node>>& nodes)
+{
+    auto receiver = AddTmp(nodes, "$externReceiver", BuildIndexedReceiver(se, externTy), ae);
+    auto index = AddTmp(nodes, "$externIndex", ASTCloner::Clone(se.indexExprs.back().get()), ae);
+    if (!receiver || !index) {
+        return nullptr;
+    }
+    std::vector<OwnedPtr<Expr>> accessArgs;
+    accessArgs.emplace_back(CreateTmpRef(*receiver, ae));
+    accessArgs.emplace_back(CreateTmpRef(*index, ae));
+    auto current = CreateRuntimeCall(INDEXED_ACCESS_FUNC, std::move(accessArgs), externTy, se);
+    auto opCall = CreateCompoundOpCall(ae, std::move(current), externTy, nodes);
+    if (!opCall) {
+        return nullptr;
+    }
+    std::vector<OwnedPtr<Expr>> args;
+    args.emplace_back(CreateTmpRef(*receiver, ae));
+    args.emplace_back(CreateTmpRef(*index, ae));
+    args.emplace_back(std::move(opCall));
+    return CreateRuntimeCall(INDEXED_UPDATE_FUNC, std::move(args), externTy, ae);
+}
+
+/** Create T.functionCall(o, [v]) for e op= v, after the declaration let o = T.memberAccess(current, "op"). */
+OwnedPtr<Expr> ExternDesugaring::CreateCompoundOpCall(
+    AssignExpr& ae, OwnedPtr<Expr> current, Ty& externTy, std::vector<OwnedPtr<Node>>& nodes)
+{
+    const std::string op = TOKENS[static_cast<int>(COMPOUND_ASSIGN_EXPR_MAP.at(ae.op))];
+    auto opFunc = AddTmp(nodes, "$externOp", CreateMemberAccessCall(std::move(current), op, externTy, ae), ae);
+    if (!opFunc) {
+        return nullptr;
+    }
+    std::vector<OwnedPtr<Expr>> args;
+    args.emplace_back(ASTCloner::Clone(ae.rightExpr.get()));
+    return CreateFunctionCall(CreateTmpRef(*opFunc, ae), std::move(args), externTy, ae);
 }
 
 OwnedPtr<Expr> ExternDesugaring::CreateMemberAccessCall(
@@ -530,7 +552,9 @@ ExternDesugaring::RuntimeFunc ExternDesugaring::LookupRuntimeFunc(
     return {decl, matchedParentTy, typeManager.GetFunctionTy(paramTys, instantiate(declTy->retTy))};
 }
 
-/** Create the call T.func<instTys>(args) for the desugaring of @p expr, where T is the foreign runtime of @p externTy. */
+/**
+ * Create the call T.func<instTys>(args) for the desugaring of @p expr, where T is the foreign runtime of @p externTy.
+ */
 OwnedPtr<CallExpr> ExternDesugaring::CreateRuntimeCall(const RuntimeFunc& func, std::vector<OwnedPtr<Expr>> args,
     Ty& externTy, const Expr& expr, std::vector<Ptr<Ty>> instTys)
 {
