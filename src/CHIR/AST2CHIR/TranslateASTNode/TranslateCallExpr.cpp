@@ -556,12 +556,6 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
         CJC_ASSERT(it->second.find(identifier) != it->second.end());
         intrinsicKind = it->second.at(identifier);
     }
-    if (intrinsicKind == GET_EXTERN) {
-        return TranslateGetExtern(expr);
-    }
-    if (intrinsicKind == SET_EXTERN) {
-        return TranslateSetExtern(expr);
-    }
 
     // Translate arguments
     auto args = TranslateFuncArgs(expr, nullptr, nullptr);
@@ -590,34 +584,6 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
         return CreateAndAppendExpression<Load>(ty, intriVar, currentBlock)->GetResult();
     }
     return intriVar;
-}
-
-Ptr<Value> Translator::TranslateGetExtern(const AST::CallExpr& expr)
-{
-    // The payload is the only member variable of std.core.Extern<T>.
-    const std::vector<uint64_t> path{0};
-    const auto& loc = TranslateLocation(expr);
-    CJC_ASSERT(expr.args.size() == 1U);
-    auto externVal = GetDerefedValue(TranslateExprArg(*expr.args[0]->expr), loc);
-    auto externTy = StaticCast<CustomType*>(externVal->GetType());
-    auto payloadTy = externTy->GetInstMemberTypeByPath(path, builder);
-    auto payload = CreateAndAppendExpression<Field>(loc, payloadTy, externVal, path, currentBlock)->GetResult();
-    return TypeCastOrBoxIfNeeded(*payload, *chirTy.TranslateType(*expr.GetTy()), loc);
-}
-
-Ptr<Value> Translator::TranslateSetExtern(const AST::CallExpr& expr)
-{
-    // The payload is the only member variable of std.core.Extern<T>.
-    const std::vector<uint64_t> path{0};
-    const auto& loc = TranslateLocation(expr);
-    CJC_ASSERT(expr.args.size() == 2U);
-    // The payload is written in place, so the receiver is translated as a left value, e.g. `this` in the constructor.
-    auto externRef = GenerateLeftValue(TranslateExprAsLeftValue(*expr.args[0]->expr), loc);
-    auto externTy = StaticCast<CustomType*>(StaticCast<RefType*>(externRef->GetType())->GetBaseType());
-    auto payloadTy = externTy->GetInstMemberTypeByPath(path, builder);
-    auto payload = TypeCastOrBoxIfNeeded(*TranslateExprArg(*expr.args[1]->expr), *payloadTy, loc);
-    CreateAndAppendExpression<StoreElementRef>(loc, builder.GetUnitTy(), payload, externRef, path, currentBlock);
-    return CreateAndAppendConstantExpression<UnitLiteral>(builder.GetUnitTy(), *currentBlock)->GetResult();
 }
 
 Ptr<Value> Translator::TranslateForeignFuncCall(const AST::CallExpr& expr)
