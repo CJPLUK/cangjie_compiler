@@ -596,30 +596,33 @@ OwnedPtr<CallExpr> ExternDesugaring::CreateRuntimeCall(const std::string& name, 
 ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
     ASTContext& ctx, Ty& runtimeTy, const std::string& name, const Expr& expr)
 {
-    std::vector<Ptr<Decl>> candidates;
-    if (runtimeTy.IsGeneric()) {
-        auto foreignRuntime = importManager.GetCoreDecl<InterfaceDecl>(STD_LIB_FOREIGN_RUNTIME);
-        if (!foreignRuntime) {
-            CJC_ASSERT(false);
-            return {};
-        }
-        candidates = foreignRuntime->GetMemberDeclPtrs();
-    } else {
-        candidates = FieldLookup(ctx, Ty::GetDeclOfTy(&runtimeTy), name, {&runtimeTy, expr.curFile});
+    auto foreignRuntime = importManager.GetCoreDecl<InterfaceDecl>(STD_LIB_FOREIGN_RUNTIME);
+    if (!foreignRuntime) {
+        CJC_ASSERT(false);
+        return {};
     }
     Ptr<FuncDecl> func = nullptr;
-    for (auto decl : candidates) {
-        auto fd = DynamicCast<FuncDecl*>(decl);
-        if (!fd || fd->identifier != name || !fd->TestAttr(Attribute::STATIC)) {
-            continue;
-        }
-        // Prefer the implementation over the abstract declaration in ForeignRuntime.
-        if (!func || (func->TestAttr(Attribute::ABSTRACT) && !fd->TestAttr(Attribute::ABSTRACT))) {
+    for (auto decl : foreignRuntime->GetMemberDeclPtrs()) {
+        if (auto fd = DynamicCast<FuncDecl*>(decl); fd && fd->identifier == name) {
             func = fd;
+            break;
         }
     }
     if (!func) {
         return {};
+    }
+    if (!runtimeTy.IsGeneric()) {
+        // Only an implementation of the ForeignRuntime member qualifies, not an overload with the same name.
+        auto promoted = promotion.Promote(runtimeTy, *foreignRuntime->GetTy());
+        auto instParentTy = promoted.empty() ? nullptr : *promoted.begin();
+        for (auto decl : FieldLookup(ctx, Ty::GetDeclOfTy(&runtimeTy), name, {&runtimeTy, expr.curFile})) {
+            auto fd = DynamicCast<FuncDecl*>(decl);
+            if (fd && !fd->TestAttr(Attribute::ABSTRACT) &&
+                IsOverrideOrShadow(typeManager, *fd, *func, &runtimeTy, instParentTy)) {
+                func = fd;
+                break;
+            }
+        }
     }
     // Like a static call T.name(...) written by hand, the call must have an implementation.
     if (!runtimeTy.IsGeneric() && func->TestAttr(Attribute::ABSTRACT)) {
