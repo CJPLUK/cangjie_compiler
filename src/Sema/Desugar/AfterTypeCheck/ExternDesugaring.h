@@ -48,6 +48,7 @@ private:
     static bool IsDynamic(const AST::Expr& expr);
 
     // Conversions to Extern<T>.
+    /** Return whether @p expr was converted to @p target, otherwise @p expr is left unchanged. */
     bool TryConvert(AST::Expr& expr, AST::Ty& target);
     void TryConvertBlock(AST::Block& block, AST::Ty& target);
 

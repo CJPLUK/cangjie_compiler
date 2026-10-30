@@ -38,6 +38,11 @@ const std::string MEMBER_UPDATE_FUNC = "memberUpdate";
 const std::string INDEXED_UPDATE_FUNC = "indexedUpdate";
 const std::string FUNCTION_CALL_FUNC = "functionCall";
 
+Ptr<Decl> GetForeignRuntimeDecl(Ty& runtimeTy)
+{
+    return runtimeTy.IsGeneric() ? Ptr<Decl>(StaticCast<GenericsTy*>(&runtimeTy)->decl) : Ty::GetDeclOfTy(&runtimeTy);
+}
+
 /**
  * Create the reference RT.func to the static function @p func of the foreign runtime @p runtimeTy, typed @p funcTy.
  * @p matchedParentTy is the instantiated interface type when @p func is a member of an interface. The reference takes
@@ -46,8 +51,7 @@ const std::string FUNCTION_CALL_FUNC = "functionCall";
 OwnedPtr<MemberAccess> CreateForeignRuntimeFuncAccess(
     Ty& runtimeTy, FuncDecl& func, Ptr<Ty> matchedParentTy, Ty& funcTy, const Expr& expr)
 {
-    Ptr<Decl> runtimeDecl = runtimeTy.IsGeneric() ? Ptr<Decl>(StaticCast<GenericsTy*>(&runtimeTy)->decl)
-                                                  : Ty::GetDeclOfTy(&runtimeTy);
+    Ptr<Decl> runtimeDecl = GetForeignRuntimeDecl(runtimeTy);
     if (!runtimeDecl) {
         return nullptr;
     }
@@ -159,12 +163,15 @@ bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
     if (!valueTy || !needConversion(*valueTy, target)) {
         return false;
     }
-    std::vector<OwnedPtr<Expr>> args;
-    args.emplace_back(expr.desugarExpr ? std::move(expr.desugarExpr) : ASTCloner::Clone(Ptr(&expr)));
-    auto ce = CreateRuntimeCall(TO_EXTERN_FUNC, std::move(args), target, expr, {valueTy});
-    if (!ce) {
+    // Everything that can fail is checked before the operand is moved out of expr.desugarExpr.
+    auto func = LookupRuntimeFunc(TO_EXTERN_FUNC, target, {valueTy}, expr);
+    if (!func.decl) {
         return false;
     }
+    std::vector<OwnedPtr<Expr>> args;
+    args.emplace_back(expr.desugarExpr ? std::move(expr.desugarExpr) : ASTCloner::Clone(Ptr(&expr)));
+    auto ce = CreateRuntimeCall(func, std::move(args), target, expr, {valueTy});
+    CJC_NULLPTR_CHECK(ce);
     if (expr.astKind == ASTKind::BLOCK) {
         // Deserialization expects a block's desugarExpr to remain a Block, so wrap the conversion call.
         auto b = MakeOwnedNode<Block>();
@@ -190,16 +197,21 @@ void ExternDesugaring::TryConvertBlock(Block& block, Ty& target)
     if (!lastTy || !needConversion(*lastTy, target)) {
         return;
     }
-    if (Is<Decl>(lastExprOrDecl) || block.body.empty()) {
+    bool addedUnit = Is<Decl>(lastExprOrDecl) || block.body.empty();
+    if (addedUnit) {
         auto unitExpr = CreateUnitExpr(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
         unitExpr->curFile = block.curFile;
         lastExprOrDecl = unitExpr.get();
         block.body.emplace_back(std::move(unitExpr));
     }
-    if (auto lastExpr = DynamicCast<Expr*>(lastExprOrDecl)) {
-        TryConvert(*lastExpr, target);
-        block.SetTy(lastExpr->GetTy());
+    auto lastExpr = DynamicCast<Expr*>(lastExprOrDecl);
+    if (!lastExpr || !TryConvert(*lastExpr, target)) {
+        if (addedUnit) {
+            block.body.pop_back();
+        }
+        return;
     }
+    block.SetTy(lastExpr->GetTy());
 }
 
 void ExternDesugaring::HandleVarDecl(const VarDeclAbstract& vd)
@@ -534,7 +546,11 @@ ExternDesugaring::RuntimeFunc ExternDesugaring::LookupRuntimeFunc(
     const std::string& name, Ty& externTy, const std::vector<Ptr<Ty>>& instTys, const Expr& expr)
 {
     CJC_ASSERT(externTy.IsCoreExternType());
-    auto [decl, matchedParentTy] = lookup(*externTy.typeArgs[0], name, expr);
+    auto& runtimeTy = *externTy.typeArgs[0];
+    if (!GetForeignRuntimeDecl(runtimeTy)) {
+        return {};
+    }
+    auto [decl, matchedParentTy] = lookup(runtimeTy, name, expr);
     auto declTy = decl ? DynamicCast<FuncTy*>(decl->GetTy()) : nullptr;
     if (!Ty::IsTyCorrect(declTy)) {
         return {};
