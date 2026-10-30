@@ -248,6 +248,8 @@ bool IsDynamicExternUpdate(const AST::AssignExpr& ae);
  * Extern<T>. This includes e.f(a1, ..., an), whose callee e.f is a dynamic member access.
  */
 bool IsDynamicExternCall(const AST::CallExpr& ce);
+/** Whether @p expr is a dynamic operation on Extern<T> that is not desugared yet. */
+bool IsDynamicExternOperation(const AST::Expr& expr);
 
 /* Utils for TypeCheckCall and TypeArgumentInference */
 bool IsEnumCtorWithoutTypeArgs(const AST::Expr& expr, Ptr<const AST::Decl> target);
