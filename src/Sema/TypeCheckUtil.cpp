@@ -844,6 +844,26 @@ bool IsDynamicExternCall(const CallExpr& ce)
     return !ce.desugarExpr && ce.baseFunc && IsExternValue(*ce.baseFunc);
 }
 
+bool IsDynamicExternOperation(const Expr& expr)
+{
+    if (expr.desugarExpr) {
+        return false;
+    }
+    if (auto ma = DynamicCast<const MemberAccess*>(&expr)) {
+        return IsDynamicExternMemberAccess(*ma);
+    }
+    if (auto se = DynamicCast<const SubscriptExpr*>(&expr)) {
+        return IsDynamicExternSubscript(*se);
+    }
+    if (auto ce = DynamicCast<const CallExpr*>(&expr)) {
+        return IsDynamicExternCall(*ce);
+    }
+    if (auto ae = DynamicCast<const AssignExpr*>(&expr)) {
+        return IsDynamicExternUpdate(*ae);
+    }
+    return false;
+}
+
 bool IsEnumCtorWithoutTypeArgs(const Expr& expr, Ptr<const Decl> target)
 {
     if (!target || !target->TestAttr(Attribute::ENUM_CONSTRUCTOR) || !target->GetGeneric()) {

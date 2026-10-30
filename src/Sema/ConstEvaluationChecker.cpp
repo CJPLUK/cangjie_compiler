@@ -44,6 +44,12 @@ void DiagExpectConstExpr(DiagnosticEngine& diag, const Expr& expr, bool isWeak)
     builder.AddMainHintArguments(mainHint);
 }
 
+void DiagExternConversionInConstCode(DiagnosticEngine& diag, const Node& node, const Ty& from, const Ty& to)
+{
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_extern_conversion_in_const, node);
+    builder.AddMainHintArguments(from.String(), to.String());
+}
+
 void DiagDefineVarInConstFunction(DiagnosticEngine& diag, const VarDeclAbstract& vda)
 {
     auto range = MakeRangeForDeclIdentifier(vda);
@@ -161,11 +167,24 @@ bool IsConstSafe(Decl& decl)
     auto& annos = decl.annotations;
     return std::find_if(annos.begin(), annos.end(), isConstSafe) != annos.end();
 }
+
+// The type of the values returned by @p fb. A constructor returns no value.
+Ptr<Ty> GetReturnTy(const FuncBody& fb)
+{
+    if (!Ty::IsTyCorrect(fb.GetTy()) || !fb.GetTy()->IsFunc() ||
+        (fb.funcDecl && fb.funcDecl->TestAttr(Attribute::CONSTRUCTOR))) {
+        return nullptr;
+    }
+    return RawStaticCast<FuncTy*>(fb.GetTy())->retTy;
+}
 }; // namespace
 
 class ConstEvaluationChecker {
 public:
-    ConstEvaluationChecker(DiagnosticEngine& diag, Package& pkg) : diag(diag), pkg(pkg)
+    using NeedExternConversion = std::function<bool(Ty& from, Ty& to)>;
+
+    ConstEvaluationChecker(DiagnosticEngine& diag, Package& pkg, NeedExternConversion needExternConversion)
+        : diag(diag), pkg(pkg), needExternConversion(std::move(needExternConversion))
     {
     }
 
@@ -237,6 +256,32 @@ private:
         return res;
     }
 
+    // Dynamic operations on Extern<T> and implicit conversions to Extern<T> are desugared after this check into calls
+    // to static functions of T, which are not 'const'. A converted value keeps its own type, so a conversion is found
+    // at the places where the desugaring converts: each one compares a value with the type expected for it.
+    bool ChkNoExternConversion(const Expr& value, Ptr<Ty> expected)
+    {
+        if (!expected || !value.GetTy() || !needExternConversion(*value.GetTy(), *expected)) {
+            return true;
+        }
+        DiagExternConversionInConstCode(diag, value, *value.GetTy(), *expected);
+        return false;
+    }
+
+    // The value of an empty block or of a block ending with a declaration is the unit value.
+    bool ChkNoExternConversion(const Block& block, Ptr<Ty> expected)
+    {
+        if (auto last = DynamicCast<const Expr*>(block.GetLastExprOrDecl())) {
+            return ChkNoExternConversion(*last, expected);
+        }
+        auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+        if (!expected || !needExternConversion(*unitTy, *expected)) {
+            return true;
+        }
+        DiagExternConversionInConstCode(diag, block, *unitTy, *expected);
+        return false;
+    }
+
     // Call this function to check `Decl` if the `decl` is assumed to be `const`.
     // This function will do `const` checking even if the `Decl` is not marked as `const`.
     // For example, the `let` declarations in `const` functions
@@ -281,7 +326,8 @@ private:
         if (vd.initializer == nullptr) {
             return true;
         }
-        return ChkExpr(*vd.initializer, !vd.isConst);
+        bool res = ChkExpr(*vd.initializer, !vd.isConst);
+        return ChkNoExternConversion(*vd.initializer, vd.GetTy()) && res;
     }
 
     bool ChkVarDecl(VarDecl& vd)
@@ -330,7 +376,8 @@ private:
         for (auto& param : fb.paramLists.front()->params) {
             if (param->assignment && param->desugarDecl) {
                 // Default parameters should be `const`.
-                bool isParamConst = ChkExpr(*param->assignment, true);
+                bool isParamConst = ChkExpr(*param->assignment, true) &&
+                    ChkNoExternConversion(*param->assignment, param->GetTy());
                 param->desugarDecl->isConst = isParamConst;
                 res = isParamConst && res;
             }
@@ -339,6 +386,7 @@ private:
         // The correctness of the imported function was checked in the package that defines the function.
         if (fb.body) {
             res = ChkBlock(*fb.body, true) && res;
+            res = ChkNoExternConversion(*fb.body, GetReturnTy(fb)) && res;
         }
         return res;
     }
@@ -381,6 +429,7 @@ private:
                 ((hasStaticConstInit && vda->TestAttr(Attribute::STATIC)) ||
                     (hasNonStaticConstInit && !vda->TestAttr(Attribute::STATIC)))) {
                 res = ChkExpr(*vda->initializer, false) && res;
+                res = ChkNoExternConversion(*vda->initializer, vda->GetTy()) && res;
             }
         }
         return res;
@@ -503,6 +552,10 @@ private:
         if (expr.TestAnyAttr(Attribute::IS_BROKEN, Attribute::HAS_BROKEN)) {
             return false;
         }
+        if (TypeCheckUtil::IsDynamicExternOperation(expr)) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_extern_operation_in_const, expr);
+            return false;
+        }
         if (expr.desugarExpr) {
             return ChkDesugarExpr(expr, isWeak);
         }
@@ -617,7 +670,24 @@ private:
             DiagExpectConstExpr(diag, ret, isWeak);
             return false;
         }
-        return ChkInnerExpr(ret, isWeak);
+        bool res = ChkInnerExpr(ret, isWeak);
+        if (ret.refFuncBody) {
+            res = ChkNoExternConversion(*ret.expr, GetReturnTy(*ret.refFuncBody)) && res;
+        }
+        return res;
+    }
+
+    bool ChkTupleLit(const TupleLit& tl, bool isWeak)
+    {
+        bool res = ChkChildren(tl, isWeak);
+        auto ty = tl.GetTy();
+        if (!Ty::IsTyCorrect(ty) || !ty->IsTuple()) {
+            return res;
+        }
+        for (size_t i = 0; i < tl.children.size() && i < ty->typeArgs.size(); ++i) {
+            res = ChkNoExternConversion(*tl.children[i], ty->typeArgs[i]) && res;
+        }
+        return res;
     }
 
     bool ChkArrayLit(const ArrayLit& al, bool isWeak)
@@ -685,6 +755,28 @@ private:
             CJC_NULLPTR_CHECK(arg->expr);
             res = ChkExpr(*arg->expr, isWeak) && res;
         }
+        return ChkNoExternConversionInArgs(ce) && res;
+    }
+
+    bool ChkNoExternConversionInArgs(const CallExpr& ce)
+    {
+        if (!Ty::IsTyCorrect(ce.baseFunc->GetTy()) || !ce.baseFunc->GetTy()->IsFunc()) {
+            return true;
+        }
+        auto& paramTys = RawStaticCast<FuncTy*>(ce.baseFunc->GetTy())->paramTys;
+        bool res = true;
+        auto chkArgs = [this, &paramTys, &res](const auto& args) {
+            for (size_t i = 0; i < args.size() && i < paramTys.size(); ++i) {
+                if (args[i]->expr) {
+                    res = ChkNoExternConversion(*args[i]->expr, paramTys[i]) && res;
+                }
+            }
+        };
+        if (ce.desugarArgs.has_value()) {
+            chkArgs(*ce.desugarArgs);
+        } else {
+            chkArgs(ce.args);
+        }
         return res;
     }
 
@@ -700,6 +792,10 @@ private:
         CJC_NULLPTR_CHECK(be.rightExpr);
         bool res = ChkExpr(*be.leftExpr, isWeak);
         res = ChkExpr(*be.rightExpr, isWeak) && res;
+        // 'a ?? b' is desugared after this check into a match whose 'None' branch is 'b'.
+        if (be.op == TokenKind::COALESCING) {
+            res = ChkNoExternConversion(*be.rightExpr, be.GetTy()) && res;
+        }
         return res;
     }
 
@@ -709,8 +805,12 @@ private:
         CJC_NULLPTR_CHECK(ie.thenBody);
         bool res = ChkExpr(*ie.condExpr, isWeak);
         res = ChkBlock(*ie.thenBody, isWeak) && res;
+        res = ChkNoExternConversion(*ie.thenBody, ie.GetTy()) && res;
         if (ie.elseBody) {
             res = ChkExpr(*ie.elseBody, isWeak) && res;
+            auto elseBlock = DynamicCast<const Block*>(ie.elseBody.get());
+            res = (elseBlock ? ChkNoExternConversion(*elseBlock, ie.GetTy())
+                             : ChkNoExternConversion(*ie.elseBody, ie.GetTy())) && res;
         }
         return res;
     }
@@ -755,10 +855,12 @@ private:
         for (auto& mc : me.matchCases) {
             CJC_NULLPTR_CHECK(mc);
             res = ChkMatchCase(*mc, isWeak) && res;
+            res = ChkNoExternConversion(*mc->exprOrDecls, me.GetTy()) && res;
         }
         for (auto& mco : me.matchCaseOthers) {
             CJC_NULLPTR_CHECK(mco);
             res = ChkMatchCaseOther(*mco, isWeak) && res;
+            res = ChkNoExternConversion(*mco->exprOrDecls, me.GetTy()) && res;
         }
         return res;
     }
@@ -771,9 +873,11 @@ private:
         }
         CJC_NULLPTR_CHECK(te.tryBlock);
         bool res = ChkBlock(*te.tryBlock, isWeak);
+        res = ChkNoExternConversion(*te.tryBlock, te.GetTy()) && res;
         for (auto& cb : te.catchBlocks) {
             CJC_NULLPTR_CHECK(cb);
             res = ChkBlock(*cb, isWeak) && res;
+            res = ChkNoExternConversion(*cb, te.GetTy()) && res;
         }
         if (te.finallyBlock) {
             res = ChkBlock(*te.finallyBlock, isWeak) && res;
@@ -854,7 +958,8 @@ private:
         CJC_NULLPTR_CHECK(ae.leftValue);
         CJC_NULLPTR_CHECK(ae.rightExpr);
         if (inInit && Utils::In<Ptr<const Decl>>(ae.leftValue->GetTarget(), structOrClassMembers)) {
-            return ChkExpr(*ae.rightExpr, isWeak);
+            bool res = ChkExpr(*ae.rightExpr, isWeak);
+            return (ae.isCompound || ChkNoExternConversion(*ae.rightExpr, ae.leftValue->GetTy())) && res;
         }
         DiagExpectConstExpr(diag, ae, isWeak);
         return false;
@@ -892,7 +997,7 @@ private:
         {ASTKind::IS_EXPR, Proxy(&ConstEvaluationChecker::ChkLeftExpr<const IsExpr&>)},
         {ASTKind::AS_EXPR, Proxy(&ConstEvaluationChecker::ChkLeftExpr<const AsExpr&>)},
         {ASTKind::ARRAY_LIT, Proxy(&ConstEvaluationChecker::ChkArrayLit)},
-        {ASTKind::TUPLE_LIT, Proxy(&ConstEvaluationChecker::ChkChildren<const TupleLit&>)},
+        {ASTKind::TUPLE_LIT, Proxy(&ConstEvaluationChecker::ChkTupleLit)},
         {ASTKind::REF_EXPR, Proxy(&ConstEvaluationChecker::ChkRefExpr)},
         {ASTKind::CALL_EXPR, Proxy(&ConstEvaluationChecker::ChkCallExpr)},
         {ASTKind::BINARY_EXPR, Proxy(&ConstEvaluationChecker::ChkBinaryExpr)},
@@ -909,6 +1014,7 @@ private:
 
     DiagnosticEngine& diag;
     Package& pkg;
+    NeedExternConversion needExternConversion;
     // Context states:
     std::unordered_set<Ptr<const Node>>
         inConstContext; // nodes in const contexts, contains `FuncBody`, `ReturnExpr` and `VarDeclAbstract`
@@ -921,6 +1027,7 @@ private:
 void TypeChecker::TypeCheckerImpl::CheckConstEvaluation(Package& pkg)
 {
     Utils::ProfileRecorder recorder("Post TypeCheck", "CheckConstEvaluation");
-    ConstEvaluationChecker(diag, pkg).Check();
+    auto needExternConversion = [this](Ty& from, Ty& to) { return NeedExternConversion(from, to); };
+    ConstEvaluationChecker(diag, pkg, needExternConversion).Check();
 }
 } // namespace Cangjie

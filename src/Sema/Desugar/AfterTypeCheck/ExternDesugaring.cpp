@@ -112,7 +112,7 @@ Ptr<VarDecl> AddTmp(std::vector<OwnedPtr<Node>>& nodes, const std::string& name,
 void ExternDesugaring::Run(Node& root)
 {
     std::function<VisitAction(Ptr<Node>)> preVisit = [this](Ptr<Node> node) -> VisitAction {
-        if (auto expr = DynamicCast<Expr*>(node); expr && IsDynamic(*expr)) {
+        if (auto expr = DynamicCast<Expr*>(node); expr && IsDynamicExternOperation(*expr)) {
             DesugarOperation(*expr);
             // Visit the cloned operands, which may contain conversions and dynamic operations of their own.
             Run(*expr->desugarExpr);
@@ -135,26 +135,6 @@ void ExternDesugaring::Run(Node& root)
         return VisitAction::WALK_CHILDREN;
     };
     Walker(&root, preVisit).Walk();
-}
-
-bool ExternDesugaring::IsDynamic(const Expr& expr)
-{
-    if (expr.desugarExpr) {
-        return false;
-    }
-    if (auto ma = DynamicCast<const MemberAccess*>(&expr)) {
-        return IsDynamicExternMemberAccess(*ma);
-    }
-    if (auto se = DynamicCast<const SubscriptExpr*>(&expr)) {
-        return IsDynamicExternSubscript(*se);
-    }
-    if (auto ce = DynamicCast<const CallExpr*>(&expr)) {
-        return IsDynamicExternCall(*ce);
-    }
-    if (auto ae = DynamicCast<const AssignExpr*>(&expr)) {
-        return IsDynamicExternUpdate(*ae);
-    }
-    return false;
 }
 
 bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
