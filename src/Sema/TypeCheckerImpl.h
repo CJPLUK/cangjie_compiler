@@ -47,7 +47,6 @@ public:
     SubstPack typeMapping;                   /**< For generic type comparison.*/
     std::pair<std::vector<Diagnostic>, MatchingStat> diags; /**< Stashed diag msg.*/
     CstVersionID ver; /**< ID to fetch constraints generated for this candidate.*/
-    bool usesExternConversion = false; /**< Some argument is implicitly converted to Extern<T>. */
     FunctionMatchingUnit(AST::FuncDecl& f, const std::vector<Ptr<AST::Ty>>& tys, const SubstPack& map) : fd(f)
     {
         tysInArgOrder = tys;
