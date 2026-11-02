@@ -107,6 +107,21 @@ Ptr<VarDecl> AddTmp(std::vector<OwnedPtr<Node>>& nodes, const std::string& name,
     nodes.emplace_back(std::move(tmp));
     return ptr;
 }
+
+/** The operand e of T.toExtern(e), the conversion of @p expr, if @p expr was converted. */
+Ptr<Expr> GetConvertedOperand(const Expr& expr)
+{
+    auto desugared = expr.desugarExpr.get();
+    if (auto block = DynamicCast<Block*>(desugared); block && block->body.size() == 1) {
+        desugared = DynamicCast<Expr*>(block->body[0].get());
+    }
+    auto ce = DynamicCast<CallExpr*>(desugared);
+    if (!ce || !ce->TestAttr(Attribute::IMPLICIT_ADD) || !ce->resolvedFunction ||
+        ce->resolvedFunction->identifier != TO_EXTERN_FUNC || ce->args.size() != 1) {
+        return nullptr;
+    }
+    return ce->args[0]->expr.get();
+}
 } // namespace
 
 void ExternDesugaring::Run(Node& root)
@@ -139,6 +154,13 @@ void ExternDesugaring::Run(Node& root)
 
 bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
 {
+    // A clone sharing the value of an expression that was converted, e.g. the index i' of the getter in
+    // c.[](i, value: c.[](i').op(v)), shares the value before the conversion.
+    if (expr.mapExpr && expr.mapExpr != &expr) {
+        if (auto operand = GetConvertedOperand(*expr.mapExpr)) {
+            expr.mapExpr = operand;
+        }
+    }
     auto valueTy = expr.GetTy();
     if (!valueTy || !needConversion(*valueTy, target)) {
         return false;
@@ -150,6 +172,10 @@ bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
     }
     std::vector<OwnedPtr<Expr>> args;
     args.emplace_back(expr.desugarExpr ? std::move(expr.desugarExpr) : ASTCloner::Clone(Ptr(&expr)));
+    if (expr.mapExpr == &expr) {
+        // The operand holds the value shared with the clones of expr.
+        args[0]->mapExpr = args[0].get();
+    }
     auto ce = CreateRuntimeCall(func, std::move(args), target, expr, {valueTy});
     CJC_NULLPTR_CHECK(ce);
     if (expr.astKind == ASTKind::BLOCK) {
@@ -345,6 +371,8 @@ void ExternDesugaring::DesugarOperation(Expr& expr)
         },
         []() -> OwnedPtr<Expr> { return nullptr; });
     CJC_NULLPTR_CHECK(desugared); // for well typed programs the functions of the runtime exist
+    // The desugared operation has the value of expr, which may be shared with its clones.
+    desugared->mapExpr = expr.mapExpr;
     expr.desugarExpr = std::move(desugared);
     AddCurFile(*expr.desugarExpr, expr.curFile);
 }

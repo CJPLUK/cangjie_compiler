@@ -1203,6 +1203,18 @@ void Translator::ProcessMapExpr(AST::Node& originExpr, bool isSubScript)
             auto chirNode = TranslateExprArg(originExpr);
             exprValueTable.Set(originExpr, *chirNode);
         }
+    } else {
+        // The value may be shared before an implicit conversion of originExpr, e.g. i in c[T.toExtern(i)] op= v. A
+        // converted block remains a block holding the conversion.
+        auto desugared = GetDesugaredExpr(originExpr);
+        if (auto block = DynamicCast<const AST::Block*>(desugared); block && block->body.size() == 1) {
+            desugared = block->body[0].get();
+        }
+        auto ce = DynamicCast<const AST::CallExpr*>(desugared);
+        if (ce && ce->args.size() == 1 && ce->args[0]->expr->mapExpr == ce->args[0]->expr.get()) {
+            auto& operand = *ce->args[0]->expr;
+            exprValueTable.Set(operand, *TranslateExprArg(operand));
+        }
     }
 }
 
