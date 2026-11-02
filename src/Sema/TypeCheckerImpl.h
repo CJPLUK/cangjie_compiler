@@ -87,10 +87,14 @@ struct LookupInfo {
     bool isSetter = false;
 };
 
-/** A static function of a foreign runtime and, if it is an interface member, its instantiated interface type. */
+/**
+ * A static function of a foreign runtime, its type as a member of the runtime and, if it is an interface member, its
+ * instantiated interface type.
+ */
 struct ForeignRuntimeFunc {
     Ptr<AST::FuncDecl> decl{nullptr};
     Ptr<AST::Ty> matchedParentTy{nullptr};
+    Ptr<AST::FuncTy> ty{nullptr};
 };
 
 struct CollectDeclsInfo {

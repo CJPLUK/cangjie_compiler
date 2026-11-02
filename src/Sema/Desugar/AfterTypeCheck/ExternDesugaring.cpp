@@ -558,8 +558,8 @@ OwnedPtr<Expr> ExternDesugaring::CreateFunctionCall(
 }
 
 /**
- * Look up the static function @p name of the foreign runtime T of @p externTy. Its type is instantiated with
- * @p externTy for Extern<T>, and with the only element of @p instTys for its own type parameter, if any.
+ * Look up the static function @p name of the foreign runtime T of @p externTy. Its type as a member of T is
+ * instantiated with the only element of @p instTys for its own type parameter, if any.
  */
 ExternDesugaring::RuntimeFunc ExternDesugaring::LookupRuntimeFunc(
     const std::string& name, Ty& externTy, const std::vector<Ptr<Ty>>& instTys, const Expr& expr)
@@ -569,22 +569,16 @@ ExternDesugaring::RuntimeFunc ExternDesugaring::LookupRuntimeFunc(
     if (!GetForeignRuntimeDecl(runtimeTy)) {
         return {};
     }
-    auto [decl, matchedParentTy] = lookup(runtimeTy, name, expr);
-    auto declTy = decl ? DynamicCast<FuncTy*>(decl->GetTy()) : nullptr;
-    if (!Ty::IsTyCorrect(declTy)) {
+    auto [decl, matchedParentTy, memberTy] = lookup(runtimeTy, name, expr);
+    if (!decl || !Ty::IsTyCorrect(memberTy)) {
         return {};
     }
-    auto instantiate = [&externTy, &instTys](Ptr<Ty> ty) -> Ptr<Ty> {
-        if (ty->IsCoreExternType()) {
-            return &externTy;
-        }
-        return ty->IsGeneric() && !instTys.empty() ? instTys[0] : ty;
-    };
-    std::vector<Ptr<Ty>> paramTys;
-    for (auto paramTy : declTy->paramTys) {
-        paramTys.emplace_back(instantiate(paramTy));
+    TypeSubst mapping;
+    if (auto generic = decl->GetGeneric(); generic && generic->typeParameters.size() == 1 && instTys.size() == 1) {
+        mapping[StaticCast<TyVar*>(generic->typeParameters[0]->GetTy())] = instTys[0];
     }
-    return {decl, matchedParentTy, typeManager.GetFunctionTy(paramTys, instantiate(declTy->retTy))};
+    auto ty = DynamicCast<FuncTy*>(typeManager.GetInstantiatedTy(memberTy, mapping));
+    return Ty::IsTyCorrect(ty) ? RuntimeFunc{decl, matchedParentTy, ty} : RuntimeFunc{};
 }
 
 /**
@@ -646,14 +640,33 @@ ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
     if (!func) {
         return {};
     }
+    // The type of a function as a member of the runtime, e.g. (E, String) -> E of a function inherited from
+    // AccessBase<E> is (Extern<RT>, String) -> Extern<RT> for RT <: AccessBase<Extern<RT>>.
+    auto memberTy = [this, &runtimeTy](const FuncDecl& fd) -> Ptr<FuncTy> {
+        Ptr<Ty> ty = fd.GetTy();
+        if (fd.outerDecl) {
+            auto promoted = promotion.Promote(runtimeTy, *fd.outerDecl->GetTy());
+            if (!promoted.empty()) {
+                auto mapping = GenerateTypeMappingByTy(fd.outerDecl->GetTy(), *promoted.begin());
+                ty = typeManager.GetInstantiatedTy(ty, mapping);
+            }
+        }
+        return DynamicCast<FuncTy*>(ty);
+    };
     if (!runtimeTy.IsGeneric()) {
         // Only an implementation of the ForeignRuntime member qualifies, not an overload with the same name.
-        auto promoted = promotion.Promote(runtimeTy, *foreignRuntime->GetTy());
-        auto instParentTy = promoted.empty() ? nullptr : *promoted.begin();
+        auto implements = [this, &memberTy, func](const FuncDecl& fd) {
+            if (fd.TestAttr(Attribute::ABSTRACT) || !fd.TestAttr(Attribute::STATIC) ||
+                fd.TestAttr(Attribute::GENERIC) != func->TestAttr(Attribute::GENERIC)) {
+                return false;
+            }
+            auto genericMapping = typeManager.GenerateGenericMappingFromGeneric(*func, fd);
+            auto parentTy = DynamicCast<FuncTy*>(typeManager.GetInstantiatedTy(memberTy(*func), genericMapping));
+            auto childTy = memberTy(fd);
+            return parentTy && childTy && typeManager.IsFuncParameterTypesIdentical(*parentTy, *childTy);
+        };
         for (auto decl : FieldLookup(ctx, Ty::GetDeclOfTy(&runtimeTy), name, {&runtimeTy, expr.curFile})) {
-            auto fd = DynamicCast<FuncDecl*>(decl);
-            if (fd && !fd->TestAttr(Attribute::ABSTRACT) &&
-                IsOverrideOrShadow(typeManager, *fd, *func, &runtimeTy, instParentTy)) {
+            if (auto fd = DynamicCast<FuncDecl*>(decl); fd && implements(*fd)) {
                 func = fd;
                 break;
             }
@@ -670,7 +683,7 @@ ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
             matchedParentTy = *promoted.begin();
         }
     }
-    return {func, matchedParentTy};
+    return {func, matchedParentTy, memberTy(*func)};
 }
 
 void TypeChecker::TypeCheckerImpl::DesugarExtern(ASTContext& ctx, Package& pkg)
