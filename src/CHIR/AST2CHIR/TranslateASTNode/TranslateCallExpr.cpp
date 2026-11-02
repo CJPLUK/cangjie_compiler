@@ -1211,9 +1211,10 @@ void Translator::ProcessMapExpr(AST::Node& originExpr, bool isSubScript)
             desugared = block->body[0].get();
         }
         auto ce = DynamicCast<const AST::CallExpr*>(desugared);
-        if (ce && ce->args.size() == 1 && ce->args[0]->expr->mapExpr == ce->args[0]->expr.get()) {
-            auto& operand = *ce->args[0]->expr;
-            exprValueTable.Set(operand, *TranslateExprArg(operand));
+        auto shared = ce && ce->args.size() == 1 ? DynamicCast<const AST::Expr*>(GetDesugaredExpr(*ce->args[0]->expr))
+                                                 : nullptr;
+        if (shared && shared->mapExpr == shared) {
+            exprValueTable.Set(*shared, *TranslateExprArg(*ce->args[0]->expr));
         }
     }
 }

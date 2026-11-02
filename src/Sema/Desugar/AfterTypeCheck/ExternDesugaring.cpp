@@ -108,7 +108,17 @@ Ptr<VarDecl> AddTmp(std::vector<OwnedPtr<Node>>& nodes, const std::string& name,
     return ptr;
 }
 
-/** The operand e of T.toExtern(e), the conversion of @p expr, if @p expr was converted. */
+/** The innermost desugared expression of @p expr, which holds the mapExpr of @p expr in CHIR. */
+Expr& GetInnermost(Expr& expr)
+{
+    auto innermost = &expr;
+    while (innermost->desugarExpr) {
+        innermost = innermost->desugarExpr.get();
+    }
+    return *innermost;
+}
+
+/** The innermost desugared expression of e in T.toExtern(e), the conversion of @p expr, if @p expr was converted. */
 Ptr<Expr> GetConvertedOperand(const Expr& expr)
 {
     auto desugared = expr.desugarExpr.get();
@@ -120,7 +130,7 @@ Ptr<Expr> GetConvertedOperand(const Expr& expr)
         ce->resolvedFunction->identifier != TO_EXTERN_FUNC || ce->args.size() != 1) {
         return nullptr;
     }
-    return ce->args[0]->expr.get();
+    return &GetInnermost(*ce->args[0]->expr);
 }
 } // namespace
 
@@ -172,9 +182,10 @@ bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
     }
     std::vector<OwnedPtr<Expr>> args;
     args.emplace_back(expr.desugarExpr ? std::move(expr.desugarExpr) : ASTCloner::Clone(Ptr(&expr)));
-    if (expr.mapExpr == &expr) {
-        // The operand holds the value shared with the clones of expr.
-        args[0]->mapExpr = args[0].get();
+    if (expr.mapExpr) {
+        // The operand holds the value shared by expr and its clones, also when it is the former desugarExpr of expr.
+        auto& shared = GetInnermost(*args[0]);
+        shared.mapExpr = expr.mapExpr == &expr ? Ptr<Expr>(&shared) : expr.mapExpr;
     }
     auto ce = CreateRuntimeCall(func, std::move(args), target, expr, {valueTy});
     CJC_NULLPTR_CHECK(ce);
