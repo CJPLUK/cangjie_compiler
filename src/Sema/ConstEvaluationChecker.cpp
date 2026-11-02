@@ -259,6 +259,15 @@ private:
     // Dynamic operations on Extern<T> and implicit conversions to Extern<T> are desugared after this check into calls
     // to static functions of T, which are not 'const'. A converted value keeps its own type, so a conversion is found
     // at the places where the desugaring converts: each one compares a value with the type expected for it.
+    bool ChkNotDynamicExtern(const Expr& expr)
+    {
+        if (TypeCheckUtil::IsDynamicExternOperation(expr)) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_extern_operation_in_const, expr);
+            return false;
+        }
+        return true;
+    }
+
     bool ChkNoExternConversion(const Expr& value, Ptr<Ty> expected)
     {
         if (!expected || !value.GetTy() || !needExternConversion(*value.GetTy(), *expected)) {
@@ -552,8 +561,7 @@ private:
         if (expr.TestAnyAttr(Attribute::IS_BROKEN, Attribute::HAS_BROKEN)) {
             return false;
         }
-        if (TypeCheckUtil::IsDynamicExternOperation(expr)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_extern_operation_in_const, expr);
+        if (!ChkNotDynamicExtern(expr)) {
             return false;
         }
         if (expr.desugarExpr) {
@@ -586,8 +594,10 @@ private:
         }
         // 1) array[0]++ is desugared to call
         // 2) binary/unary operator call is desuguared to call
+        // 3) 'x |> e' is desugared to 'e(x)', a dynamic call if 'e' is an Extern<T> value
         if (expr.desugarExpr->astKind == ASTKind::CALL_EXPR) {
-            return ChkCallExpr(StaticCast<CallExpr>(*expr.desugarExpr), isWeak);
+            return ChkNotDynamicExtern(*expr.desugarExpr) &&
+                ChkCallExpr(StaticCast<CallExpr>(*expr.desugarExpr), isWeak);
         }
         // multiple assignement expr is expanded into a block of multiple expressions
         if (expr.astKind == ASTKind::ASSIGN_EXPR) {
