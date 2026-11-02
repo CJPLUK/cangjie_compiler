@@ -258,7 +258,7 @@ private:
 
     // Dynamic operations on Extern<T> and implicit conversions to Extern<T> are desugared after this check into calls
     // to static functions of T, which are not 'const'. A converted value keeps its own type, so a conversion is found
-    // at the places where the desugaring converts: each one compares a value with the type expected for it.
+    // by the same checks as in the desugaring: each one compares a value with the type expected for it.
     bool ChkNotDynamicExtern(const Expr& expr)
     {
         if (TypeCheckUtil::IsDynamicExternOperation(expr)) {
