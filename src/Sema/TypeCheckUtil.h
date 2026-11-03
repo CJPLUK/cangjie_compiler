@@ -227,6 +227,8 @@ inline Ptr<AST::InheritableDecl> GetCurInheritableDecl(const ASTContext& ctx, co
 
 /** Whether @p expr is a value of type std.core.Extern<T>, as opposed to a reference to the type itself. */
 bool IsExternValue(const AST::Expr& expr);
+/** Whether an expression of type @p from needs T.toExtern to become @p to. */
+bool NeedExternConversion(TypeManager& typeManager, AST::Ty& from, AST::Ty& to);
 /**
  * Whether @p ma is a dynamic member access e.f, i.e. an access to any member f of a value e of type Extern<T>.
  * Left values are excluded, they are handled by IsDynamicExternUpdate.

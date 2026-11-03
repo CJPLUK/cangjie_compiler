@@ -181,10 +181,8 @@ Ptr<Ty> GetReturnTy(const FuncBody& fb)
 
 class ConstEvaluationChecker {
 public:
-    using NeedExternConversion = std::function<bool(Ty& from, Ty& to)>;
-
-    ConstEvaluationChecker(DiagnosticEngine& diag, Package& pkg, NeedExternConversion needExternConversion)
-        : diag(diag), pkg(pkg), needExternConversion(std::move(needExternConversion))
+    ConstEvaluationChecker(DiagnosticEngine& diag, Package& pkg, TypeManager& typeManager)
+        : diag(diag), pkg(pkg), typeManager(typeManager)
     {
     }
 
@@ -270,7 +268,8 @@ private:
 
     bool ChkNoExternConversion(const Expr& value, Ptr<Ty> expected)
     {
-        if (!expected || !value.GetTy() || !needExternConversion(*value.GetTy(), *expected)) {
+        if (!expected || !value.GetTy() ||
+            !TypeCheckUtil::NeedExternConversion(typeManager, *value.GetTy(), *expected)) {
             return true;
         }
         DiagExternConversionInConstCode(diag, value, *value.GetTy(), *expected);
@@ -284,7 +283,7 @@ private:
             return ChkNoExternConversion(*last, expected);
         }
         auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-        if (!expected || !needExternConversion(*unitTy, *expected)) {
+        if (!expected || !TypeCheckUtil::NeedExternConversion(typeManager, *unitTy, *expected)) {
             return true;
         }
         DiagExternConversionInConstCode(diag, block, *unitTy, *expected);
@@ -1024,7 +1023,7 @@ private:
 
     DiagnosticEngine& diag;
     Package& pkg;
-    NeedExternConversion needExternConversion;
+    TypeManager& typeManager;
     // Context states:
     std::unordered_set<Ptr<const Node>>
         inConstContext; // nodes in const contexts, contains `FuncBody`, `ReturnExpr` and `VarDeclAbstract`
@@ -1037,7 +1036,6 @@ private:
 void TypeChecker::TypeCheckerImpl::CheckConstEvaluation(Package& pkg)
 {
     Utils::ProfileRecorder recorder("Post TypeCheck", "CheckConstEvaluation");
-    auto needExternConversion = [this](Ty& from, Ty& to) { return NeedExternConversion(from, to); };
-    ConstEvaluationChecker(diag, pkg, needExternConversion).Check();
+    ConstEvaluationChecker(diag, pkg, typeManager).Check();
 }
 } // namespace Cangjie

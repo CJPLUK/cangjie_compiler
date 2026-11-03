@@ -814,6 +814,12 @@ bool IsExternValue(const Expr& expr)
     return !target || !target->IsTypeDecl();
 }
 
+bool NeedExternConversion(TypeManager& typeManager, Ty& from, Ty& to)
+{
+    return Ty::IsTyCorrect(&from) && Ty::IsTyCorrect(&to) && to.IsCoreExternType() && !from.IsNothing() &&
+        !typeManager.IsSubtype(&from, &to);
+}
+
 bool IsDynamicExternMemberAccess(const MemberAccess& ma)
 {
     return !ma.target && ma.baseExpr && !ma.TestAttr(Attribute::LEFT_VALUE) && IsExternValue(*ma.baseExpr);

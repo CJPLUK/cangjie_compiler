@@ -187,8 +187,6 @@ private:
     /** Implicit conversion of an expression to an expected Extern<T>. */
     bool NeedTryExternConversion(const AST::Ty& target, const AST::Node& node) const;
     bool ChkWithExternConversion(ASTContext& ctx, AST::Node& node);
-    /** Whether an expression of type @p from needs T.toExtern to become @p to. */
-    bool NeedExternConversion(AST::Ty& from, AST::Ty& to);
     bool IsChecked(ASTContext& ctx, AST::Node& node) const;
     std::optional<bool> PerformBasicChecksForCheck(ASTContext& ctx, Ptr<AST::Ty> target, Ptr<AST::Node> node) const;
     /**

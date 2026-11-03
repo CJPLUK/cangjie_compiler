@@ -26,12 +26,11 @@
 namespace Cangjie {
 class ExternDesugaring {
 public:
-    using NeedConversion = std::function<bool(AST::Ty& from, AST::Ty& to)>;
     using RuntimeFuncLookup =
         std::function<ForeignRuntimeFunc(AST::Ty& runtimeTy, const std::string& name, const AST::Expr& expr)>;
 
-    ExternDesugaring(TypeManager& typeManager, NeedConversion needConversion, RuntimeFuncLookup lookup)
-        : typeManager(typeManager), needConversion(std::move(needConversion)), lookup(std::move(lookup))
+    ExternDesugaring(TypeManager& typeManager, RuntimeFuncLookup lookup)
+        : typeManager(typeManager), lookup(std::move(lookup))
     {
     }
 
@@ -90,7 +89,6 @@ private:
         AST::Ty& externTy, const AST::Expr& expr);
 
     TypeManager& typeManager;
-    NeedConversion needConversion;
     RuntimeFuncLookup lookup;
 };
 } // namespace Cangjie

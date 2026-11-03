@@ -1093,12 +1093,6 @@ bool TypeChecker::TypeCheckerImpl::NeedTryExternConversion(const Ty& target, con
     return target.IsCoreExternType() && !target.HasPlaceholder() && Is<Expr>(&node);
 }
 
-bool TypeChecker::TypeCheckerImpl::NeedExternConversion(Ty& from, Ty& to)
-{
-    return Ty::IsTyCorrect(&from) && Ty::IsTyCorrect(&to) && to.IsCoreExternType() && !from.IsNothing() &&
-        !typeManager.IsSubtype(&from, &to);
-}
-
 /**
  * Any well-typed expression is accepted wherever Extern<T> is expected. Its own type U is synthesized and kept as the
  * type of the node, so that DesugarExtern can later rewrite it into T.toExtern<U>(e) when U is not
