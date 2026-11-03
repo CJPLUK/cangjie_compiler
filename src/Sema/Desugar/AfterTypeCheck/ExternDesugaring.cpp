@@ -172,7 +172,7 @@ bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
         }
     }
     auto valueTy = expr.GetTy();
-    if (!valueTy || !needConversion(*valueTy, target)) {
+    if (!valueTy || !NeedExternConversion(typeManager, *valueTy, target)) {
         return false;
     }
     // Everything that can fail is checked before the operand is moved out of expr.desugarExpr.
@@ -211,7 +211,7 @@ void ExternDesugaring::TryConvertBlock(Block& block, Ty& target)
     if (auto expr = DynamicCast<Expr*>(lastExprOrDecl)) {
         lastTy = expr->GetTy();
     }
-    if (!lastTy || !needConversion(*lastTy, target)) {
+    if (!lastTy || !NeedExternConversion(typeManager, *lastTy, target)) {
         return;
     }
     bool addedUnit = Is<Decl>(lastExprOrDecl) || block.body.empty();
@@ -688,10 +688,9 @@ ForeignRuntimeFunc TypeChecker::TypeCheckerImpl::LookupForeignRuntimeFunc(
 
 void TypeChecker::TypeCheckerImpl::DesugarExtern(ASTContext& ctx, Package& pkg)
 {
-    auto needConversion = [this](Ty& from, Ty& to) { return NeedExternConversion(from, to); };
     auto lookup = [this, &ctx](Ty& runtimeTy, const std::string& name, const Expr& expr) {
         return LookupForeignRuntimeFunc(ctx, runtimeTy, name, expr);
     };
-    auto externDesugaring = ExternDesugaring(typeManager, needConversion, lookup);
+    auto externDesugaring = ExternDesugaring(typeManager, lookup);
     externDesugaring.Run(pkg);
 }
