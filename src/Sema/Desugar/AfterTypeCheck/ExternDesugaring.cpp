@@ -149,11 +149,20 @@ Ptr<FuncTy> GetMemberTy(TypeManager& typeManager, Promotion& promotion, Ty& runt
     }
     return DynamicCast<FuncTy*>(ty);
 }
+
+/** An unsafe block or an unsafe declaration, whose calls the parser marks as unsafe. */
+bool IsUnsafeContext(const Node& node)
+{
+    return node.TestAttr(Attribute::UNSAFE) && (node.astKind == ASTKind::BLOCK || Is<Decl>(&node));
+}
 } // namespace
 
 void ExternDesugaring::Run(Node& root)
 {
     std::function<VisitAction(Ptr<Node>)> preVisit = [this](Ptr<Node> node) -> VisitAction {
+        if (IsUnsafeContext(*node)) {
+            ++unsafeDepth;
+        }
         if (auto expr = DynamicCast<Expr*>(node); expr && IsDynamicExternOperation(*expr)) {
             DesugarOperation(*expr);
             // Visit the cloned operands, which may contain conversions and dynamic operations of their own.
@@ -176,7 +185,13 @@ void ExternDesugaring::Run(Node& root)
             []() {});
         return VisitAction::WALK_CHILDREN;
     };
-    Walker(&root, preVisit).Walk();
+    std::function<VisitAction(Ptr<Node>)> postVisit = [this](Ptr<Node> node) -> VisitAction {
+        if (IsUnsafeContext(*node)) {
+            --unsafeDepth;
+        }
+        return VisitAction::KEEP_DECISION;
+    };
+    Walker(&root, preVisit, postVisit).Walk();
 }
 
 bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
@@ -626,6 +641,10 @@ OwnedPtr<CallExpr> ExternDesugaring::CreateRuntimeCall(const RuntimeFunc& func, 
         std::move(baseFunc), std::move(funcArgs), func.decl, func.ty->retTy, CallKind::CALL_DECLARED_FUNCTION);
     ce->EnableAttr(Attribute::IMPLICIT_ADD);
     CopyBasicInfo(&expr, ce.get());
+    if (unsafeDepth > 0) {
+        ce->EnableAttr(Attribute::UNSAFE);
+    }
+    checkUnsafeInvoke(*ce);
     return ce;
 }
 
@@ -696,6 +715,7 @@ void TypeChecker::TypeCheckerImpl::DesugarExtern(ASTContext& ctx, Package& pkg)
     auto lookup = [this, &ctx](Ty& runtimeTy, const std::string& name, const Expr& expr) {
         return LookupForeignRuntimeFunc(ctx, runtimeTy, name, expr);
     };
-    auto externDesugaring = ExternDesugaring(typeManager, lookup);
+    auto checkUnsafeInvoke = [this](const CallExpr& ce) { CheckUnsafeInvoke(ce); };
+    auto externDesugaring = ExternDesugaring(typeManager, lookup, checkUnsafeInvoke);
     externDesugaring.Run(pkg);
 }

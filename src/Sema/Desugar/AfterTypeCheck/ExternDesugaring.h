@@ -28,9 +28,10 @@ class ExternDesugaring {
 public:
     using RuntimeFuncLookup =
         std::function<ForeignRuntimeFunc(AST::Ty& runtimeTy, const std::string& name, const AST::Expr& expr)>;
+    using CallCheck = std::function<void(const AST::CallExpr& ce)>;
 
-    ExternDesugaring(TypeManager& typeManager, RuntimeFuncLookup lookup)
-        : typeManager(typeManager), lookup(std::move(lookup))
+    ExternDesugaring(TypeManager& typeManager, RuntimeFuncLookup lookup, CallCheck checkUnsafeInvoke)
+        : typeManager(typeManager), lookup(std::move(lookup)), checkUnsafeInvoke(std::move(checkUnsafeInvoke))
     {
     }
 
@@ -90,6 +91,9 @@ private:
 
     TypeManager& typeManager;
     RuntimeFuncLookup lookup;
+    CallCheck checkUnsafeInvoke;
+    /** The number of enclosing unsafe blocks and unsafe declarations of the visited node. */
+    unsigned unsafeDepth = 0;
 };
 } // namespace Cangjie
 
