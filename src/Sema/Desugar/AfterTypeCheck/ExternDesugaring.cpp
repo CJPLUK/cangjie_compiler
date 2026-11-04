@@ -203,6 +203,14 @@ bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
             expr.mapExpr = operand;
         }
     }
+    // A block is never converted as a whole, only its value is, within the block's unsafe context.
+    if (auto block = DynamicCast<Block*>(&expr)) {
+        bool isUnsafe = IsUnsafeContext(*block);
+        unsafeDepth += isUnsafe ? 1 : 0;
+        bool converted = TryConvertBlock(*block, target);
+        unsafeDepth -= isUnsafe ? 1 : 0;
+        return converted;
+    }
     auto valueTy = expr.GetTy();
     if (!valueTy || !NeedExternConversion(typeManager, *valueTy, target)) {
         return false;
@@ -221,21 +229,13 @@ bool ExternDesugaring::TryConvert(Expr& expr, Ty& target)
     }
     auto ce = CreateRuntimeCall(func, std::move(args), target, expr, {valueTy});
     CJC_NULLPTR_CHECK(ce);
-    if (expr.astKind == ASTKind::BLOCK) {
-        // Deserialization expects a block's desugarExpr to remain a Block, so wrap the conversion call.
-        auto b = MakeOwnedNode<Block>();
-        b->SetTy(ce->GetTy());
-        b->body.emplace_back(std::move(ce));
-        expr.desugarExpr = std::move(b);
-    } else {
-        expr.desugarExpr = std::move(ce);
-    }
+    expr.desugarExpr = std::move(ce);
     AddCurFile(*expr.desugarExpr, expr.curFile);
     expr.SetTy(expr.desugarExpr->GetTy());
     return true;
 }
 
-void ExternDesugaring::TryConvertBlock(Block& block, Ty& target)
+bool ExternDesugaring::TryConvertBlock(Block& block, Ty& target)
 {
     // If the block is empty or ends with a declaration, its value is the unit value.
     auto lastExprOrDecl = block.GetLastExprOrDecl();
@@ -244,7 +244,7 @@ void ExternDesugaring::TryConvertBlock(Block& block, Ty& target)
         lastTy = expr->GetTy();
     }
     if (!lastTy || !NeedExternConversion(typeManager, *lastTy, target)) {
-        return;
+        return false;
     }
     bool addedUnit = Is<Decl>(lastExprOrDecl) || block.body.empty();
     if (addedUnit) {
@@ -258,9 +258,10 @@ void ExternDesugaring::TryConvertBlock(Block& block, Ty& target)
         if (addedUnit) {
             block.body.pop_back();
         }
-        return;
+        return false;
     }
     block.SetTy(lastExpr->GetTy());
+    return true;
 }
 
 void ExternDesugaring::HandleVarDecl(const VarDeclAbstract& vd)

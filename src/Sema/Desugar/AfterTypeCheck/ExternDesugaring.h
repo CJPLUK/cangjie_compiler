@@ -48,7 +48,8 @@ private:
     // Conversions to Extern<T>.
     /** Return whether @p expr was converted to @p target, otherwise @p expr is left unchanged. */
     bool TryConvert(AST::Expr& expr, AST::Ty& target);
-    void TryConvertBlock(AST::Block& block, AST::Ty& target);
+    /** Return whether the value of @p block was converted to @p target. */
+    bool TryConvertBlock(AST::Block& block, AST::Ty& target);
 
     void HandleVarDecl(const AST::VarDeclAbstract& vd);
     void HandleAssignExpr(const AST::AssignExpr& ae);
