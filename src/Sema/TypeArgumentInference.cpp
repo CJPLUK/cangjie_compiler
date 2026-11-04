@@ -493,7 +493,10 @@ ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
         std::vector<Ptr<Ty>> paramTys;
         for (size_t i = 0; i < paramsTyInOrder.size(); ++i) {
             if (!stat.failSet[i]) {
-                paramTys.push_back(paramsTyInOrder[i]);
+                // Like Check, a parameter of type Extern<T> accepts an argument of any type, so it does not constrain
+                // the type arguments.
+                bool acceptsAnyTy = ce.args[i]->expr && NeedTryExternConversion(*paramsTyInOrder[i], *ce.args[i]->expr);
+                paramTys.push_back(acceptsAnyTy ? stat.argTys[i] : paramsTyInOrder[i]);
             }
         }
         // 3. prepare input pack & infer type args
