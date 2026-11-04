@@ -732,6 +732,16 @@ bool IsControlFlowExpr(const Node& node)
             {ASTKind::IF_EXPR, ASTKind::MATCH_EXPR, ASTKind::TRY_EXPR, ASTKind::BLOCK, ASTKind::PAREN_EXPR});
 }
 
+/**
+ * Whether the value of @p node is evaluated once and shared with its clones, e.g. the index i of c[i] op= v. The shared
+ * value is converted as a whole, so that each clone can convert it to its own target.
+ */
+bool SharesValue(const Node& node)
+{
+    auto expr = DynamicCast<const Expr*>(&node);
+    return expr && expr->mapExpr;
+}
+
 void RestoreCached(ASTContext& ctx, Ptr<Node> node, CacheEntry& cache, bool recoverDiag = true)
 {
     if (Ty::IsInitialTy(node->GetTy())) {
@@ -1140,7 +1150,7 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
             ReplaceIdealTy(*node);
             chkRet = typeManager.IsSubtype(node->GetTy(), realTarget);
         }
-    } else if (NeedTryExternConversion(*realTarget, *node) && !IsControlFlowExpr(*node)) {
+    } else if (NeedTryExternConversion(*realTarget, *node) && (!IsControlFlowExpr(*node) || SharesValue(*node))) {
         chkRet = ChkWithExternConversion(*curCtx, *node);
     } else {
         switch (node->astKind) {
