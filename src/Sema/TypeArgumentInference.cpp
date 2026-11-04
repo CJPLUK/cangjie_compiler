@@ -310,6 +310,56 @@ bool ContainsCoreExternType(const Ty& ty)
         Utils::In(ty.typeArgs, [](auto arg) { return arg && ContainsCoreExternType(*arg); });
 }
 
+/**
+ * Like Check, a parameter of type Extern<T> accepts an argument of any type, so it does not constrain the type
+ * arguments. Neither does a concrete parameter containing Extern<T>, whose literal argument may have its elements
+ * converted by Check. A parameter of type Extern<R>, where R is to be inferred, is only constrained by an argument of
+ * type Extern<T>, as any other argument will be converted to it. Otherwise, a parameter containing Extern<T> is
+ * constrained by its other parts, the parts of type Extern<T> being replaced by the matching parts of @p argTy.
+ */
+Ptr<Ty> ReplaceConvertedExternTys(TypeManager& tyMgr, Ty& paramTy, Ty& argTy)
+{
+    // Extern<RT> is never constrained, Extern<R> only by an argument of type Extern<T> or Nothing.
+    if (paramTy.IsCoreExternType()) {
+        bool converted = !paramTy.HasPlaceholder() || (!argTy.IsCoreExternType() && !argTy.IsNothing());
+        return converted ? &argTy : &paramTy;
+    }
+    // Without Extern<T>, no part of the argument is converted, so the whole parameter is constrained.
+    if (!ContainsCoreExternType(paramTy)) {
+        return &paramTy;
+    }
+    // Without type variables, there is nothing to infer from the parameter.
+    if (!paramTy.HasPlaceholder()) {
+        return &argTy;
+    }
+    // A literal or a lambda that Check may accept has a type of the same shape as the parameter.
+    auto decl = Ty::GetDeclPtrOfTy(&paramTy);
+    if (paramTy.kind != argTy.kind || decl != Ty::GetDeclPtrOfTy(&argTy) ||
+        paramTy.typeArgs.size() != argTy.typeArgs.size()) {
+        return &paramTy;
+    }
+    // Rebuild the parameter type from its parts, each replaced recursively.
+    std::vector<Ptr<Ty>> typeArgs;
+    for (size_t i = 0; i < paramTy.typeArgs.size(); ++i) {
+        typeArgs.push_back(ReplaceConvertedExternTys(tyMgr, *paramTy.typeArgs[i], *argTy.typeArgs[i]));
+    }
+    if (auto sd = DynamicCast<StructDecl*>(decl)) {
+        return tyMgr.GetStructTy(*sd, typeArgs);
+    } else if (auto cd = DynamicCast<ClassDecl*>(decl)) {
+        return tyMgr.GetClassTy(*cd, typeArgs);
+    } else if (auto ed = DynamicCast<EnumDecl*>(decl)) {
+        return tyMgr.GetEnumTy(*ed, typeArgs);
+    } else if (paramTy.IsTuple()) {
+        return tyMgr.GetTupleTy(typeArgs);
+    } else if (auto funcTy = DynamicCast<FuncTy*>(&paramTy)) {
+        // The return type is the last type argument of a function type.
+        auto retTy = typeArgs.back();
+        typeArgs.pop_back();
+        return tyMgr.GetFunctionTy(typeArgs, retTy, {funcTy->IsCFunc(), funcTy->isClosureTy, funcTy->hasVariableLenArg});
+    }
+    return &paramTy;
+}
+
 std::vector<Ptr<Ty>> ValidateArgTys(CallExpr& ce, TyArgSynState& stat)
 {
     std::vector<Ptr<Ty>> validArgTys;
@@ -499,17 +549,9 @@ ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
         std::vector<Ptr<Ty>> paramTys;
         for (size_t i = 0; i < paramsTyInOrder.size(); ++i) {
             if (!stat.failSet[i]) {
-                // Like Check, a parameter of type Extern<T> accepts an argument of any type, so it does not constrain
-                // the type arguments. Neither does a concrete parameter containing Extern<T>, whose literal argument
-                // may have its elements converted by Check. A parameter of type Extern<R>, where R is to be inferred, is
-                // only constrained by an argument of type Extern<T>, as any other argument will be converted to it.
-                auto& paramTy = *paramsTyInOrder[i];
-                auto argTy = stat.argTys[i];
-                bool deferArgumentConstraint = ce.args[i]->expr &&
-                    (NeedTryExternConversion(paramTy, *ce.args[i]->expr) ||
-                        (!paramTy.HasPlaceholder() && ContainsCoreExternType(paramTy)) ||
-                        (paramTy.IsCoreExternType() && !argTy->IsCoreExternType() && !argTy->IsNothing()));
-                paramTys.push_back(deferArgumentConstraint ? stat.argTys[i] : paramsTyInOrder[i]);
+                paramTys.push_back(ce.args[i]->expr
+                        ? ReplaceConvertedExternTys(typeManager, *paramsTyInOrder[i], *stat.argTys[i])
+                        : paramsTyInOrder[i]);
             }
         }
         // 3. prepare input pack & infer type args
