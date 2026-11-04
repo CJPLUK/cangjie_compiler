@@ -304,6 +304,12 @@ bool PrepareQuestParamTy(TypeManager& tyMgr, const std::vector<Ptr<Ty>>& paramsT
     return anyNewTarget;
 }
 
+bool ContainsCoreExternType(const Ty& ty)
+{
+    return ty.IsCoreExternType() ||
+        Utils::In(ty.typeArgs, [](auto arg) { return arg && ContainsCoreExternType(*arg); });
+}
+
 std::vector<Ptr<Ty>> ValidateArgTys(CallExpr& ce, TyArgSynState& stat)
 {
     std::vector<Ptr<Ty>> validArgTys;
@@ -494,9 +500,16 @@ ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
         for (size_t i = 0; i < paramsTyInOrder.size(); ++i) {
             if (!stat.failSet[i]) {
                 // Like Check, a parameter of type Extern<T> accepts an argument of any type, so it does not constrain
-                // the type arguments.
-                bool acceptsAnyTy = ce.args[i]->expr && NeedTryExternConversion(*paramsTyInOrder[i], *ce.args[i]->expr);
-                paramTys.push_back(acceptsAnyTy ? stat.argTys[i] : paramsTyInOrder[i]);
+                // the type arguments. Neither does a concrete parameter containing Extern<T>, whose literal argument
+                // may have its elements converted by Check. A parameter of type Extern<R>, where R is to be inferred, is
+                // only constrained by an argument of type Extern<T>, as any other argument will be converted to it.
+                auto& paramTy = *paramsTyInOrder[i];
+                auto argTy = stat.argTys[i];
+                bool deferArgumentConstraint = ce.args[i]->expr &&
+                    (NeedTryExternConversion(paramTy, *ce.args[i]->expr) ||
+                        (!paramTy.HasPlaceholder() && ContainsCoreExternType(paramTy)) ||
+                        (paramTy.IsCoreExternType() && !argTy->IsCoreExternType() && !argTy->IsNothing()));
+                paramTys.push_back(deferArgumentConstraint ? stat.argTys[i] : paramsTyInOrder[i]);
             }
         }
         // 3. prepare input pack & infer type args
