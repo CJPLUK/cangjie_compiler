@@ -15,6 +15,7 @@
 #include "TypeCheckUtil.h"
 #include "ExtraScopes.h"
 #include "LocalTypeArgumentSynthesis.h"
+#include "Promotion.h"
 #include "DiagSuppressor.h"
 #include "Diags.h"
 
@@ -332,16 +333,29 @@ Ptr<Ty> ReplaceConvertedExternTys(TypeManager& tyMgr, Ty& paramTy, Ty& argTy)
     if (!paramTy.HasPlaceholder()) {
         return &argTy;
     }
-    // A literal or a lambda that Check may accept has a type of the same shape as the parameter.
     auto decl = Ty::GetDeclPtrOfTy(&paramTy);
-    if (paramTy.kind != argTy.kind || decl != Ty::GetDeclPtrOfTy(&argTy) ||
-        paramTy.typeArgs.size() != argTy.typeArgs.size()) {
+    // An argument boxed into an option type is matched against the type of its value.
+    if (paramTy.IsCoreOptionType() && !argTy.IsCoreOptionType()) {
+        return tyMgr.GetEnumTy(
+            *StaticCast<EnumDecl*>(decl), {ReplaceConvertedExternTys(tyMgr, *paramTy.typeArgs[0], argTy)});
+    }
+    // An argument of a subtype is matched against the parameter through its promotion to the parameter declaration.
+    Ptr<Ty> shapedArgTy = &argTy;
+    if (decl && decl != Ty::GetDeclPtrOfTy(&argTy)) {
+        auto promotedTys = Promotion(tyMgr).Promote(argTy, paramTy);
+        if (promotedTys.size() == 1) {
+            shapedArgTy = *promotedTys.begin();
+        }
+    }
+    // A literal or a lambda that Check may accept has a type of the same shape as the parameter.
+    if (paramTy.kind != shapedArgTy->kind || decl != Ty::GetDeclPtrOfTy(shapedArgTy) ||
+        paramTy.typeArgs.size() != shapedArgTy->typeArgs.size()) {
         return &paramTy;
     }
     // Rebuild the parameter type from its parts, each replaced recursively.
     std::vector<Ptr<Ty>> typeArgs;
     for (size_t i = 0; i < paramTy.typeArgs.size(); ++i) {
-        typeArgs.push_back(ReplaceConvertedExternTys(tyMgr, *paramTy.typeArgs[i], *argTy.typeArgs[i]));
+        typeArgs.push_back(ReplaceConvertedExternTys(tyMgr, *paramTy.typeArgs[i], *shapedArgTy->typeArgs[i]));
     }
     if (auto sd = DynamicCast<StructDecl*>(decl)) {
         return tyMgr.GetStructTy(*sd, typeArgs);
@@ -349,6 +363,8 @@ Ptr<Ty> ReplaceConvertedExternTys(TypeManager& tyMgr, Ty& paramTy, Ty& argTy)
         return tyMgr.GetClassTy(*cd, typeArgs);
     } else if (auto ed = DynamicCast<EnumDecl*>(decl)) {
         return tyMgr.GetEnumTy(*ed, typeArgs);
+    } else if (auto id = DynamicCast<InterfaceDecl*>(decl)) {
+        return tyMgr.GetInterfaceTy(*id, typeArgs);
     } else if (paramTy.IsTuple()) {
         return tyMgr.GetTupleTy(typeArgs);
     } else if (auto funcTy = DynamicCast<FuncTy*>(&paramTy)) {
