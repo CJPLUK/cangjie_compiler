@@ -355,9 +355,26 @@ Ptr<Ty> ReplaceConvertedExternTys(TypeManager& tyMgr, Ty& paramTy, Ty& argTy)
         // The return type is the last type argument of a function type.
         auto retTy = typeArgs.back();
         typeArgs.pop_back();
-        return tyMgr.GetFunctionTy(typeArgs, retTy, {funcTy->IsCFunc(), funcTy->isClosureTy, funcTy->hasVariableLenArg});
+        return tyMgr.GetFunctionTy(typeArgs, retTy,
+            {funcTy->IsCFunc(), funcTy->isClosureTy, funcTy->hasVariableLenArg});
     }
     return &paramTy;
+}
+
+// Parameter types used as inference constraints. An absent argument keeps its declared type. Otherwise, parts that
+// Check converts into Extern<T> are replaced by the corresponding parts of the argument type.
+std::vector<Ptr<Ty>> ParamTysForInference(
+    TypeManager& tyMgr, CallExpr& ce, const TyArgSynState& stat, const std::vector<Ptr<Ty>>& paramsTyInOrder)
+{
+    std::vector<Ptr<Ty>> paramTys;
+    for (size_t i = 0; i < paramsTyInOrder.size(); ++i) {
+        if (!stat.failSet[i]) {
+            paramTys.push_back(ce.args[i]->expr
+                    ? ReplaceConvertedExternTys(tyMgr, *paramsTyInOrder[i], *stat.argTys[i])
+                    : paramsTyInOrder[i]);
+        }
+    }
+    return paramTys;
 }
 
 std::vector<Ptr<Ty>> ValidateArgTys(CallExpr& ce, TyArgSynState& stat)
@@ -546,14 +563,7 @@ ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
         }
         // 2. collect valid arg tys & update failSet
         std::vector<Ptr<Ty>> validArgTys = ValidateArgTys(ce, stat);
-        std::vector<Ptr<Ty>> paramTys;
-        for (size_t i = 0; i < paramsTyInOrder.size(); ++i) {
-            if (!stat.failSet[i]) {
-                paramTys.push_back(ce.args[i]->expr
-                        ? ReplaceConvertedExternTys(typeManager, *paramsTyInOrder[i], *stat.argTys[i])
-                        : paramsTyInOrder[i]);
-            }
-        }
+        auto paramTys = ParamTysForInference(typeManager, ce, stat, paramsTyInOrder);
         // 3. prepare input pack & infer type args
         auto retBlame = Blame{
             .src = &ce, .lb = typeManager.RecoverUnivTyVar(funcRetTy), .ub = retTyUB, .style = BlameStyle::RETURN};
