@@ -645,6 +645,7 @@ OwnedPtr<CallExpr> ExternDesugaring::CreateRuntimeCall(const RuntimeFunc& func, 
         ce->EnableAttr(Attribute::UNSAFE);
     }
     checkUnsafeInvoke(*ce);
+    createdRuntimeCalls = true;
     return ce;
 }
 
@@ -718,4 +719,8 @@ void TypeChecker::TypeCheckerImpl::DesugarExtern(ASTContext& ctx, Package& pkg)
     auto checkUnsafeInvoke = [this](const CallExpr& ce) { CheckUnsafeInvoke(ce); };
     auto externDesugaring = ExternDesugaring(typeManager, lookup, checkUnsafeInvoke);
     externDesugaring.Run(pkg);
+    // The runtime functions may read global and static variables.
+    if (externDesugaring.CreatedRuntimeCalls()) {
+        CheckGlobalVarInitialization(ctx, pkg);
+    }
 }

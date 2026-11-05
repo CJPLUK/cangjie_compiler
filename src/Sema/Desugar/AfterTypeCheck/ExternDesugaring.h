@@ -36,6 +36,10 @@ public:
     }
 
     void Run(AST::Node& root);
+    bool CreatedRuntimeCalls() const
+    {
+        return createdRuntimeCalls;
+    }
 
 private:
     /** A static function of the foreign runtime T of a given Extern<T>, with its type instantiated. */
@@ -94,6 +98,7 @@ private:
     CallCheck checkUnsafeInvoke;
     /** The number of enclosing unsafe blocks and unsafe declarations of the visited node. */
     unsigned unsafeDepth = 0;
+    bool createdRuntimeCalls = false;
 };
 } // namespace Cangjie
 
