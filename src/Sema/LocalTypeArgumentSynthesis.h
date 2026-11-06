@@ -27,6 +27,8 @@ struct LocTyArgSynArgPack {
     Ptr<AST::Ty> funcRetTy = nullptr; // Nullable
     Ptr<AST::Ty> retTyUB = nullptr; // Nullable
     Blame retBlame;
+    // Whether Extern<T> accepts values of any other type, which are converted to it.
+    bool externConversion = false;
 };
 
 using MemoForUnifiedTys = std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Ty>>>;
@@ -105,6 +107,8 @@ private:
     // UnifiedTys memo: memoization of already unified types,
     // Ty argTy and Ty paramTy: two types to be unified.
     // The series of functions return false if obvious errors are detected.
+    // Whether argTy <: paramTy holds without constraining the type variables.
+    bool IsUnifiedWithoutConstraints(const AST::Ty& argTy, const AST::Ty& paramTy) const;
     bool UnifyOne(const Tracked<AST::Ty>& argTTy, const Tracked<AST::Ty>& paramTTy);
     bool UnifyTyVar(const Tracked<AST::Ty>& argTTy, const Tracked<AST::Ty>& paramTTy);
     bool UnifyTyVarCollectConstraints(TyVar& tyVar, const Tracked<AST::Ty>& lbTTy, const Tracked<AST::Ty>& ubTTy);

@@ -15,7 +15,6 @@
 #include "TypeCheckUtil.h"
 #include "ExtraScopes.h"
 #include "LocalTypeArgumentSynthesis.h"
-#include "Promotion.h"
 #include "DiagSuppressor.h"
 #include "Diags.h"
 
@@ -305,94 +304,6 @@ bool PrepareQuestParamTy(TypeManager& tyMgr, const std::vector<Ptr<Ty>>& paramsT
     return anyNewTarget;
 }
 
-bool ContainsCoreExternType(const Ty& ty)
-{
-    return ty.IsCoreExternType() ||
-        Utils::In(ty.typeArgs, [](auto arg) { return arg && ContainsCoreExternType(*arg); });
-}
-
-/**
- * Like Check, a parameter of type Extern<T> accepts an argument of any type, so it does not constrain the type
- * arguments. Neither does a concrete parameter containing Extern<T>, whose literal argument may have its elements
- * converted by Check. A parameter of type Extern<R>, where R is to be inferred, is only constrained by an argument of
- * type Extern<T>, as any other argument will be converted to it. Otherwise, a parameter containing Extern<T> is
- * constrained by its other parts, the parts of type Extern<T> being replaced by the matching parts of @p argTy.
- */
-Ptr<Ty> ReplaceConvertedExternTys(TypeManager& tyMgr, Ty& paramTy, Ty& argTy)
-{
-    // Extern<RT> is never constrained, Extern<R> only by an argument of type Extern<T> or Nothing.
-    if (paramTy.IsCoreExternType()) {
-        bool converted = !paramTy.HasPlaceholder() || (!argTy.IsCoreExternType() && !argTy.IsNothing());
-        return converted ? &argTy : &paramTy;
-    }
-    // Without Extern<T>, no part of the argument is converted, so the whole parameter is constrained.
-    if (!ContainsCoreExternType(paramTy)) {
-        return &paramTy;
-    }
-    // Without type variables, there is nothing to infer from the parameter.
-    if (!paramTy.HasPlaceholder()) {
-        return &argTy;
-    }
-    auto decl = Ty::GetDeclPtrOfTy(&paramTy);
-    // An argument boxed into an option type is matched against the type of its value.
-    if (paramTy.IsCoreOptionType() && !argTy.IsCoreOptionType()) {
-        return tyMgr.GetEnumTy(
-            *StaticCast<EnumDecl*>(decl), {ReplaceConvertedExternTys(tyMgr, *paramTy.typeArgs[0], argTy)});
-    }
-    // An argument of a subtype is matched against the parameter through its promotion to the parameter declaration.
-    Ptr<Ty> shapedArgTy = &argTy;
-    if (decl && decl != Ty::GetDeclPtrOfTy(&argTy)) {
-        auto promotedTys = Promotion(tyMgr).Promote(argTy, paramTy);
-        if (promotedTys.size() == 1) {
-            shapedArgTy = *promotedTys.begin();
-        }
-    }
-    // A literal or a lambda that Check may accept has a type of the same shape as the parameter.
-    if (paramTy.kind != shapedArgTy->kind || decl != Ty::GetDeclPtrOfTy(shapedArgTy) ||
-        paramTy.typeArgs.size() != shapedArgTy->typeArgs.size()) {
-        return &paramTy;
-    }
-    // Rebuild the parameter type from its parts, each replaced recursively.
-    std::vector<Ptr<Ty>> typeArgs;
-    for (size_t i = 0; i < paramTy.typeArgs.size(); ++i) {
-        typeArgs.push_back(ReplaceConvertedExternTys(tyMgr, *paramTy.typeArgs[i], *shapedArgTy->typeArgs[i]));
-    }
-    if (auto sd = DynamicCast<StructDecl*>(decl)) {
-        return tyMgr.GetStructTy(*sd, typeArgs);
-    } else if (auto cd = DynamicCast<ClassDecl*>(decl)) {
-        return tyMgr.GetClassTy(*cd, typeArgs);
-    } else if (auto ed = DynamicCast<EnumDecl*>(decl)) {
-        return tyMgr.GetEnumTy(*ed, typeArgs);
-    } else if (auto id = DynamicCast<InterfaceDecl*>(decl)) {
-        return tyMgr.GetInterfaceTy(*id, typeArgs);
-    } else if (paramTy.IsTuple()) {
-        return tyMgr.GetTupleTy(typeArgs);
-    } else if (auto funcTy = DynamicCast<FuncTy*>(&paramTy)) {
-        // The return type is the last type argument of a function type.
-        auto retTy = typeArgs.back();
-        typeArgs.pop_back();
-        return tyMgr.GetFunctionTy(typeArgs, retTy,
-            {funcTy->IsCFunc(), funcTy->isClosureTy, funcTy->hasVariableLenArg});
-    }
-    return &paramTy;
-}
-
-// Parameter types used as inference constraints. An absent argument keeps its declared type. Otherwise, parts that
-// Check converts into Extern<T> are replaced by the corresponding parts of the argument type.
-std::vector<Ptr<Ty>> ParamTysForInference(
-    TypeManager& tyMgr, CallExpr& ce, const TyArgSynState& stat, const std::vector<Ptr<Ty>>& paramsTyInOrder)
-{
-    std::vector<Ptr<Ty>> paramTys;
-    for (size_t i = 0; i < paramsTyInOrder.size(); ++i) {
-        if (!stat.failSet[i]) {
-            paramTys.push_back(ce.args[i]->expr
-                    ? ReplaceConvertedExternTys(tyMgr, *paramsTyInOrder[i], *stat.argTys[i])
-                    : paramsTyInOrder[i]);
-        }
-    }
-    return paramTys;
-}
-
 std::vector<Ptr<Ty>> ValidateArgTys(CallExpr& ce, TyArgSynState& stat)
 {
     std::vector<Ptr<Ty>> validArgTys;
@@ -579,13 +490,18 @@ ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
         }
         // 2. collect valid arg tys & update failSet
         std::vector<Ptr<Ty>> validArgTys = ValidateArgTys(ce, stat);
-        auto paramTys = ParamTysForInference(typeManager, ce, stat, paramsTyInOrder);
+        std::vector<Ptr<Ty>> paramTys;
+        for (size_t i = 0; i < paramsTyInOrder.size(); ++i) {
+            if (!stat.failSet[i]) {
+                paramTys.push_back(paramsTyInOrder[i]);
+            }
+        }
         // 3. prepare input pack & infer type args
         auto retBlame = Blame{
             .src = &ce, .lb = typeManager.RecoverUnivTyVar(funcRetTy), .ub = retTyUB, .style = BlameStyle::RETURN};
         argPack = {stat.tyVarsToSolve,
             validArgTys, paramTys, MakeArgBlames(stat, ce, validArgTys, paramTys, typeManager),
-            funcRetTy, stat.retTarget, retBlame};
+            funcRetTy, stat.retTarget, retBlame, true};
         auto synCtx = LocalTypeArgumentSynthesis(typeManager, argPack, ctx.gcBlames, false);
         stat.solution = synCtx.SynthesizeTypeArguments(true);
         size_t newUnsolvedCount = stat.solution ? synCtx.CountUnsolvedTyVars(*stat.solution) : 0;
