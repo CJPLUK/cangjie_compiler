@@ -186,7 +186,7 @@ private:
     bool Check(ASTContext& ctx, Ptr<AST::Ty> target, Ptr<AST::Node> node);
     /** Implicit conversion of an expression to an expected Extern<T>. */
     bool NeedTryExternConversion(const AST::Ty& target, const AST::Node& node) const;
-    bool ChkWithExternConversion(ASTContext& ctx, AST::Node& node);
+    bool ChkWithExternConversion(ASTContext& ctx, AST::Ty& target, AST::Node& node);
     bool IsChecked(ASTContext& ctx, AST::Node& node) const;
     std::optional<bool> PerformBasicChecksForCheck(ASTContext& ctx, Ptr<AST::Ty> target, Ptr<AST::Node> node) const;
     /**
